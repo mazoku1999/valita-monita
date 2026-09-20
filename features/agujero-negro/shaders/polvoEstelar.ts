@@ -99,9 +99,9 @@ void main() {
   // Así el flujo de cada grano cae con el cuadrado de la distancia, como una fuente puntual, y
   // una sola exposición vale para todas las distancias (antes hacía falta una por vista: 3.5 a
   // 19.5 unidades, 0.9 a 38, 0.5 a 60, que es justo la ley 1/d²).
-  // Suelo de 0.8 px·dpr: por debajo, el grano ya no pierde energía con la distancia y la banda
+  // Suelo de 0.7 px·dpr: por debajo, el grano ya no pierde energía con la distancia y la banda
   // sigue viva de lejos (capturas 28 y 31); por encima rige la ley 1/d².
-  float tamEnergia = max(tamSuave, 0.8 * uPixelRatio);
+  float tamEnergia = max(tamSuave, 0.7 * uPixelRatio);
   float cobertura = (tamEnergia * tamEnergia) / (tamPx * tamPx);
   // Los granos que pasan a ras de la cámara se disuelven antes de cruzar el plano cercano.
   float cercania = smoothstep(0.6, 3.5, dist);
@@ -109,7 +109,9 @@ void main() {
   float alfaPolvo = aBrillo * conservacion * cobertura * cercania;
   float alfaEstrella = aBrillo * conservacion * cobertura * 3.2;
 
-  // Los discos de bokeh de los granos que pasan junto a la cámara se contienen un poco.
+  // Los discos de bokeh de los granos que pasan junto a la cámara se contienen un poco. No más:
+  // con 0.45 la vista Above perdía 0.15 sRGB de relleno liso dentro de la sombra (referencia 3:
+  // 0.655 a 0.38 R), porque ese relleno lo ponen miles de discos tenues.
   float contencionBokeh = mix(1.0, 0.7, bokeh);
   vAlfa = mix(alfaPolvo, alfaEstrella, esEstrella) * visible * magnificacion * contencionBokeh;
   vBrilloBase = aBrillo;
@@ -128,6 +130,15 @@ export const POLVO_ESTELAR_FRAG = /* glsl */ `
 uniform float uTiempo;
 uniform float uBrilloPolvo;
 uniform float uPixelRatio;
+// Rodilla de la respuesta de cada píxel del grano: lineal hasta uRodilla y compresión suave hasta
+// el techo uTecho (valores lineales, antes del mapeo tonal). Así el campo puede exponerse lo
+// bastante para que la banda sea densa sin que los granos cercanos revienten a blanco: en la
+// captura 32 (rechazada) el 7.5 % de los píxeles junto al anillo pasaban de 0.9 sRGB frente al
+// 1.8 % de la referencia 33, con la misma luz media.
+uniform float uRodilla;
+uniform float uTecho;
+// Viraje del polvo hacia el oro (0 = paleta base).
+uniform float uCalidez;
 
 varying float vTono;
 varying float vFase;
@@ -136,6 +147,12 @@ varying float vBokeh;
 varying float vEstrella;
 varying float vBrilloBase;
 varying float vTamPx;
+
+float rodilla(float e) {
+  if (uTecho <= uRodilla) return e;
+  float margen = uTecho - uRodilla;
+  return e < uRodilla ? e : uRodilla + margen * (1.0 - exp(-(e - uRodilla) / margen));
+}
 
 void main() {
   vec2 c = gl_PointCoord - 0.5;
@@ -183,6 +200,8 @@ void main() {
   col = mix(col, fria, smoothstep(0.9, 1.0, temperatura));
   // Ligero calentamiento hacia la periferia: iluminadas por el disco, más rojas cuanto más lejos.
   col = mix(col, vec3(1.0, 0.80, 0.56), 0.18 * vTono);
+  // Oro de la referencia 33 (r/b 1.7 en sRGB en la banda): la paleta base se queda en crema.
+  col = mix(col, vec3(1.0, 0.74, 0.42), uCalidez);
   // Los discos de bokeh se leen ámbar translúcido, nunca gris: la acumulación aditiva los
   // empujaría a blanco si conservaran el tono claro de los granos en foco.
   col = mix(col, ambar, vBokeh * 0.85);
@@ -191,6 +210,9 @@ void main() {
   // Las estrellas del fondo también tienen temperatura: un cielo real no es de puntos idénticos.
   col = mix(col, blanco, vEstrella * 0.6);
 
-  gl_FragColor = vec4(col * forma * parpadeo * vAlfa * uBrilloPolvo, 1.0);
+  float valor = forma * vAlfa * uBrilloPolvo;
+  // Las estrellas del fondo no pasan por la rodilla: son puntos y su aureola la pone el bloom.
+  valor = mix(rodilla(valor), valor, vEstrella);
+  gl_FragColor = vec4(col * parpadeo * valor, 1.0);
 }
 `

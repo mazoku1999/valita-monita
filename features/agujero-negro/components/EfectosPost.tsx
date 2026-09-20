@@ -22,14 +22,17 @@ const BLOOM_GAS = { umbral: 0.9, intensidad: 5, radio: 0.9, niveles: 8 } as cons
  * a 720 px de alto). Como es de tamaño fijo en píxeles, el haz se lee fino de cerca (captura 29)
  * y como una banda con cuerpo de lejos (capturas 22 y 31), igual que en las capturas del usuario.
  */
-const BANDA_GAS = { umbral: 1.0, intensidad: 6, radio: 0.6, niveles: 5 } as const
+// Umbral 0.5: el gas sale comprimido a un tope de luminancia 1.45, así que con umbral 1.0 el
+// bloom sólo veía un hilo del núcleo y el haz no tenía cuerpo; con 0.5 entra toda la hoja y de
+// lejos el haz mide como la referencia 33 (FWHM 0.5–0.8 R a 76 unidades frente a 0.2–0.4 antes).
+const BANDA_GAS = { umbral: 0.5, intensidad: 6, radio: 0.6, niveles: 5 } as const
 
 /**
  * Bloom de las chispas: la escena que entra al compositor sólo contiene el polvo (el gas se
  * compone después), así que este bloom no toca el gas. Umbral alto y radio corto: las
  * estrellitas más vivas tienen una aureola pequeña y siguen siendo puntos, no manchas.
  */
-const BLOOM_CHISPAS = { umbral: 0.8, intensidad: 2.5, radio: 0.85 } as const
+const BLOOM_CHISPAS = { umbral: 1.0, intensidad: 1.5, radio: 0.85 } as const
 
 export function EfectosPost() {
   const efectoGas = useMemo(
@@ -79,6 +82,9 @@ export function EfectosPost() {
       // Cambiar los niveles recrea los buffers del bloom sin tamaño: hay que redimensionar.
       efectoGas.setSize(efectoGas.resolution.baseWidth, efectoGas.resolution.baseHeight)
     }
+    bandaGas.luminanceMaterial.threshold = ajuste('bandaUmbral', BANDA_GAS.umbral)
+    bandaGas.intensity = ajuste('bandaIntensidad', BANDA_GAS.intensidad)
+    bandaGas.mipmapBlurPass.radius = ajuste('bandaRadio', BANDA_GAS.radio)
   })
 
   return (

@@ -14,10 +14,21 @@ import { generarPolvoEstelar } from '../utils/generarPolvoEstelar'
  * vista (0.9 a 38 unidades, 3.5 a 19.5, 0.5 a 60) porque los granos subpíxel tenían un suelo
  * de energía de 1 px.
  */
-const EXPOSICION_POLVO = 5.0
+const EXPOSICION_POLVO = 4.0
 /** Factor de apertura de la profundidad de campo (1 = la original) y tamaño máximo de grano (px·dpr). */
 const APERTURA_POLVO = 0.7
 const TAMANO_MAXIMO_POLVO = 20
+/**
+ * Rodilla de la respuesta de los granos (ver `shaders/polvoEstelar.ts`): lineal hasta RODILLA y
+ * compresión suave hasta TECHO (lineal, antes del ACES). Con TECHO ≤ RODILLA se desactiva.
+ */
+const RODILLA_POLVO = 0.25
+const TECHO_POLVO = 0.7
+/**
+ * Viraje de la paleta del polvo hacia el oro (0 = crema base, 1 = oro pleno). La referencia 33
+ * mide la banda de chispas en r/b ≈ 1.7–1.8 sRGB; con la paleta crema se quedaba en 1.5.
+ */
+const CALIDEZ_POLVO = 0.7
 
 type UniformesPolvo = {
   uTiempo: THREE.IUniform<number>
@@ -28,6 +39,9 @@ type UniformesPolvo = {
   uBrilloPolvo: THREE.IUniform<number>
   uRadioSombra: THREE.IUniform<number>
   uTamMax: THREE.IUniform<number>
+  uRodilla: THREE.IUniform<number>
+  uTecho: THREE.IUniform<number>
+  uCalidez: THREE.IUniform<number>
 }
 
 export function CampoPolvoEstelar() {
@@ -54,6 +68,9 @@ export function CampoPolvoEstelar() {
       uBrilloPolvo: { value: EXPOSICION_POLVO },
       uRadioSombra: { value: PARAMETROS_AGUJERO.radioSombra },
       uTamMax: { value: TAMANO_MAXIMO_POLVO },
+      uRodilla: { value: RODILLA_POLVO },
+      uTecho: { value: TECHO_POLVO },
+      uCalidez: { value: CALIDEZ_POLVO },
     }
 
     const mat = new THREE.ShaderMaterial({
@@ -88,6 +105,9 @@ export function CampoPolvoEstelar() {
     uniformes.uBrilloPolvo.value = ajuste('polvoExposicion', EXPOSICION_POLVO)
     uniformes.uApertura.value = 6 * escalaVista * APERTURA_POLVO
     uniformes.uTamMax.value = TAMANO_MAXIMO_POLVO * gl.getPixelRatio()
+    uniformes.uRodilla.value = ajuste('polvoRodilla', RODILLA_POLVO)
+    uniformes.uTecho.value = ajuste('polvoTecho', TECHO_POLVO)
+    uniformes.uCalidez.value = ajuste('polvoCalidez', CALIDEZ_POLVO)
   })
 
   return <points geometry={geometria} material={material} frustumCulled={false} />
