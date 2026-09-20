@@ -7,16 +7,11 @@ uniform float uPixelRatio;
 uniform float uFoco;
 uniform float uApertura;
 uniform float uRadioSombra;
-// Cuánto mira la cámara desde arriba (0 = recorrido de canto, 1 = vista elevada).
-uniform float uElevada;
-// Cuánto mira desde el cenit (0 = ≤ 27°, 1 = ≥ 58°): sin "lado lejano" que extinguir.
-uniform float uCenital;
-// Luz que conserva el polvo del lado lejano fuera del plano (0.5 calibrado desde arriba).
-uniform float uPolvoLejano;
 // Tamaño máximo de un grano (px, ya multiplicado por el pixel ratio).
 uniform float uTamMax;
-// Contención del dobladillo pegado al gas fuera del plano (0 = intacto, 1 = a la mitad).
-uniform float uDobladillo;
+// Opacidad de la niebla interior (la misma del shader de la lente): apaga los granos que se ven a
+// través de ella, detrás del agujero.
+uniform float uNiebla;
 
 attribute float aTamano;
 attribute float aTono;
@@ -48,27 +43,22 @@ void main() {
   vec3 posAparente = lensar(pos, cameraPosition, magnificacion, bAparente, detras);
   float captura = 1.0 - smoothstep(uRadioSombra, uRadioSombra + 0.3, bAparente);
   float visible = 1.0 - captura * detras;
-  // Con la cámara en el plano del disco, la luz de los escombros del lado lejano que rodea el
-  // agujero atraviesa la atmósfera del propio disco y llega extinguida, igual que la imagen
-  // lensada del gas: alrededor de la sombra quedan chispas sueltas, no un enjambre.
-  float elevacionCamara = abs(cameraPosition.y) / length(cameraPosition);
-  float enPlano = 1.0 - smoothstep(0.04, 0.35, elevacionCamara);
-  float rozaAgujero = 1.0 - smoothstep(uRadioSombra, uRadioSombra * 3.0, bAparente);
-  visible *= mix(1.0, 0.3, enPlano * detras * rozaAgujero);
-  // Desde arriba (pero no desde el cenit), los escombros del lado lejano se ven a través de la
-  // banda de polvo del plano y llegan a la mitad: en la referencia elevada la cola bajo el gas
-  // (lado cercano) dobla en brillo a la que asoma sobre los arcos (lado lejano).
-  vec2 dirCamaraPlano = length(cameraPosition.xz) > 1e-3 ? normalize(cameraPosition.xz) : vec2(1.0, 0.0);
-  float rcPlano = max(length(pos.xz), 1e-3);
-  // Peso por lado, medido en la referencia elevada: la cara cercana (hacia la cámara) es la
-  // más viva (×1.3), los flancos quedan a ×0.8 y la cara lejana, vista a través de la banda del
-  // plano, a la mitad.
-  float haciaCamara = dot(pos.xz / rcPlano, dirCamaraPlano);
-  float pesoLado = mix(uPolvoLejano, 1.3, smoothstep(-0.6, 0.8, haciaCamara));
-  // El dobladillo pegado al gas (r < 13) se contiene desde arriba: en la referencia el gas acaba
-  // en punta y de ahí en adelante hay chispas sueltas, no una prolongación densa de la banda.
-  float dobladillo = 1.0 - 0.45 * uDobladillo * (1.0 - smoothstep(9.0, 13.5, length(position.xz)));
-  visible *= mix(1.0, pesoLado * dobladillo, uElevada * (1.0 - uCenital) * (1.0 - esEstrella));
+  // Niebla interior (la misma del shader de la lente, densidad ∝ exp(−(r − 1))): un grano que
+  // queda DETRÁS del agujero se ve a través de ella con el parámetro de impacto de su rayo; la
+  // columna de niebla es ≈ 0.90·exp(−(b − 3)/1.3) (L = 1.15) (función de Bessel K1 ajustada). Así las
+  // chispas que rodean la sombra por detrás salen apagadas a cualquier ángulo, igual que los
+  // arcos lensados del gas.
+  float columnaNiebla = 0.90 * exp(-(bAparente - 3.0) / 1.3);
+  visible *= exp(-uNiebla * columnaNiebla * detras);
+  // Función de fase del polvo (Henyey-Greenstein, g = 0.15, normalizada a 1 en los flancos):
+  // iluminado por el disco, un grano entre el agujero y la cámara dispersa hacia delante (×1.7)
+  // y uno que queda detrás devuelve la luz hacia atrás (×0.7), la asimetría cercano/lejano que
+  // mide la referencia elevada; y vale igual para cualquier elevación.
+  const float G_POLVO = 0.15;
+  vec3 haciaCamaraGrano = normalize(cameraPosition - pos);
+  float cosFase = dot(normalize(pos), haciaCamaraGrano);
+  float faseHG = pow((1.0 + G_POLVO * G_POLVO) / (1.0 + G_POLVO * G_POLVO - 2.0 * G_POLVO * cosFase), 1.5);
+  visible *= mix(faseHG, 1.0, esEstrella);
 
   vec4 mv = modelViewMatrix * vec4(posAparente, 1.0);
   float dist = max(-mv.z, 0.5);
@@ -110,15 +100,15 @@ void main() {
   // arena de puntos tenues; desde arriba se conserva algo más porque la banda se ve de frente y
   // reparte sus granos en muchos más píxeles.
   float finura = clamp(tam / uPixelRatio, 0.0, 1.0);
-  float subpixel = mix(mix(0.5, 1.0, finura), mix(0.85, 1.0, finura), uElevada);
+  float subpixel = mix(0.7, 1.0, finura);
   // Los granos que pasan a ras de la cámara se disuelven antes de cruzar el plano cercano.
   float cercania = smoothstep(0.6, 3.5, dist);
 
   float alfaPolvo = aBrillo * conservacion * cobertura * subpixel * cercania;
   float alfaEstrella = aBrillo * conservacion * cobertura * 3.2;
 
-  // Desde arriba los discos de bokeh de los granos que pasan junto a la cámara se contienen.
-  float contencionBokeh = mix(1.0, 0.55, bokeh * uElevada);
+  // Los discos de bokeh de los granos que pasan junto a la cámara se contienen un poco.
+  float contencionBokeh = mix(1.0, 0.7, bokeh);
   vAlfa = mix(alfaPolvo, alfaEstrella, esEstrella) * visible * magnificacion * contencionBokeh;
   vBrilloBase = aBrillo;
   vBokeh = bokeh;

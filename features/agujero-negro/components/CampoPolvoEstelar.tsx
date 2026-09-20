@@ -3,18 +3,22 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
-import { PARAMETROS_AGUJERO } from '../constantes/parametrosAgujero'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
+import { PARAMETROS_AGUJERO } from '../constantes/parametrosAgujero'
 import { POLVO_ESTELAR_FRAG, POLVO_ESTELAR_VERT } from '../shaders/polvoEstelar'
 import { ajuste } from '../store/vistaCamaraStore'
-import { ASPECTO_CANTO, aspectoEnCamara } from '../utils/campoAspecto'
+import { aspectoEnCamara } from '../utils/campoAspecto'
 import { generarPolvoEstelar } from '../utils/generarPolvoEstelar'
+import { MUNDO } from './LenteGravitacionalQuad'
 
 /**
- * Ganancia del polvo de canto (0.9): conserva el perfil del haz calibrado. Fuera del plano manda
- * el `aspecto` de cada vista, interpolado por la cámara real (ver `utils/campoAspecto.ts`).
+ * Exposición del polvo a la distancia de referencia (0.9 a 38 unidades, la calibración de canto).
+ * El flujo de cada grano cae con el cuadrado de la distancia, así que la exposición efectiva es
+ * 0.9·(38/D)²: es exactamente la ley que seguían las exposiciones que antes se fijaban a mano por
+ * vista (3.5 a 19.5, 1.8 a 27.5, 0.5 a 60), ahora continua con la cámara real.
  */
-const EXPOSICION_CANTO = ASPECTO_CANTO.polvoExposicion
+const EXPOSICION_REFERENCIA = 0.9
+const DISTANCIA_REFERENCIA = 38
 
 type UniformesPolvo = {
   uTiempo: THREE.IUniform<number>
@@ -24,11 +28,8 @@ type UniformesPolvo = {
   uApertura: THREE.IUniform<number>
   uBrilloPolvo: THREE.IUniform<number>
   uRadioSombra: THREE.IUniform<number>
-  uElevada: THREE.IUniform<number>
-  uCenital: THREE.IUniform<number>
-  uPolvoLejano: THREE.IUniform<number>
   uTamMax: THREE.IUniform<number>
-  uDobladillo: THREE.IUniform<number>
+  uNiebla: THREE.IUniform<number>
 }
 
 export function CampoPolvoEstelar() {
@@ -50,15 +51,10 @@ export function CampoPolvoEstelar() {
       uPixelRatio: { value: 1 },
       uFoco: { value: 60 },
       uApertura: { value: 16 },
-      // Con un 30 % más de granos que antes, la ganancia baja para conservar el perfil del haz
-      // calibrado (±250 px ≈ 84, ±300 px ≈ 50 sRGB).
-      uBrilloPolvo: { value: EXPOSICION_CANTO },
+      uBrilloPolvo: { value: EXPOSICION_REFERENCIA },
       uRadioSombra: { value: PARAMETROS_AGUJERO.radioSombra },
-      uElevada: { value: 0 },
-      uCenital: { value: 0 },
-      uPolvoLejano: { value: 0.5 },
       uTamMax: { value: 30 },
-      uDobladillo: { value: 1 },
+      uNiebla: { value: MUNDO.niebla },
     }
 
     const mat = new THREE.ShaderMaterial({
@@ -89,15 +85,14 @@ export function CampoPolvoEstelar() {
     // chispas y no como motas.
     uniformes.uEscalaPuntos.value = 40 * escalaVista
     // El plano de enfoque sigue al agujero: lo que la cámara atraviesa se desenfoca en bokeh.
-    uniformes.uFoco.value = camera.position.length()
+    const distancia = camera.position.length()
+    uniformes.uFoco.value = distancia
     const aspecto = aspectoEnCamara(camera, obtenerProgreso())
-    uniformes.uElevada.value = aspecto.elevada
-    uniformes.uCenital.value = aspecto.cenital
-    uniformes.uBrilloPolvo.value = ajuste('polvoExposicion', aspecto.polvoExposicion)
-    uniformes.uPolvoLejano.value = aspecto.polvoLejano
+    const relacion = DISTANCIA_REFERENCIA / Math.max(distancia, 1)
+    uniformes.uBrilloPolvo.value = ajuste('polvoExposicion', EXPOSICION_REFERENCIA) * relacion * relacion
     uniformes.uApertura.value = 6 * escalaVista * aspecto.apertura
     uniformes.uTamMax.value = aspecto.tamanoMaximo * gl.getPixelRatio()
-    uniformes.uDobladillo.value = aspecto.dobladillo
+    uniformes.uNiebla.value = ajuste('niebla', MUNDO.niebla)
   })
 
   return <points geometry={geometria} material={material} frustumCulled={false} />

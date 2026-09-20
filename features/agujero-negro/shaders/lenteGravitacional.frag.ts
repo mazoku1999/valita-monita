@@ -17,6 +17,11 @@ const f = (valor: number): string => valor.toFixed(4)
  * La lámina de gas es mucho más fina que el paso de marcha, así que su profundidad óptica
  * por paso se integra analíticamente (perfil vertical gaussiano → erf) en vez de muestrearse:
  * el disco luce igual de canto que desde arriba y sin granulado.
+ *
+ * Todo lo que se ve es UN solo modelo del mundo, el mismo desde cualquier ángulo y distancia:
+ * disco, niebla interior (absorbe y brilla), anillo de fotones y cielo. Ningún término depende
+ * de la elevación de la cámara ni de la vista elegida; lo único que cambia con la vista es la
+ * exposición (uBrillo), como en una cámara.
  */
 export const LENTE_GRAVITACIONAL_FRAG = /* glsl */ `
 uniform float uTiempo;
@@ -25,24 +30,11 @@ uniform mat4 uCamaraMundo;
 uniform mat4 uVistaProyeccion;
 uniform vec3 uPosCamara;
 uniform float uBrillo;
-// Nivel de bruma que sobrevive cuando la cámara sube (0 = se apaga como de canto).
-uniform float uBrumaElevada;
-// Cuánto mira la cámara desde arriba (0 = recorrido de canto, 1 = vista elevada).
-uniform float uElevada;
-// Fracción de luz que conserva el gas de detrás del agujero en la vista elevada (0.06 calibrado).
-uniform float uAtenuacionLejana;
-// Cuánto mira la cámara desde el cenit (0 = ≤ 27°, 1 = ≥ 58°): apaga las asimetrías cercano/lejano.
-uniform float uCenital;
-// Radio donde el gas acaba de fundirse fuera del plano (la vista lo fija; de canto no se usa).
-uniform float uRadioGasFin;
-// Cuánto pesa el dobladillo de polvo sobre el gas cercano (0 = sin extinción; la vista lo fija).
-uniform float uDobladillo;
-// Gradiente de la bruma hacia la cara cercana (0 = bruma simétrica; la vista lo fija).
-uniform float uBrumaCercana;
-// Escala global de la bruma, también con la cámara en el plano (1 = calibración de canto).
-uniform float uBrumaEscala;
-// Amplitud de la corona de dispersión que envuelve el gas (1 = calibración de canto; la vista la fija).
-uniform float uCorona;
+// Niebla interior: opacidad por unidad de densidad y brillo de su fuente (luz del disco que dispersa).
+uniform float uNiebla;
+uniform float uNieblaLuz;
+// Amplitud del anillo de fotones (las imágenes de orden superior apiladas, que no se integran).
+uniform float uAnillo;
 // Tamaño angular de un píxel (rad): fija el tamaño mínimo de las estrellas del cielo de fondo.
 uniform float uAnguloPixel;
 
@@ -69,33 +61,18 @@ const float RAIZ_PI = 1.7724538509;
 // la referencia. Esta asimetría τ_frente ≪ 1 ≪ τ_canto es lo que hace que el disco se lea como
 // haz brillante de canto y como superficie dorada desde arriba.
 const float KAPPA = 1.8;
-// Dobladillo de escombros que rodea el gas: radio donde se concentra, su escala de altura (la
-// misma ley que el campo de polvo, (0.05 + 0.04·r)·√2) y su espesor óptico vertical.
-const float R_DOBLADILLO = 10.0;
-const float SIGMA_DOBLADILLO = 0.8;
-const float TAU_DOBLADILLO = 0.7;
 const float SIGMA_INV_NUCLEO = 26.3;
 const float SIGMA_INV_ATMOSFERA = 7.89;
 const float AMP_ATMOSFERA = 0.0076;
-// Corona de dispersión: polvo fino que envuelve el disco con una escala de altura de ~1 unidad
-// (treinta veces la lámina de gas, creciendo hacia fuera) y dispersa hacia delante la luz del
-// disco interior. Con la cámara en el plano, el rayo recorre la corona a lo largo (decenas de
-// unidades) y la luz del gas que viaja hacia la cámara se desvía en ángulos pequeños: el haz se
-// lee envuelto en un resplandor ancho, suave y crema (FWHM ≈ 0.85 R en la captura 22) que se
-// apaga hacia las puntas con el brillo del disco. La función de fase (Henyey-Greenstein) hace
-// que la cara cercana disperse mucho más que la lejana, como los arcos tenues de la referencia.
-// Una capa así de gruesa se ve igual de brillante desde arriba (a 12.6° la columna 2H/sin e
-// iguala la cuerda de canto y el ángulo de dispersión en la cara cercana es sólo la elevación),
-// así que su amplitud la fija cada vista (uCorona) y el campo de aspecto la funde entre encuadres.
-const float R_CORONA = 15.0;
-const float H_CORONA_0 = 0.78;
-const float H_CORONA_1 = 0.08;
-// Fase moderadamente hacia delante (g = 0.4): con g = 0.65 los rayos que apuntan al agujero
-// (cuya luz viaja casi a lo largo del rayo) recibían tres veces más corona que los que pasan a
-// 1.5 R y el resplandor se concentraba en el centro; con 0.4 se reparte a lo largo del haz,
-// como en la captura 22 (a ±0.5 R del eje: 0.65 sRGB en el centro, 0.60 a 1.5 R, 0.32 a 3 R).
-const float G_CORONA = 0.4;
-const float AMP_CORONA = 0.16;
+// Niebla interior: la atmósfera caliente y densa que rodea el agujero por dentro de la ISCO,
+// con densidad ∝ exp(−(r − 1)/L). Es un único medio para todos los ángulos: absorbe lo que pasa
+// cerca del agujero (las imágenes lensadas del lado lejano y las de orden superior rodean el
+// agujero a r ≈ 1.5–3.5 y salen atenuadas; el rayo que llega a la cara cercana nunca baja de su
+// propio radio y apenas se atenúa) y brilla con la luz del disco que dispersa, que es lo que llena
+// la sombra de crema tostado. Sustituye a la extinción "en el plano", al dobladillo, a la bruma
+// por vista y a la corona, que dependían del ángulo de la cámara.
+const float L_NIEBLA = 1.15;
+const vec3 TINTE_NIEBLA = vec3(1.0, 0.60, 0.28);
 
 float hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
@@ -193,7 +170,10 @@ vec3 cielo(vec3 dir) {
         float temperatura = h.z;
         vec3 col = mix(vec3(1.0, 0.93, 0.80), vec3(0.99, 0.97, 0.93), smoothstep(0.35, 0.75, temperatura));
         col = mix(col, vec3(0.88, 0.93, 1.0), smoothstep(0.9, 1.0, temperatura));
-        luz += col * (0.025 + 1.2 * m * m) * g;
+        // Brillo acotado: junto al anillo de Einstein del cielo (3.4 R a 38 unidades) una estrella
+        // se estira en un arco tangencial con el mismo brillo de pico, y con picos altos esos
+        // arcos se leían como arañazos (pico máximo 0.32).
+        luz += col * (0.015 + 0.3 * m * m) * g;
       }
     }
   }
@@ -287,12 +267,11 @@ float densidadPlano(vec3 p, float r, float suavizado, out float textura) {
   // la que se calibraron KAPPA y uBrillo) no cambia con el radio aunque los surcos se marquen.
   // Desde arriba el disco es ópticamente fino y los surcos se leen directamente en su superficie:
   // se marcan más para que la banda no salga lisa (la referencia elevada los muestra a ±10 %).
-  // De frente (uCenital) las estrías finas se marcan el doble y las bandas anchas la mitad: sin
-  // el escorzo de la vista baja, los surcos a ±6 % se perdían y el disco se leía como bandas
-  // lisas de vinilo. La media de la textura no cambia.
-  float marcaSurcos = marcado * mix(0.22, 0.42, uElevada) * (1.0 + 0.9 * uCenital);
-  float marcaOndulacion = marcado * mix(0.06, 0.12, uElevada) * (1.0 + 1.5 * uCenital);
-  float pesoDivisiones = mix(0.30, 0.16, uCenital);
+  // Las mismas marcas a cualquier ángulo: de frente se ven tal cual; con la cámara baja el rayo
+  // cruza la lámina en oblicuo y promedia las estrías finas por sí solo.
+  float marcaSurcos = marcado * 0.55;
+  float marcaOndulacion = marcado * 0.14;
+  float pesoDivisiones = 0.22;
   float texturaAnillos = (0.85 - 0.5 * pesoDivisiones + pesoDivisiones * divisiones)
     * (1.0 + marcaSurcos * (surcos - 0.5))
     * (1.0 + marcaOndulacion * (ondulacion - 0.5));
@@ -319,10 +298,10 @@ vec3 emisionDisco(vec3 p, float r, vec3 v, float textura) {
   // hasta 200 px del centro y se apaga entre 250 y 350 px. Sin torque en la ISCO el flujo del
   // disco fino se anula justo en el borde (Novikov-Thorne).
   float flujo = pow(x, 0.8) * (1.0 - exp(-(rE - R_IN) * 3.0));
-  // De canto el haz se apaga hacia las puntas: en la captura 22 el núcleo pasa de 0.97 sRGB en
-  // el centro a 0.78 de media a 3 R (7.8 unidades), mientras que con la meseta comprimida
-  // seguía saturado (0.94) hasta el final. Fuera del plano manda el fundido de uRadioGasFin.
-  flujo *= 1.0 - 0.5 * smoothstep(3.5, 9.0, rE) * (1.0 - uElevada);
+  // El flujo cae hacia fuera (a la mitad entre 3.5 y 9 radios): de canto el haz se apaga hacia
+  // las puntas como en la captura 22 (0.97 sRGB en el centro, 0.78 a 3 R) y desde arriba la
+  // cara externa pasa de crema a oro sin necesidad de ninguna extinción por vista.
+  flujo *= 1.0 - 0.5 * smoothstep(3.5, 9.0, rE);
 
   // Región de plunge: el gas que cae conserva parte de su calor, pero su luz sale corrida al rojo
   // y diluida (g³ respecto a la ISCO) y se apaga hacia el horizonte. Es el resplandor tenue y
@@ -363,19 +342,7 @@ vec3 emisionDisco(vec3 p, float r, vec3 v, float textura) {
   // en la columna (τ) y en la emisividad. De canto se promedia a lo largo del haz.
   float estructura = 0.7 + 0.6 * textura;
   float redshift = sqrt(max(0.0, 1.0 - R_HORIZONTE / r));
-  // De canto la meseta de flujo hasta ~8 radios es lo que mantiene el haz encendido en toda su
-  // longitud, y desde arriba se conserva (los flancos de la referencia siguen en crema hasta ~8
-  // radios). Lo que cambia desde arriba es el final: el gas de 9 → 11 se funde antes, porque la
-  // banda de la referencia elevada acaba en punta a ~10 radios y de ahí en adelante sólo
-  // continúan los escombros.
-  // Fundido largo (6 → 10.2): con la compresión de luminancia, un fundido corto seguía leyéndose
-  // brillante hasta su final; con éste el perfil a lo largo del eje mayor calca el de la
-  // referencia (0.87 a 7 radios, 0.66 a 9, 0.47 a 10, 0.28 a 11).
-  float exposicion = mix(1.0, 1.0 - smoothstep(uRadioGasFin - 4.2, uRadioGasFin, rE), uElevada);
-  // De frente, sin el camino rasante que de canto enciende todo el haz, el brillo superficial
-  // cae hacia fuera como en un disco real: el anillo interno domina y el borde queda en sepia.
-  exposicion *= mix(1.0, 0.35 + 0.65 * pow(R_IN / rE, 1.3), uCenital);
-  return col * flujo * impulso * redshift * estructura * uBrillo * exposicion;
+  return col * flujo * impulso * redshift * estructura * uBrillo;
 }
 
 void main() {
@@ -389,17 +356,12 @@ void main() {
   float c = dot(ro, ro) - R_BORDE * R_BORDE;
   float disc = b * b - c;
 
-  // Cuánto está la cámara dentro del plano del gas: sólo entonces el lado lejano se ve a través
-  // de la atmósfera del propio disco y sale extinguido a bruma sepia.
-  // Desde arriba esta extinción rasante se apaga del todo: el lado lejano lo gobiernan entonces
-  // uAtenuacionLejana (arcos) y el dobladillo de polvo, y los flancos deben quedar intactos (su
-  // única ventaja sobre la cara cercana es el camino rasante, ×1.4, que es justo lo que los lleva
-  // a crema en la referencia).
-  float enPlano = (1.0 - smoothstep(0.04, 0.35, abs(ro.y) / length(ro))) * (1.0 - uElevada);
-  vec2 dirCamaraPlano = length(ro.xz) > 1e-3 ? normalize(ro.xz) : vec2(1.0, 0.0);
 
   vec3 color = vec3(0.0);
+  // Transmitancia total (gas + niebla) y sólo del gas (para el anillo de fotones, que nace
+  // dentro de la niebla y cuya salida a través de ella es una constante absorbida en uAnillo).
   float T = 1.0;
+  float TGas = 1.0;
   float minR = length(ro + rd * max(-b, 0.0));
   bool capturado = false;
   bool hayHit = false;
@@ -460,20 +422,15 @@ void main() {
       vec3 pNueva = p + (paso / 6.0) * (v + 2.0 * v2 + 2.0 * v3 + v4);
       vec3 vNueva = v + (paso / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
 
-      // Corona de dispersión (ver las constantes): emisividad por unidad de camino, con el perfil
-      // radial del flujo del disco, la caída exponencial en altura y la fase hacia delante.
-      if (r < R_CORONA) {
-        float hCorona = H_CORONA_0 + H_CORONA_1 * r;
-        // Perfil radial suave (r^-0.9): el resplandor sigue encendido hasta las puntas del haz
-        // (a 3 R la captura lee 0.36/0.28 sRGB a ±0.5 R del eje) y nace fuera de la ISCO, donde
-        // hay polvo que dispersar; con más corona interior el anillo se llenaba a blanco.
-        float perfilCorona = pow(R_IN / max(r, R_IN), 0.9) * smoothstep(R_IN, R_IN + 1.5, r)
-          * (1.0 - smoothstep(R_GAS - 1.0, R_CORONA, r));
-        float mu = -dot(p, v) / max(r * length(v), 1e-4);
-        float fase = pow((1.0 - G_CORONA) * (1.0 - G_CORONA) / (1.0 + G_CORONA * G_CORONA - 2.0 * G_CORONA * mu), 1.5);
-        float emisCorona = AMP_CORONA * uCorona * perfilCorona * exp(-ay / hCorona) * fase;
-        vec3 tinteCorona = mix(vec3(1.0, 0.82, 0.58), vec3(1.0, 0.62, 0.30), smoothstep(R_IN, 10.0, r));
-        color += T * emisCorona * tinteCorona * paso;
+      // Niebla interior (ver L_NIEBLA): absorbe y emite a lo largo de todo el paso. Su fuente es
+      // la luz del disco que dispersa: constante por dentro de la ISCO (la niebla ve el disco
+      // desde dentro) y cayendo con 1/r² hacia fuera, donde el disco queda cada vez más lejos.
+      {
+        float densNiebla = exp(-(r - R_HORIZONTE) / L_NIEBLA);
+        float aNiebla = 1.0 - exp(-uNiebla * densNiebla * paso);
+        float iluminacion = min(1.0, 12.25 / r2);
+        color += T * uNieblaLuz * iluminacion * TINTE_NIEBLA * aNiebla;
+        T *= 1.0 - aNiebla;
       }
 
       if (enDisco) {
@@ -483,56 +440,21 @@ void main() {
         // las muestra como un filamento tenue pegado a la sombra, no como aros brillantes.
         float deflexion = acos(clamp(dot(normalize(vNueva), rd), -1.0, 1.0));
         float lensado = smoothstep(1.4, 2.2, deflexion);
-        // Lado lejano visto con la cámara en el plano: su luz atraviesa la atmósfera del propio
-        // disco y llega extinguida a bruma sepia lisa, sin filamentos.
-        float haciaCamara = dot(normalize(pm.xz), dirCamaraPlano);
-        float ladoCercano = smoothstep(-0.3, 0.5, haciaCamara);
-        float lejano = (1.0 - ladoCercano) * enPlano;
-        // Sólo el gas que queda de verdad detrás del agujero (no los flancos, que son imagen
-        // directa y en la referencia elevada siguen saturados a crema hasta ±7.7 radios: allí el
-        // camino rasante por el gas es 1.4 veces el de la cara cercana y esa es toda su ventaja,
-        // así que cualquier extinción que se cuele en los flancos la anula).
-        float lejanoPuro = 1.0 - smoothstep(-0.95, -0.45, haciaCamara);
         float textura;
-        float densPlano = densidadPlano(pm, rm, max(lensado, lejano), textura);
+        float densPlano = densidadPlano(pm, rm, lensado, textura);
         if (densPlano > 0.002) {
           float sNucleo = SIGMA_INV_NUCLEO / ens;
           float sAtmosfera = SIGMA_INV_ATMOSFERA / ens;
           float columna = columnaGaussiana(p.y, pNueva.y, vNueva.y, paso, sNucleo)
             + AMP_ATMOSFERA * columnaGaussiana(p.y, pNueva.y, vNueva.y, paso, sAtmosfera);
-          // La imagen lensada no oculta lo que hay detrás como el gas directo: si absorbiera
-          // igual, el anillo de fotones saldría más oscuro arriba que abajo.
-          float tau = KAPPA * densPlano * columna * mix(1.0, 0.25, lensado);
+          float tau = KAPPA * densPlano * columna;
           float a = 1.0 - exp(-tau);
 
           vec3 emis = emisionDisco(pm, rm, vNueva, textura);
-          float factorLente = mix(1.0, 0.25, lensado);
-          // Extinción por el dobladillo de polvo (los escombros densos de r ≈ 9–13 que rodean el
-          // gas). Con la cámara baja, el rayo que llega al gas de la cara cercana lo cruza a poca
-          // altura: cuanto más externo es el gas, más bajo pasa y más se apaga. El de la ISCO se
-          // ve por encima del dobladillo y sigue en crema; los flancos lo esquivan (el rayo pasa
-          // 2 σ por encima) y por eso en la referencia elevada saturan hasta ~8 radios mientras la
-          // cara cercana pasa a oro a partir de 6. De canto no se aplica: ahí la extinción rasante
-          // ya la modela enPlano.
-          float alturaCruce = abs(ro.y) * max(R_DOBLADILLO - rm, 0.0) / max(length(ro.xz) - rm, 1.0);
-          float tauDobladillo = TAU_DOBLADILLO * uDobladillo * exp(-0.5 * alturaCruce * alturaCruce / (SIGMA_DOBLADILLO * SIGMA_DOBLADILLO));
-          // Sólo en el sector que mira a la cámara: el rayo que llega a un flanco pasa 2 σ por
-          // encima del dobladillo y no debe atenuarse (la referencia mantiene los flancos en
-          // crema hasta ±7.7 radios).
-          float sectorCercano = smoothstep(0.2, 0.8, haciaCamara);
-          float extincionDobladillo = exp(-tauDobladillo * sectorCercano * uElevada * (1.0 - uCenital));
-          // Desde arriba la luz del lado lejano llega rasante a través de la banda de polvo del
-          // plano antes de doblarse hacia la cámara: en la referencia elevada los arcos lucen a
-          // 0.4 sRGB frente a los 0.95 de la cara cercana, con sus surcos todavía visibles.
-          float atenuacionLejana = mix(1.0, uAtenuacionLejana, uElevada * lejanoPuro * (1.0 - uCenital));
-          // El gas lejano más externo atraviesa más atmósfera antes de llegar: su imagen se
-          // apaga gradualmente en vez de cortar el halo de bruma con un borde.
-          float caminoLejano = 1.0 - 0.8 * smoothstep(4.0, R_GAS, rm);
-          vec3 extincion = mix(vec3(1.0), vec3(0.02, 0.012, 0.005) * caminoLejano, lejano);
-          emis *= factorLente * extincion * atenuacionLejana * extincionDobladillo;
 
           color += T * emis * a;
           T *= 1.0 - a;
+          TGas *= 1.0 - a;
           if (!hayHit && T < 0.6) {
             hayHit = true;
             pHit = pm;
@@ -551,62 +473,20 @@ void main() {
     color += T * salioLimpio * cielo(dirSalida);
     float dR = minR - R_FOTON;
     float dRExt = max(dR, 0.0);
-    // Anillo de fotones: filamento dorado nítido y completo en el borde de la sombra.
-    // Luminancia pico ≈ 1.0, justo bajo el umbral del bloom (1.05): el filamento no se emborrona.
-    float nucleoAnillo = exp(-dRExt * 14.0) * smoothstep(-0.06, 0.01, dR);
+    // Anillo de fotones: filamento dorado nítido y completo en el borde de la sombra (las
+    // imágenes de orden superior apiladas). Se ve a través del gas (TGas); su salida a través de
+    // la niebla es la misma para todos sus rayos y va incluida en la amplitud.
+    // Filamento fino (exp(−20·dR)) y por debajo del umbral del resplandor: en las referencias es
+    // una línea, no un aro luminoso.
+    float nucleoAnillo = exp(-dRExt * 20.0) * smoothstep(-0.05, 0.01, dR);
     float resplandorAnillo = exp(-dRExt * 6.0) * smoothstep(-0.1, 0.02, dR);
-    color += T * nucleoAnillo * vec3(1.0, 0.72, 0.40) * 1.3;
-    color += T * resplandorAnillo * vec3(1.0, 0.60, 0.28) * 0.35;
+    // El haz lo tapa sólo a medias (en las referencias el filamento sigue viéndose sobre el
+    // gas que lo cruza, sin muescas).
+    float visibleAnillo = max(TGas, 0.45);
+    color += visibleAnillo * nucleoAnillo * vec3(1.0, 0.70, 0.36) * uAnillo;
+    color += visibleAnillo * resplandorAnillo * vec3(1.0, 0.60, 0.28) * (0.2 * uAnillo);
   }
 
-  // Bruma sepia: polvo tenue del plano del disco iluminado por el gas. Su espesor óptico es el
-  // camino del rayo por esa capa: enorme para rayos rasantes (cámara en el plano), nulo cuando se
-  // mira el agujero desde arriba, donde la sombra queda negra.
-  float caminoCapa = clamp(8.0 / max(abs(rd.y), 0.02), 0.0, 30.0) / 30.0;
-  float capaPolvo = caminoCapa * caminoCapa * caminoCapa;
-  // La capa es fina: su espesor óptico cae como 1/sin θ con la elevación de la cámara. A 0.5°
-  // (cámara del scroll) el camino es ~100 veces el espesor; a 15° apenas 4. La sombra vuelve a
-  // ser negra en cuanto la cámara sale del plano, como en las vistas oblicuas de la referencia.
-  float elevacionCamara = abs(ro.y) / length(ro);
-  // Desde arriba la capa rasante se apaga, pero el resplandor que llena la sombra no: son las
-  // imágenes de orden superior del disco apiladas contra el anillo de fotones, que en la vista
-  // elevada de referencia dejan el interior de la sombra en crema (0.65 sRGB) y no en negro.
-  capaPolvo *= max(1.0 - smoothstep(0.03, 0.28, elevacionCamara), uBrumaElevada * (1.0 - uCenital));
-  // Se parametriza por el parámetro de impacto para que sea un círculo limpio en pantalla.
-  float bImpacto = length(cross(ro, rd));
-  float rho = bImpacto / R_SOMBRA;
-  float fuera = max(rho - 1.4, 0.0);
-  float anillosBruma = 0.965 + 0.035 * sin(rho * 30.0 + 1.7) * sin(rho * 11.0);
-  // Meseta hasta 1.4 R, gaussiana corta y cola exponencial: calibrado contra la referencia
-  // (sRGB medido: 1.15 R ≈ 104, 1.4 R ≈ 97, 1.7 R ≈ 63, 2.2 R ≈ 26, 2.6 R ≈ 20).
-  // Desde arriba la cola exponencial pesa menos: el halo exterior lo pone el bloom.
-  // Cola de canto calibrada con la captura 22 (medianas radiales fuera del haz: 0.20 sRGB a
-  // 2.1 R, 0.14 a 2.6 R, 0.09 a 3.1 R, 0.03 a 4 R); dentro de 2 R la corona pone el resto.
-  float perfilBruma = exp(-pow(fuera / 0.33, 2.0)) + mix(0.46, 0.10, uElevada) * exp(-fuera / 1.0);
-  // Dentro de la sombra (rho < 1), arriba y abajo del haz, la referencia mide 139/99/63: la imagen
-  // lensada del lado lejano se apila ahí, ~1.8 veces más brillante que a 1.15 R.
-  // Desde arriba el apilamiento dentro de la sombra pesa más: la referencia elevada mide 0.83
-  // en el centro frente a 0.55 junto al anillo.
-  // (Con la corona, que ya llena la sombra con la luz dispersada delante del agujero, el
-  // apilamiento de canto baja de 0.75 a 0.4: la captura 22 lee 0.66 sRGB bajo el haz a 0.4 R.)
-  float apilamientoCanto = 0.4 * (1.0 - smoothstep(0.2, 1.05, rho));
-  float apilamientoElevado = 2.3 * (1.0 - smoothstep(0.0, 0.95, rho));
-  perfilBruma *= 1.0 + mix(apilamientoCanto, apilamientoElevado, uElevada);
-  float segundoAnillo = exp(-pow((rho - 1.30) / 0.045, 2.0)) * step(1.0, rho);
-  // Con la cámara alta y cerca, la referencia mide dentro de la sombra un gradiente cálido que
-  // sube hacia la cara cercana (0.20 arriba → 0.61 en el centro → 0.76 abajo): es la luz de la
-  // cara cercana dispersada por el polvo que hay entre ella y la cámara. Se pesa por dónde cruza
-  // el rayo el plano del disco: antes del agujero (cara cercana, rayos que apuntan bajo el centro)
-  // pesa más; detrás, menos.
-  float sCruce = (rd.y < -1e-4) ? -ro.y / rd.y : 1e9;
-  float cercania = clamp((length(ro) - sCruce) / (0.5 * length(ro)), -1.0, 1.0);
-  float gradienteCercano = mix(1.0, clamp(0.55 + 1.3 * cercania, 0.15, 1.6), uElevada * uBrumaCercana);
-  float bruma = (0.070 * perfilBruma * anillosBruma + 0.02 * segundoAnillo) * capaPolvo * gradienteCercano * uBrumaEscala;
-  // De canto la bruma es sepia saturada; desde arriba la referencia la mide crema tostado
-  // (0.78, 0.63, 0.44 sRGB), así que el tono se abre hacia el ámbar claro.
-  // De canto la captura 22 mide el resplandor en oro pálido (0.72, 0.57, 0.38 sRGB a 0.8 R),
-  // menos saturado que el sepia original.
-  color += bruma * mix(vec3(1.0, 0.55, 0.22), vec3(1.0, 0.58, 0.27), uElevada);
   // Nivel de negro de película: el fondo de la referencia no es 0 sino ~(7,7,7) sRGB (la
   // captura 22 lee 0.03 a 4 R del agujero).
   color += vec3(0.006);
@@ -630,12 +510,7 @@ void main() {
     // antes: en la referencia elevada los flancos del disco (luminancia ~1–1.3 antes de comprimir)
     // ya son crema (0.94, 0.87, 0.73 sRGB), no oro, y sólo la cara cercana externa queda dorada.
     vec3 crema = comprimida * vec3(1.0, 0.93, 0.80);
-    float inicioCrema = mix(0.8, 0.65, uElevada);
-    float plenoCrema = mix(1.8, 1.5, uElevada);
-    // De frente el viraje a crema se modera: sin el camino rasante que satura la cara cercana,
-    // la mitad interna del disco quedaba en un crema pálido y plano; así conserva el oro.
-    float pesoCrema = 0.9 * (1.0 - 0.55 * uCenital);
-    color = mix(color, crema, pesoCrema * smoothstep(inicioCrema, plenoCrema, luminancia));
+    color = mix(color, crema, 0.85 * smoothstep(0.7, 1.6, luminancia));
   }
   fragColor = vec4(color, 1.0);
 }

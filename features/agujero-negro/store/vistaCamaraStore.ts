@@ -17,10 +17,15 @@ export type ClaveAjuste =
   | 'bloomUmbral'
   | 'bloomIntensidad'
   | 'bloomRadio'
-  | 'bruma'
-  | 'lejano'
+  | 'bloomNiveles'
+  | 'resplandorBase'
+  | 'resplandorPolvo'
+  | 'resplandorPolvoRadio'
+  | 'resplandorPolvoNiveles'
+  | 'niebla'
+  | 'nieblaLuz'
+  | 'anillo'
   | 'polvoExposicion'
-  | 'corona'
 
 export type AjustesCalibracion = Partial<Record<ClaveAjuste, number>>
 
@@ -35,10 +40,15 @@ const CLAVES_AJUSTE: readonly ClaveAjuste[] = [
   'bloomUmbral',
   'bloomIntensidad',
   'bloomRadio',
-  'bruma',
-  'lejano',
+  'bloomNiveles',
+  'resplandorBase',
+  'resplandorPolvo',
+  'resplandorPolvoRadio',
+  'resplandorPolvoNiveles',
+  'niebla',
+  'nieblaLuz',
+  'anillo',
   'polvoExposicion',
-  'corona',
 ]
 
 type Escucha = () => void
