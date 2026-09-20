@@ -9,11 +9,12 @@ import { EfectoGas } from '../utils/efectoGas'
 
 /**
  * Bloom del gas (ver `utils/efectoGas.ts`): florece SOLO el buffer del gas (disco, anillo,
- * bruma, envoltura). Umbral por encima del gas comprimido (1.05) para que sólo el núcleo del haz
- * y el anillo florezcan y el filamento del anillo de fotones no se emborrone. Un solo ajuste
- * para todas las vistas: es un efecto de pantalla y se comporta igual desde cualquier ángulo.
+ * bruma), ancho y de tamaño fijo en píxeles CSS (altura de referencia 720). Es el resplandor
+ * que en las capturas del usuario crece con la distancia: a 140 unidades envuelve el anillo
+ * hasta ~4 R (captura 28), a 38 llena de luz el interior (captura 22) y a 19.5 apenas se nota
+ * frente a un anillo enorme (captura 29). Un solo ajuste para todas las vistas.
  */
-const BLOOM_GAS = { umbral: 1.05, intensidad: 2.0, radio: 0.85 } as const
+const BLOOM_GAS = { umbral: 0.9, intensidad: 8, radio: 0.9, niveles: 8 } as const
 
 /**
  * Bloom de las chispas: la escena que entra al compositor sólo contiene el polvo (el gas se
@@ -32,7 +33,10 @@ export function EfectosPost() {
         intensity: BLOOM_GAS.intensidad,
         radius: BLOOM_GAS.radio,
         // Ocho niveles de mip: el resplandor necesita alcanzar ~300 px.
-        levels: 8,
+        levels: BLOOM_GAS.niveles,
+        // Altura fija del bloom: sus escalas no dependen del pixel ratio (mi captura a dpr 1 y la
+        // pantalla del usuario a 1.5 ven el mismo resplandor en píxeles CSS).
+        resolutionY: 720,
       }),
     [],
   )
@@ -44,8 +48,12 @@ export function EfectosPost() {
     efectoGas.luminanceMaterial.threshold = ajuste('bloomUmbral', BLOOM_GAS.umbral)
     efectoGas.intensity = ajuste('bloomIntensidad', BLOOM_GAS.intensidad)
     efectoGas.mipmapBlurPass.radius = ajuste('bloomRadio', BLOOM_GAS.radio)
-    const niveles = Math.round(ajuste('bloomNiveles', 8))
-    if (efectoGas.mipmapBlurPass.levels !== niveles) efectoGas.mipmapBlurPass.levels = niveles
+    const niveles = Math.round(ajuste('bloomNiveles', BLOOM_GAS.niveles))
+    if (efectoGas.mipmapBlurPass.levels !== niveles) {
+      efectoGas.mipmapBlurPass.levels = niveles
+      // Cambiar los niveles recrea los buffers del bloom sin tamaño: hay que redimensionar.
+      efectoGas.setSize(efectoGas.resolution.baseWidth, efectoGas.resolution.baseHeight)
+    }
   })
 
   return (

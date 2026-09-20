@@ -18,8 +18,6 @@ uniform mat4 uCamaraMundo;
 uniform mat4 uVistaProyeccion;
 uniform vec3 uPosCamara;
 uniform float uBrillo;
-// Multiplicador de la envoltura luminosa (1; sólo para calibrar desde la URL en desarrollo).
-uniform float uCorona;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -70,20 +68,10 @@ const float FUNDIDO = 0.5;
 // atenuación por vista de los arcos y un dobladillo de polvo sólo desde arriba.
 const float R_ABSORCION = 3.1;
 const float K_ABSORCION = 2.0;
-// Envoltura luminosa del disco: gas y polvo fino que lo rodean con una escala de altura de ~1
-// unidad (treinta veces la lámina) y dispersan hacia delante la luz del disco interior (fase
-// Henyey-Greenstein, g 0.4). Es UNA sola capa para todas las vistas: con la cámara en el plano
-// el rayo la recorre a lo largo (decenas de unidades) y el haz queda envuelto en el resplandor
-// ancho y suave de la captura 22 (FWHM ≈ 0.85 R); a 12–16° la columna es 2–3 veces más corta
-// y se lee como la falda bajo la cara cercana de la referencia elevada; desde el cenit apenas
-// pesa. Calibrada a 38 unidades contra la captura 22 (0.16 la calcaba; 0.12 reparte mejor el
-// coste de ser una sola capa: las vistas cercanas, que en las capturas del usuario son secas,
-// quedan con menos bruma).
-const float R_CORONA = 15.0;
-const float H_CORONA_0 = 0.78;
-const float H_CORONA_1 = 0.08;
-const float G_CORONA = 0.4;
-const float AMP_CORONA = 0.14;
+// No hay envoltura luminosa alrededor del disco: una capa lo bastante gruesa para el pedestal
+// de la captura 22 inunda el interior del anillo en las vistas cercanas (captura 29, oscuro) y
+// pesa igual a todas las distancias. El resplandor que crece con la distancia (captura 28) lo
+// pone el bloom del gas, de tamaño fijo en píxeles (ver components/EfectosPost.tsx).
 const vec3 CUERPO_NEGRO[13] = vec3[13](
   vec3(1.0000, 0.0570, 0.0003),
   vec3(1.0000, 0.1202, 0.0048),
@@ -377,19 +365,6 @@ void main() {
       vec3 vNueva = v + acel * paso;
       vec3 pNueva = p + vNueva * paso;
 
-      // Envoltura luminosa (ver las constantes): emisividad por unidad de camino, con el perfil
-      // radial del flujo del disco, la caída exponencial en altura y la fase hacia delante.
-      if (r < R_CORONA) {
-        float hCorona = H_CORONA_0 + H_CORONA_1 * r;
-        float perfilCorona = pow(R_IN / max(r, R_IN), 0.9) * smoothstep(R_IN, R_IN + 1.5, r)
-          * (1.0 - smoothstep(R_GAS - 1.0, R_CORONA, r));
-        float mu = -dot(p, v) / max(r * length(v), 1e-4);
-        float fase = pow((1.0 - G_CORONA) * (1.0 - G_CORONA) / (1.0 + G_CORONA * G_CORONA - 2.0 * G_CORONA * mu), 1.5);
-        float emisCorona = AMP_CORONA * uCorona * perfilCorona * exp(-ay / hCorona) * fase;
-        vec3 tinteCorona = mix(vec3(1.0, 0.82, 0.58), vec3(1.0, 0.62, 0.30), smoothstep(R_IN, 10.0, r));
-        color += T * emisCorona * tinteCorona * paso;
-      }
-
       // Región de caída: absorbe (y enrojece) la luz que viene de detrás; sólo la cruzan los rayos
       // que rodean el agujero (arcos del lado lejano, imágenes de orden superior), nunca los que
       // van a la cara cercana del disco (r ≥ 3.1).
@@ -467,14 +442,17 @@ void main() {
   // Se parametriza por el parámetro de impacto para que sea un círculo limpio en pantalla.
   float bImpacto = length(cross(ro, rd));
   float rho = bImpacto / R_SOMBRA;
-  float fuera = max(rho - 1.4, 0.0);
+  float fuera = max(rho - 1.25, 0.0);
   float anillosBruma = 0.965 + 0.035 * sin(rho * 30.0 + 1.7) * sin(rho * 11.0);
   // Meseta hasta 1.4 R, gaussiana corta y cola exponencial: calibrado contra la referencia
   // (sRGB medido: 1.15 R ≈ 104, 1.4 R ≈ 97, 1.7 R ≈ 63, 2.2 R ≈ 26, 2.6 R ≈ 20).
   // Desde arriba la cola exponencial pesa menos: el halo exterior lo pone el bloom.
   // Cola de canto calibrada con la captura 22 (medianas radiales fuera del haz: 0.20 sRGB a
   // 2.1 R, 0.14 a 2.6 R, 0.09 a 3.1 R, 0.03 a 4 R); dentro de 2 R la corona pone el resto.
-  float perfilBruma = exp(-pow(fuera / 0.33, 2.0)) + 0.46 * exp(-fuera / 1.0);
+  // Halo compacto en unidades del anillo: la captura cercana 29 lo mide en 0.22 sRGB junto al
+  // anillo, 0.14 a 1.6 R y negro (0.03) desde 1.9 R; el resplandor lejano lo pone el bloom del
+  // gas, que crece con la distancia porque es de tamaño fijo en píxeles (captura 28).
+  float perfilBruma = exp(-pow(fuera / 0.25, 2.0)) + 0.15 * exp(-fuera / 0.4);
   // Dentro de la sombra (rho < 1), arriba y abajo del haz, la referencia mide 139/99/63: la imagen
   // lensada del lado lejano se apila ahí, ~1.8 veces más brillante que a 1.15 R.
   // Desde arriba el apilamiento dentro de la sombra pesa más: la referencia elevada mide 0.83
@@ -483,7 +461,8 @@ void main() {
   // apilamiento de canto baja de 0.75 a 0.4: la captura 22 lee 0.66 sRGB bajo el haz a 0.4 R.)
   // Apilamiento dentro de la sombra (imágenes de orden superior contra el anillo de fotones):
   // 0.45 deja la sombra a 12° en ~0.6 sRGB (referencia 0.65) y de canto en ~0.7 (captura 22: 0.66).
-  perfilBruma *= 1.0 + 0.45 * (1.0 - smoothstep(0.2, 1.05, rho));
+  // Dentro de la sombra el halo es ~1.5 veces el de fuera (29: 0.375 a 0.4 R frente a 0.22).
+  perfilBruma *= 1.0 + 0.8 * (1.0 - smoothstep(0.2, 1.05, rho));
   float segundoAnillo = exp(-pow((rho - 1.30) / 0.045, 2.0)) * step(1.0, rho);
   float bruma = (0.070 * perfilBruma * anillosBruma + 0.02 * segundoAnillo) * capaPolvo;
   // De canto la bruma es sepia saturada; desde arriba la referencia la mide crema tostado

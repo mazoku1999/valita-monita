@@ -19,7 +19,6 @@ type UniformesLente = {
   uVistaProyeccion: THREE.IUniform<THREE.Matrix4>
   uPosCamara: THREE.IUniform<THREE.Vector3>
   uBrillo: THREE.IUniform<number>
-  uCorona: THREE.IUniform<number>
 }
 
 /**
@@ -39,7 +38,6 @@ export function LenteGravitacionalQuad() {
       uVistaProyeccion: { value: new THREE.Matrix4() },
       uPosCamara: { value: new THREE.Vector3() },
       uBrillo: { value: GANANCIA },
-      uCorona: { value: 1 },
     }
     const geometria = new THREE.PlaneGeometry(2, 2)
     const materialLente = new THREE.ShaderMaterial({
@@ -116,7 +114,6 @@ export function LenteGravitacionalQuad() {
     // real y KAPPA 2.4 el haz de canto satura igual, la cara cercana a 12° queda en crema y el
     // disco de frente en oro sin bajar nada por vista. (Ajustables desde la URL en desarrollo.)
     uniformes.uBrillo.value = ajuste('ganancia', GANANCIA)
-    uniformes.uCorona.value = ajuste('corona', 1)
 
     const objetivoPrevio = gl.getRenderTarget()
     const limpiezaPrevia = gl.autoClear
