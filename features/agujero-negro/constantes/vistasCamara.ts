@@ -246,11 +246,23 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     etiqueta: 'Overhead',
     descripcion: 'Camera almost over the pole: the disk is a turbulent surface with two spiral arms.',
     fotogramas: derivarRecorrido({ polar: 0.3, distancia: 30, fov: 41 }),
-    inclinacion: 0,
+    // El mismo roll que las demás vistas: desde arriba sólo gira la imagen del disco, y así
+    // entrar o salir de esta vista no hace rotar toda la pantalla.
+    inclinacion: INCLINACION_PANTALLA,
     encuadre: { x: 0, y: 0.12 },
-    // Desde el cenit la corona se ve como un velo sobre el disco exterior (+0.08 sRGB entre 2 y
-    // 3.5 R con la corona entera): se contiene para que la superficie siga nítida.
-    aspecto: { ...ASPECTO_ELEVADO, corona: 0.3 },
+    aspecto: {
+      ...ASPECTO_ELEVADO,
+      // De frente el disco es ópticamente fino y con la ganancia elevada (5.2) toda la mitad
+      // interna saturaba a un crema plano: con menos ganancia sólo el borde interno queda claro,
+      // el resto es oro que se apaga hacia el borde y las estrías se ven.
+      ganancia: 3.6,
+      // Desde el cenit la corona se ve como un velo sobre el disco exterior (+0.08 sRGB entre 2
+      // y 3.5 R con la corona entera): se contiene para que la superficie siga nítida.
+      corona: 0.3,
+      // De frente se ve todo el sistema de anillos a la vez: con la exposición elevada (1.8) los
+      // 80 000 granos se leían como ruido de fondo; con la de canto quedan las chispas vivas.
+      polvoExposicion: 0.9,
+    },
     pesoMinimoAspecto: 0,
   },
   lejana: {

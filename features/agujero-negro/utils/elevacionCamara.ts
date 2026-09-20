@@ -28,11 +28,14 @@ export const pesoAspecto = (seno: number, pesoMinimo: number): number =>
   Math.max(factorVistaElevada(seno), pesoMinimo)
 
 /**
- * Cuánto mira la cámara "desde el cenit", de 0 (≤ 27°) a 1 (≥ 58°). Las asimetrías cercano/lejano
- * de la vista elevada (arcos extinguidos, dobladillo de polvo, bruma que llena la sombra) sólo
- * tienen sentido con la cámara baja: con el disco de frente no hay "detrás del agujero", la
- * sombra vuelve a ser negra y el gas se lee como superficie turbulenta y no como surcos.
+ * Cuánto mira la cámara "desde el cenit", de 0 (≤ 17°, justo por encima de la vista Above close)
+ * a 1 en el cenit. Las asimetrías cercano/lejano de la vista elevada (arcos extinguidos,
+ * dobladillo de polvo, bruma que llena la sombra, caída del brillo hacia fuera) sólo tienen
+ * sentido con la cámara baja: con el disco de frente no hay "detrás del agujero" y la sombra
+ * vuelve a ser negra. La rampa es deliberadamente larga (17° → 90°): con la antigua (27° → 58°)
+ * todo eso aparecía en una franja de 30° al inclinar la cámara desde arriba y se leía como un
+ * cambio brusco.
  */
-export const factorVistaCenital = (seno: number): number => suavizar(0.45, 0.85, seno)
+export const factorVistaCenital = (seno: number): number => suavizar(0.29, 1.05, seno)
 
 export const mezclar = (a: number, b: number, t: number): number => a + (b - a) * t

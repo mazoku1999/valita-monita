@@ -205,11 +205,21 @@ float densidadPlano(vec3 p, float r, float suavizado, out float textura) {
   // planetario. Divisiones anchas (~0.6 u), surcos finos (~0.2 u) y una ondulación casi subpíxel,
   // todos funciones sólo de r. Derivan muy despacio hacia dentro: el gas cae en espiral, los
   // anillos no giran.
-  float divisiones = fbmRadial(r * 1.7 + uTiempo * 0.012);
-  float surcos = fbmRadial(r * 4.5 + 41.0 + uTiempo * 0.02);
-  float ondulacion = ruidoRadial(r * 14.0 + 3.0);
   // El borde interno, caliente y turbulento, es liso; los surcos se marcan hacia fuera.
   float marcado = smoothstep(R_IN + 0.5, R_IN + 4.0, r);
+  // Serpenteo: los anillos no son círculos perfectos. Un desplazamiento radial lento en azimut,
+  // arrastrado por el mismo flujo acotado, convierte los surcos en filamentos que ondulan: de
+  // frente son estrías finas y vivas (ni un disco de vinilo ni una espiral ni el remolino de
+  // nubes que había antes), y de canto o desde 12–16° se promedian en la banda calibrada. Es la
+  // misma textura a cualquier ángulo: nada cambia de golpe al inclinar la cámara.
+  float serpenteo = mix(
+    fbmAnular(vec2(vueltas1 * 3.0, r * 0.45), 3.0),
+    fbmAnular(vec2(vueltas2 * 3.0, r * 0.45 + 5.3), 3.0),
+    pesoCiclo2) - 0.5;
+  float rSurcos = r + 1.0 * serpenteo * marcado;
+  float divisiones = fbmRadial(rSurcos * 1.7 + uTiempo * 0.012);
+  float surcos = fbmRadial(rSurcos * 4.5 + 41.0 + uTiempo * 0.02);
+  float ondulacion = ruidoRadial(rSurcos * 14.0 + 3.0);
   // Nubes azimutales débiles que sí rotan con el gas: rompen la simetría perfecta y dan vida al
   // disco en movimiento sin llegar a leerse como brazos espirales.
   float nubes = mix(
@@ -221,34 +231,17 @@ float densidadPlano(vec3 p, float r, float suavizado, out float textura) {
   // la que se calibraron KAPPA y uBrillo) no cambia con el radio aunque los surcos se marquen.
   // Desde arriba el disco es ópticamente fino y los surcos se leen directamente en su superficie:
   // se marcan más para que la banda no salga lisa (la referencia elevada los muestra a ±10 %).
-  float marcaSurcos = marcado * mix(0.22, 0.42, uElevada);
-  float marcaOndulacion = marcado * mix(0.06, 0.12, uElevada);
-  float texturaAnillos = (0.70 + 0.30 * divisiones)
+  // De frente (uCenital) las estrías finas se marcan el doble y las bandas anchas la mitad: sin
+  // el escorzo de la vista baja, los surcos a ±6 % se perdían y el disco se leía como bandas
+  // lisas de vinilo. La media de la textura no cambia.
+  float marcaSurcos = marcado * mix(0.22, 0.42, uElevada) * (1.0 + 0.9 * uCenital);
+  float marcaOndulacion = marcado * mix(0.06, 0.12, uElevada) * (1.0 + 1.5 * uCenital);
+  float pesoDivisiones = mix(0.30, 0.16, uCenital);
+  float texturaAnillos = (0.85 - 0.5 * pesoDivisiones + pesoDivisiones * divisiones)
     * (1.0 + marcaSurcos * (surcos - 0.5))
     * (1.0 + marcaOndulacion * (ondulacion - 0.5));
 
-  // Desde el cenit los anillos concéntricos se leen como un disco de vinilo. Un disco real visto
-  // de frente es turbulento: nubes de todos los tamaños que la rotación diferencial estira en
-  // arcos abiertos hacia atrás (~0.5 vueltas de retraso entre la ISCO y el borde), sin líneas
-  // limpias. El ruido se deforma consigo mismo (domain warp) para que sus celdas no queden en
-  // filas radiales, que es lo que vuelve a dibujar anillos; y el patrón gira rígido con el gas de
-  // r ≈ 5 para no enrollarse sin límite.
-  float vueltasRigidas = angRigido / DOS_PI;
-  float arrastre = 0.5 * log(rE / R_IN);
-  vec2 uvTurb = vec2((vueltasRigidas - arrastre) * 20.0, rE * 1.25);
-  vec2 deformacion = vec2(
-    fbmAnular(uvTurb * 0.5 + vec2(3.1, 7.7), 10.0),
-    fbmAnular(uvTurb * 0.5 + vec2(11.3, 2.9), 10.0)) - 0.5;
-  uvTurb += deformacion * vec2(2.2, 1.4);
-  float nubesGrandes = fbmAnular(uvTurb, 20.0);
-  float nubesFinas = fbmAnular(uvTurb * vec2(2.0, 2.4) + vec2(0.0, 5.0), 40.0);
-  // Onda de densidad de dos brazos (modo m = 2, el más común en discos reales): abierta, ~0.7
-  // vueltas de arrollamiento entre la ISCO y el borde, y con velocidad de patrón propia, más
-  // lenta que el gas, como corresponde a una onda y no a materia.
-  float brazos = 0.5 + 0.5 * cos(2.0 * (ang + uTiempo * OMEGA_RIGIDA * 0.6) - 3.2 * log(rE / R_IN));
-  float texturaTurbulenta = (0.5 + 0.5 * nubesGrandes) * (0.8 + 0.2 * nubesFinas) * (0.82 + 0.36 * brazos);
-
-  textura = mix(texturaAnillos, texturaTurbulenta, uCenital) * (0.88 + 0.12 * nubes);
+  textura = texturaAnillos * (0.88 + 0.12 * nubes);
   // Los anillos tienen menos varianza que los filamentos antiguos y el brillo óptico fino
   // depende de E[textura²]: el factor sube de 0.68 a 0.76 para conservar el perfil calibrado.
   textura *= 0.76;
@@ -565,7 +558,10 @@ void main() {
     vec3 crema = comprimida * vec3(1.0, 0.93, 0.80);
     float inicioCrema = mix(0.8, 0.65, uElevada);
     float plenoCrema = mix(1.8, 1.5, uElevada);
-    color = mix(color, crema, 0.9 * smoothstep(inicioCrema, plenoCrema, luminancia));
+    // De frente el viraje a crema se modera: sin el camino rasante que satura la cara cercana,
+    // la mitad interna del disco quedaba en un crema pálido y plano; así conserva el oro.
+    float pesoCrema = 0.9 * (1.0 - 0.55 * uCenital);
+    color = mix(color, crema, pesoCrema * smoothstep(inicioCrema, plenoCrema, luminancia));
   }
   fragColor = vec4(color, 1.0);
 }
