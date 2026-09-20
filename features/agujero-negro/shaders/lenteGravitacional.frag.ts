@@ -3,9 +3,16 @@ import { PARAMETROS_AGUJERO } from '../constantes/parametrosAgujero'
 const f = (valor: number): string => valor.toFixed(4)
 
 /**
- * Ray-marching de geodésicas nulas en métrica de Schwarzschild (aproximación
- * pseudo-newtoniana d²x/dt² = -1.5·h²·x/r⁵) con disco de acreción ópticamente grueso,
- * beaming Doppler, corrimiento gravitacional y anillo de fotones.
+ * Ray-marching de geodésicas nulas en métrica de Schwarzschild con disco de acreción
+ * ópticamente grueso, beaming Doppler, corrimiento gravitacional, anillo de fotones y cielo de
+ * fondo lensado.
+ *
+ * La ecuación d²x/dλ² = -1.5·h²·x/r⁵ (h = momento angular específico del fotón, r_s = 1) es la
+ * geodésica nula EXACTA de Schwarzschild escrita en coordenadas cartesianas con un parámetro
+ * afín, no la aproximación 1/r² con factor de ajuste de otros trazadores. Se integra con
+ * Runge-Kutta de cuarto orden: el paso de 0.05–0.7 unidades da un error por paso ~10⁻⁶ frente al
+ * ~10⁻² del Euler anterior, y así el anillo de fotones (b = 2.598) y las imágenes lensadas del
+ * disco salen del cálculo y no del ajuste del paso.
  *
  * La lámina de gas es mucho más fina que el paso de marcha, así que su profundidad óptica
  * por paso se integra analíticamente (perfil vertical gaussiano → erf) en vez de muestrearse:
@@ -36,6 +43,8 @@ uniform float uBrumaCercana;
 uniform float uBrumaEscala;
 // Amplitud de la corona de dispersión que envuelve el gas (1 = calibración de canto; la vista la fija).
 uniform float uCorona;
+// Tamaño angular de un píxel (rad): fija el tamaño mínimo de las estrellas del cielo de fondo.
+uniform float uAnguloPixel;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -146,6 +155,51 @@ float fbmRadial(float x) {
   return v / 0.875;
 }
 
+// Geodésica nula de Schwarzschild (r_s = 1) en forma cartesiana: d²x/dλ² = -1.5·h²·x/r⁵.
+vec3 aceleracionGeodesica(vec3 q, float h2) {
+  float r2 = max(dot(q, q), 1e-4);
+  return -1.5 * h2 * q / (r2 * r2 * sqrt(r2));
+}
+
+vec3 hash33(vec3 p) {
+  p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+  p += dot(p, p.yxz + 33.33);
+  return fract((p.xxy + p.yxx) * p.zyx);
+}
+
+// Cielo de fondo: estrellas fijas en la esfera celeste, una por celda de una rejilla 3D sobre la
+// dirección (≈ 4π·N² celdas tocan la esfera). Se muestrea con la dirección con la que el rayo
+// ESCAPA tras rodear el agujero, así que las estrellas que quedan detrás se estiran en arcos y
+// se duplican junto a la sombra (anillo de Einstein) por la misma integración que lensa el disco,
+// y su brillo no depende de la vista ni de la exposición del polvo. Cada estrella es una gaussiana
+// angular de al menos ~1 px (sin parpadeo subpíxel al mover la cámara); la distribución de brillos
+// sigue la ley cúbica del campo de sprites anterior (muchas tenues, un puñado vivas).
+const float CELDAS_CIELO = 11.0;
+vec3 cielo(vec3 dir) {
+  vec3 celda = floor(dir * CELDAS_CIELO);
+  vec3 luz = vec3(0.0);
+  for (int i = -1; i <= 1; i++) {
+    for (int j = -1; j <= 1; j++) {
+      for (int k = -1; k <= 1; k++) {
+        vec3 c = celda + vec3(float(i), float(j), float(k));
+        vec3 h = hash33(c + 7.3);
+        if (h.x > 0.62) continue;
+        vec3 s = normalize(c + 0.5 + (hash33(c + 3.1) - 0.5) * 0.9);
+        float ang = sqrt(max(2.0 * (1.0 - dot(dir, s)), 0.0));
+        float m = h.y * h.y * h.y;
+        float sigma = uAnguloPixel * (0.6 + 1.0 * m);
+        float g = exp(-0.5 * ang * ang / (sigma * sigma));
+        if (g < 1e-4) continue;
+        float temperatura = h.z;
+        vec3 col = mix(vec3(1.0, 0.93, 0.80), vec3(0.99, 0.97, 0.93), smoothstep(0.35, 0.75, temperatura));
+        col = mix(col, vec3(0.88, 0.93, 1.0), smoothstep(0.9, 1.0, temperatura));
+        luz += col * (0.025 + 1.2 * m * m) * g;
+      }
+    }
+  }
+  return luz;
+}
+
 // Aproximación de Winitzki (error < 1.3e-4), suficiente para integrar la lámina.
 float erfAprox(float x) {
   float x2 = x * x;
@@ -196,9 +250,11 @@ float densidadPlano(vec3 p, float r, float suavizado, out float textura) {
   float ciclo1 = mod(uTiempo, PERIODO_CIZALLA);
   float ciclo2 = mod(uTiempo + 0.5 * PERIODO_CIZALLA, PERIODO_CIZALLA);
   float pesoCiclo2 = abs(ciclo1 / PERIODO_CIZALLA * 2.0 - 1.0);
-  float angRigido = ang + uTiempo * OMEGA_RIGIDA;
-  float vueltas1 = (angRigido + (ciclo1 - 0.5 * PERIODO_CIZALLA) * omegaRel) / DOS_PI;
-  float vueltas2 = (angRigido + (ciclo2 - 0.5 * PERIODO_CIZALLA) * omegaRel) / DOS_PI;
+  // El patrón gira en el sentido +tangente (ang creciente): el MISMO en el que se mueve el gas
+  // para el beaming Doppler y en el que orbitan los granos de escombros (antes giraba al revés).
+  float angRigido = ang - uTiempo * OMEGA_RIGIDA;
+  float vueltas1 = (angRigido - (ciclo1 - 0.5 * PERIODO_CIZALLA) * omegaRel) / DOS_PI;
+  float vueltas2 = (angRigido - (ciclo2 - 0.5 * PERIODO_CIZALLA) * omegaRel) / DOS_PI;
 
   // En un disco kepleriano la rotación diferencial borra cualquier estructura azimutal en pocas
   // órbitas: lo que sobrevive son anillos concéntricos de densidad, como en un sistema de anillos
@@ -348,6 +404,9 @@ void main() {
   bool capturado = false;
   bool hayHit = false;
   vec3 pHit = vec3(0.0);
+  // Dirección con la que el rayo sale de la esfera de marcha (para el cielo lensado).
+  vec3 dirSalida = rd;
+  float salioLimpio = 1.0;
 
   if (disc > 0.0 || c < 0.0) {
     float tIni = (c < 0.0) ? 0.0 : max(-b - sqrt(disc), 0.0);
@@ -368,7 +427,13 @@ void main() {
         break;
       }
       if (r > R_BORDE && dot(p, v) > 0.0) {
+        dirSalida = normalize(v);
         break;
+      }
+      // Rayos atrapados junto a la esfera de fotones que agotan los pasos: casi capturados.
+      if (i == MAX_PASOS - 1) {
+        dirSalida = normalize(v);
+        salioLimpio = smoothstep(R_FOTON, R_FOTON * 2.0, r);
       }
 
       float ay = abs(p.y);
@@ -384,9 +449,16 @@ void main() {
         paso = min(paso, 0.09 * ens);
       }
 
-      vec3 acel = -1.5 * h2 * p / (r2 * r2 * r);
-      vec3 vNueva = v + acel * paso;
-      vec3 pNueva = p + vNueva * paso;
+      // Runge-Kutta 4 sobre (x, v): cuatro evaluaciones de la aceleración por paso.
+      vec3 k1 = aceleracionGeodesica(p, h2);
+      vec3 v2 = v + 0.5 * paso * k1;
+      vec3 k2 = aceleracionGeodesica(p + 0.5 * paso * v, h2);
+      vec3 v3 = v + 0.5 * paso * k2;
+      vec3 k3 = aceleracionGeodesica(p + 0.5 * paso * v2, h2);
+      vec3 v4 = v + paso * k3;
+      vec3 k4 = aceleracionGeodesica(p + paso * v3, h2);
+      vec3 pNueva = p + (paso / 6.0) * (v + 2.0 * v2 + 2.0 * v3 + v4);
+      vec3 vNueva = v + (paso / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
 
       // Corona de dispersión (ver las constantes): emisividad por unidad de camino, con el perfil
       // radial del flujo del disco, la caída exponencial en altura y la fase hacia delante.
@@ -475,6 +547,8 @@ void main() {
   }
 
   if (!capturado) {
+    // Cielo de fondo visto a través del gas (T) y lensado por la trayectoria real del rayo.
+    color += T * salioLimpio * cielo(dirSalida);
     float dR = minR - R_FOTON;
     float dRExt = max(dR, 0.0);
     // Anillo de fotones: filamento dorado nítido y completo en el borde de la sombra.

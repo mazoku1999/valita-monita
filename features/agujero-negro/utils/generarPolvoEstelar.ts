@@ -47,8 +47,9 @@ const CUENTAS = {
   // finos (σ ≥ 0.22 px) siguen leyéndose como chispas y no como arena.
   anillos: 80000,
   relleno: 14000,
-  // Cielo de fondo: muchas estrellas tenues y pocas vivas, como una distribución de magnitudes real.
-  estrellasLejanas: 1400,
+  // Cielo de fondo: desde la ronda de geodésicas RK4 lo dibuja el shader de la lente (estrellas
+  // lensadas con la dirección real de escape del rayo); los sprites quedan a cero.
+  estrellasLejanas: 0,
 } as const
 
 /** Compensación parcial de luz por grano tras subir la población (66 000 → 94 000). */

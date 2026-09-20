@@ -1,6 +1,6 @@
 'use client'
 
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { LENTE_GRAVITACIONAL_FRAG } from '../shaders/lenteGravitacional.frag'
@@ -25,9 +25,11 @@ type UniformesLente = {
   uBrumaCercana: THREE.IUniform<number>
   uBrumaEscala: THREE.IUniform<number>
   uCorona: THREE.IUniform<number>
+  uAnguloPixel: THREE.IUniform<number>
 }
 
 export function LenteGravitacionalQuad() {
+  const { size } = useThree()
   const { geometria, material, uniformes } = useMemo(() => {
     const uniformesIniciales: UniformesLente = {
       uTiempo: { value: 0 },
@@ -45,6 +47,7 @@ export function LenteGravitacionalQuad() {
       uBrumaCercana: { value: 0 },
       uBrumaEscala: { value: 1 },
       uCorona: { value: 1 },
+      uAnguloPixel: { value: 0.001 },
     }
     const materialLente = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
@@ -88,6 +91,8 @@ export function LenteGravitacionalQuad() {
     uniformes.uBrumaCercana.value = aspecto.brumaCercana
     uniformes.uBrumaEscala.value = aspecto.brumaEscala
     uniformes.uCorona.value = ajuste('corona', aspecto.corona)
+    const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 40
+    uniformes.uAnguloPixel.value = THREE.MathUtils.degToRad(fov) / Math.max(size.height, 1)
   })
 
   return <mesh geometry={geometria} material={material} frustumCulled={false} renderOrder={-10} />
