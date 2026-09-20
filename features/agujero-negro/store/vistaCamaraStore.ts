@@ -17,6 +17,7 @@ export type ClaveAjuste =
   | 'bloomUmbral'
   | 'bloomIntensidad'
   | 'bloomRadio'
+  | 'bloomNiveles'
   | 'bruma'
   | 'lejano'
   | 'polvoExposicion'
@@ -35,6 +36,7 @@ const CLAVES_AJUSTE: readonly ClaveAjuste[] = [
   'bloomUmbral',
   'bloomIntensidad',
   'bloomRadio',
+  'bloomNiveles',
   'bruma',
   'lejano',
   'polvoExposicion',

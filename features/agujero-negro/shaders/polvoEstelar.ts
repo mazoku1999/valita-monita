@@ -7,16 +7,12 @@ uniform float uPixelRatio;
 uniform float uFoco;
 uniform float uApertura;
 uniform float uRadioSombra;
-// Cuánto mira la cámara desde arriba (0 = recorrido de canto, 1 = vista elevada).
-uniform float uElevada;
-// Cuánto mira desde el cenit (0 = ≤ 27°, 1 = ≥ 58°): sin "lado lejano" que extinguir.
-uniform float uCenital;
-// Luz que conserva el polvo del lado lejano fuera del plano (0.5 calibrado desde arriba).
-uniform float uPolvoLejano;
 // Tamaño máximo de un grano (px, ya multiplicado por el pixel ratio).
 uniform float uTamMax;
-// Contención del dobladillo pegado al gas fuera del plano (0 = intacto, 1 = a la mitad).
-uniform float uDobladillo;
+
+// Luz que conserva el polvo del lado lejano visto a través de la banda del plano (0.5, medido en
+// la referencia elevada: la cola bajo el gas dobla en brillo a la que asoma sobre los arcos).
+const float POLVO_LEJANO = 0.5;
 
 attribute float aTamano;
 attribute float aTono;
@@ -55,20 +51,16 @@ void main() {
   float enPlano = 1.0 - smoothstep(0.04, 0.35, elevacionCamara);
   float rozaAgujero = 1.0 - smoothstep(uRadioSombra, uRadioSombra * 3.0, bAparente);
   visible *= mix(1.0, 0.3, enPlano * detras * rozaAgujero);
-  // Desde arriba (pero no desde el cenit), los escombros del lado lejano se ven a través de la
-  // banda de polvo del plano y llegan a la mitad: en la referencia elevada la cola bajo el gas
-  // (lado cercano) dobla en brillo a la que asoma sobre los arcos (lado lejano).
+  // Con la cámara baja pero fuera del plano (3° → 17°, apagándose hacia el cenit), los escombros
+  // del lado lejano se ven a través de la banda de polvo del plano y llegan a la mitad; la cara
+  // cercana es la más viva (×1.3) y los flancos quedan a ×0.8 (medido en la referencia elevada).
+  // Es una función continua de la elevación de la cámara, no de la vista elegida.
   vec2 dirCamaraPlano = length(cameraPosition.xz) > 1e-3 ? normalize(cameraPosition.xz) : vec2(1.0, 0.0);
   float rcPlano = max(length(pos.xz), 1e-3);
-  // Peso por lado, medido en la referencia elevada: la cara cercana (hacia la cámara) es la
-  // más viva (×1.3), los flancos quedan a ×0.8 y la cara lejana, vista a través de la banda del
-  // plano, a la mitad.
   float haciaCamara = dot(pos.xz / rcPlano, dirCamaraPlano);
-  float pesoLado = mix(uPolvoLejano, 1.3, smoothstep(-0.6, 0.8, haciaCamara));
-  // El dobladillo pegado al gas (r < 13) se contiene desde arriba: en la referencia el gas acaba
-  // en punta y de ahí en adelante hay chispas sueltas, no una prolongación densa de la banda.
-  float dobladillo = 1.0 - 0.45 * uDobladillo * (1.0 - smoothstep(9.0, 13.5, length(position.xz)));
-  visible *= mix(1.0, pesoLado * dobladillo, uElevada * (1.0 - uCenital) * (1.0 - esEstrella));
+  float pesoLado = mix(POLVO_LEJANO, 1.3, smoothstep(-0.6, 0.8, haciaCamara));
+  float pesoElevado = smoothstep(0.03, 0.25, elevacionCamara) * (1.0 - smoothstep(0.29, 1.05, elevacionCamara));
+  visible *= mix(1.0, pesoLado, pesoElevado * (1.0 - esEstrella));
 
   vec4 mv = modelViewMatrix * vec4(posAparente, 1.0);
   float dist = max(-mv.z, 0.5);
@@ -102,23 +94,21 @@ void main() {
   float bokeh = coc / (coc + tamNitido + 0.6);
   // La misma luz repartida en un disco mayor es más tenue (conservación de energía).
   float conservacion = (tamNitido * tamNitido + 0.3) / (tam * tam + 0.3);
-  // La energía total del grano es la de su tamaño real (con 1 px como suelo); si se rasteriza
-  // más grande para estabilizarlo, el alfa baja en la misma proporción de área.
-  float tamEnergia = max(tamSuave, uPixelRatio);
+  // La energía total del grano es la de su tamaño REAL en pantalla, también por debajo de 1 px:
+  // si se rasteriza más grande para estabilizarlo, el alfa baja en la misma proporción de área.
+  // Así el flujo de cada grano cae con el cuadrado de la distancia, como una fuente puntual, y
+  // una sola exposición vale para todas las distancias (antes hacía falta una por vista: 3.5 a
+  // 19.5 unidades, 0.9 a 38, 0.5 a 60, que es justo la ley 1/d²).
+  float tamEnergia = tamSuave;
   float cobertura = (tamEnergia * tamEnergia) / (tamPx * tamPx);
-  // Motas subpíxel: se apagan casi del todo. Lo que se ve son estrellitas de ≥ 1 px, no una
-  // arena de puntos tenues; desde arriba se conserva algo más porque la banda se ve de frente y
-  // reparte sus granos en muchos más píxeles.
-  float finura = clamp(tam / uPixelRatio, 0.0, 1.0);
-  float subpixel = mix(mix(0.5, 1.0, finura), mix(0.85, 1.0, finura), uElevada);
   // Los granos que pasan a ras de la cámara se disuelven antes de cruzar el plano cercano.
   float cercania = smoothstep(0.6, 3.5, dist);
 
-  float alfaPolvo = aBrillo * conservacion * cobertura * subpixel * cercania;
+  float alfaPolvo = aBrillo * conservacion * cobertura * cercania;
   float alfaEstrella = aBrillo * conservacion * cobertura * 3.2;
 
-  // Desde arriba los discos de bokeh de los granos que pasan junto a la cámara se contienen.
-  float contencionBokeh = mix(1.0, 0.55, bokeh * uElevada);
+  // Los discos de bokeh de los granos que pasan junto a la cámara se contienen un poco.
+  float contencionBokeh = mix(1.0, 0.7, bokeh);
   vAlfa = mix(alfaPolvo, alfaEstrella, esEstrella) * visible * magnificacion * contencionBokeh;
   vBrilloBase = aBrillo;
   vBokeh = bokeh;
