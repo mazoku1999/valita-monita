@@ -14,7 +14,7 @@ import { generarPolvoEstelar } from '../utils/generarPolvoEstelar'
  * vista (0.9 a 38 unidades, 3.5 a 19.5, 0.5 a 60) porque los granos subpíxel tenían un suelo
  * de energía de 1 px.
  */
-const EXPOSICION_POLVO = 3.5
+const EXPOSICION_POLVO = 4.5
 /** Factor de apertura de la profundidad de campo (1 = la original) y tamaño máximo de grano (px·dpr). */
 const APERTURA_POLVO = 0.7
 const TAMANO_MAXIMO_POLVO = 20

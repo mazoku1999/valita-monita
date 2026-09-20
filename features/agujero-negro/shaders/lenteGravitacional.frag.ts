@@ -424,10 +424,14 @@ void main() {
     float dRExt = max(dR, 0.0);
     // Anillo de fotones: filamento dorado nítido y completo en el borde de la sombra.
     // Luminancia pico ≈ 1.0, justo bajo el umbral del bloom (1.05): el filamento no se emborrona.
-    float nucleoAnillo = exp(-dRExt * 14.0) * smoothstep(-0.06, 0.01, dR);
+    // Filamento fino y dorado (captura 29): luminancia ≈ 0.75, por debajo del umbral del bloom
+    // del gas (0.9) para que no se emborrone. El haz que lo cruza lo tapa sólo a medias: en la
+    // referencia el anillo sigue viéndose a través del gas, sin muescas.
+    float nucleoAnillo = exp(-dRExt * 22.0) * smoothstep(-0.05, 0.01, dR);
     float resplandorAnillo = exp(-dRExt * 6.0) * smoothstep(-0.1, 0.02, dR);
-    color += TGas * nucleoAnillo * vec3(1.0, 0.72, 0.40) * 1.3;
-    color += TGas * resplandorAnillo * vec3(1.0, 0.60, 0.28) * 0.35;
+    float visibleAnillo = max(TGas, 0.45);
+    color += visibleAnillo * nucleoAnillo * vec3(1.0, 0.66, 0.30) * 1.05;
+    color += visibleAnillo * resplandorAnillo * vec3(1.0, 0.55, 0.22) * 0.3;
   }
 
   // Bruma sepia: polvo tenue del plano del disco iluminado por el gas. Su espesor óptico es el

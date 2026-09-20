@@ -10,9 +10,10 @@ uniform highp sampler2D gas;
   uniform lowp sampler2D map;
 #endif
 uniform float intensity;
+uniform vec3 tinte;
 
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-  outputColor = vec4(texture2D(gas, uv).rgb + texture2D(map, uv).rgb * intensity, 1.0);
+  outputColor = vec4(texture2D(gas, uv).rgb + texture2D(map, uv).rgb * intensity * tinte, 1.0);
 }
 `
 
@@ -29,6 +30,9 @@ export class EfectoGas extends BloomEffect {
   constructor(opciones: BloomEffectOptions) {
     super({ ...opciones, blendFunction: BlendFunction.ADD })
     this.uniforms.set('gas', new THREE.Uniform<THREE.Texture | null>(null))
+    // El resplandor es luz del gas dispersada por el polvo: llega enrojecida (oro), no crema. En
+    // la captura lejana 28 el halo alrededor del anillo es oro-pardo, no crema-gris.
+    this.uniforms.set('tinte', new THREE.Uniform(new THREE.Vector3(1.0, 0.76, 0.5)))
     this.setFragmentShader(FRAGMENTO)
   }
 
