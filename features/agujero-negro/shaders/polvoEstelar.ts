@@ -99,7 +99,9 @@ void main() {
   // Así el flujo de cada grano cae con el cuadrado de la distancia, como una fuente puntual, y
   // una sola exposición vale para todas las distancias (antes hacía falta una por vista: 3.5 a
   // 19.5 unidades, 0.9 a 38, 0.5 a 60, que es justo la ley 1/d²).
-  float tamEnergia = tamSuave;
+  // Suelo de 0.8 px·dpr: por debajo, el grano ya no pierde energía con la distancia y la banda
+  // sigue viva de lejos (capturas 28 y 31); por encima rige la ley 1/d².
+  float tamEnergia = max(tamSuave, 0.8 * uPixelRatio);
   float cobertura = (tamEnergia * tamEnergia) / (tamPx * tamPx);
   // Los granos que pasan a ras de la cámara se disuelven antes de cruzar el plano cercano.
   float cercania = smoothstep(0.6, 3.5, dist);
@@ -169,9 +171,10 @@ void main() {
   // Valores lineales: ACES desatura, así que aquí todo es más cálido de lo que parece.
   // Estrellitas: crema-blanco cálido con variación de temperatura como un campo estelar real
   // (la mayoría cálidas, algunas blancas, unas pocas frías); el ámbar queda para el bokeh.
-  vec3 calida = vec3(1.00, 0.93, 0.80);
-  vec3 blancaCalida = vec3(0.99, 0.97, 0.93);
-  vec3 fria = vec3(0.88, 0.93, 1.00);
+  // Paleta más cálida (captura 31): la banda de chispas es oro, no crema-gris.
+  vec3 calida = vec3(1.00, 0.86, 0.62);
+  vec3 blancaCalida = vec3(1.00, 0.94, 0.82);
+  vec3 fria = vec3(0.94, 0.95, 1.00);
   vec3 ambar = vec3(0.92, 0.46, 0.16);
   vec3 blanco = vec3(0.96, 0.97, 1.00);
 

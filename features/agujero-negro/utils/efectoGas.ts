@@ -24,16 +24,37 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
  * de a la imagen de entrada: el gas florece con su propio umbral y radio, y las chispas no
  * engordan con él. Como efecto de pantalla se comporta igual desde cualquier ángulo.
  */
+const FRAGMENTO_SOLO_BLOOM = /* glsl */ `
+#ifdef FRAMEBUFFER_PRECISION_HIGH
+  uniform mediump sampler2D map;
+#else
+  uniform lowp sampler2D map;
+#endif
+uniform float intensity;
+uniform vec3 tinte;
+
+void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+  outputColor = vec4(texture2D(map, uv).rgb * intensity * tinte, 1.0);
+}
+`
+
+export interface OpcionesEfectoGas extends BloomEffectOptions {
+  /** Si es falso, el efecto sólo suma su bloom (el gas ya lo compuso otra instancia). */
+  componerGas?: boolean
+  /** Tinte del bloom (lineal). */
+  tinte?: THREE.Vector3
+}
+
 export class EfectoGas extends BloomEffect {
   private bufferActual: THREE.WebGLRenderTarget | null = null
 
-  constructor(opciones: BloomEffectOptions) {
+  constructor({ componerGas = true, tinte = new THREE.Vector3(1.0, 0.76, 0.5), ...opciones }: OpcionesEfectoGas) {
     super({ ...opciones, blendFunction: BlendFunction.ADD })
     this.uniforms.set('gas', new THREE.Uniform<THREE.Texture | null>(null))
     // El resplandor es luz del gas dispersada por el polvo: llega enrojecida (oro), no crema. En
     // la captura lejana 28 el halo alrededor del anillo es oro-pardo, no crema-gris.
-    this.uniforms.set('tinte', new THREE.Uniform(new THREE.Vector3(1.0, 0.76, 0.5)))
-    this.setFragmentShader(FRAGMENTO)
+    this.uniforms.set('tinte', new THREE.Uniform(tinte))
+    this.setFragmentShader(componerGas ? FRAGMENTO : FRAGMENTO_SOLO_BLOOM)
   }
 
   override update(renderer: THREE.WebGLRenderer, inputBuffer: THREE.WebGLRenderTarget, deltaTime?: number): void {

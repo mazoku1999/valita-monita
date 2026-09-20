@@ -41,9 +41,13 @@ const float RAIZ_PI = 1.7724538509;
 // (τ ≈ 25), el gas satura y el haz brilla al máximo con un núcleo de ~5 px sobre 1158, como en
 // la referencia. Esta asimetría τ_frente ≪ 1 ≪ τ_canto es lo que hace que el disco se lea como
 // haz brillante de canto y como superficie dorada desde arriba.
-// KAPPA 2.4: con la ganancia única (3.6) la cara cercana a 12° necesita τ ≈ 0.7 para llegar a
-// crema; de canto (τ ≈ 35) satura igual y de frente (τ ≈ 0.16) el disco queda en oro.
+// KAPPA 2.4: la cara cercana a 12° tiene τ ≈ 0.7 y llega a crema; de canto (τ ≈ 35) satura y
+// de frente (τ ≈ 0.16) el disco queda en oro.
 const float KAPPA = 2.4;
+// Lámina de gas fina (σ = 0.038 en la ISCO). En las capturas del usuario el grosor del haz es
+// constante en PÍXELES (fino a 19.5 unidades, con cuerpo a 74 y a 140), no en unidades del
+// disco: se probaron láminas 3 y 6 veces más gruesas y de cerca el haz se convertía en una banda
+// enorme. El cuerpo del haz lo pone la floración compacta del gas (ver EfectosPost.tsx).
 const float SIGMA_INV_NUCLEO = 26.3;
 const float SIGMA_INV_ATMOSFERA = 7.89;
 const float AMP_ATMOSFERA = 0.0076;
@@ -446,8 +450,10 @@ void main() {
   // Se parametriza por el parámetro de impacto para que sea un círculo limpio en pantalla.
   float bImpacto = length(cross(ro, rd));
   float rho = bImpacto / R_SOMBRA;
-  float fuera = max(rho - 1.25, 0.0);
-  float anillosBruma = 0.965 + 0.035 * sin(rho * 30.0 + 1.7) * sin(rho * 11.0);
+  // Un solo hombro suave desde el anillo, sin anillos concéntricos (a distancia se leían como
+  // una diana): calibrado con la captura 29 (0.22 sRGB junto al anillo, 0.14 a 1.6 R, negro
+  // desde 1.9 R) y con el halo pardo y liso de la captura 31.
+  float fuera = max(rho - 1.0, 0.0);
   // Meseta hasta 1.4 R, gaussiana corta y cola exponencial: calibrado contra la referencia
   // (sRGB medido: 1.15 R ≈ 104, 1.4 R ≈ 97, 1.7 R ≈ 63, 2.2 R ≈ 26, 2.6 R ≈ 20).
   // Desde arriba la cola exponencial pesa menos: el halo exterior lo pone el bloom.
@@ -456,7 +462,9 @@ void main() {
   // Halo compacto en unidades del anillo: la captura cercana 29 lo mide en 0.22 sRGB junto al
   // anillo, 0.14 a 1.6 R y negro (0.03) desde 1.9 R; el resplandor lejano lo pone el bloom del
   // gas, que crece con la distancia porque es de tamaño fijo en píxeles (captura 28).
-  float perfilBruma = exp(-pow(fuera / 0.25, 2.0)) + 0.15 * exp(-fuera / 0.4);
+  // Cola tenue (0.15, escala 0.9 R) para que el halo se funda con el resplandor del haz en vez
+  // de acabar en una burbuja; en la captura 29 sigue leyéndose negro (< 0.08) desde 1.9 R.
+  float perfilBruma = exp(-fuera / 0.7);
   // Dentro de la sombra (rho < 1), arriba y abajo del haz, la referencia mide 139/99/63: la imagen
   // lensada del lado lejano se apila ahí, ~1.8 veces más brillante que a 1.15 R.
   // Desde arriba el apilamiento dentro de la sombra pesa más: la referencia elevada mide 0.83
@@ -467,8 +475,7 @@ void main() {
   // 0.45 deja la sombra a 12° en ~0.6 sRGB (referencia 0.65) y de canto en ~0.7 (captura 22: 0.66).
   // Dentro de la sombra el halo es ~1.5 veces el de fuera (29: 0.375 a 0.4 R frente a 0.22).
   perfilBruma *= 1.0 + 0.8 * (1.0 - smoothstep(0.2, 1.05, rho));
-  float segundoAnillo = exp(-pow((rho - 1.30) / 0.045, 2.0)) * step(1.0, rho);
-  float bruma = (0.070 * perfilBruma * anillosBruma + 0.02 * segundoAnillo) * capaPolvo;
+  float bruma = 0.05 * perfilBruma * capaPolvo;
   // De canto la bruma es sepia saturada; desde arriba la referencia la mide crema tostado
   // (0.78, 0.63, 0.44 sRGB), así que el tono se abre hacia el ámbar claro.
   // De canto la captura 22 mide el resplandor en oro pálido (0.72, 0.57, 0.38 sRGB a 0.8 R),
