@@ -28,6 +28,9 @@ type UniformesLente = {
   uAtenuacionLejana: THREE.IUniform<number>
   uCenital: THREE.IUniform<number>
   uRadioGasFin: THREE.IUniform<number>
+  uDobladillo: THREE.IUniform<number>
+  uBrumaCercana: THREE.IUniform<number>
+  uBrumaEscala: THREE.IUniform<number>
 }
 
 export function LenteGravitacionalQuad() {
@@ -44,6 +47,9 @@ export function LenteGravitacionalQuad() {
       uAtenuacionLejana: { value: 1 },
       uCenital: { value: 0 },
       uRadioGasFin: { value: 10.2 },
+      uDobladillo: { value: 1 },
+      uBrumaCercana: { value: 0 },
+      uBrumaEscala: { value: 1 },
     }
     const materialLente = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
@@ -77,13 +83,18 @@ export function LenteGravitacionalQuad() {
     const seno = senoElevacion(camera.position)
     const vista = VISTAS_CAMARA[obtenerVista()]
     const t = pesoAspecto(seno, vista.pesoMinimoAspecto)
+    const tFisica = pesoAspecto(seno, vista.pesoMinimoFisica ?? vista.pesoMinimoAspecto)
     const aspecto = vista.aspecto
     uniformes.uCenital.value = factorVistaCenital(seno)
     uniformes.uBrillo.value = ajuste('ganancia', mezclar(GANANCIA_CANTO, aspecto.ganancia, t))
     uniformes.uBrumaElevada.value = ajuste('bruma', aspecto.bruma) * t
-    uniformes.uElevada.value = t
+    uniformes.uElevada.value = tFisica
     uniformes.uAtenuacionLejana.value = ajuste('lejano', aspecto.luzArcos)
     uniformes.uRadioGasFin.value = aspecto.radioGas
+    uniformes.uDobladillo.value = aspecto.dobladillo
+    uniformes.uBrumaCercana.value = aspecto.brumaCercana ?? 0
+    // La escala de la bruma sigue el peso del aspecto para que cambiar de vista sea un fundido.
+    uniformes.uBrumaEscala.value = mezclar(1, aspecto.brumaEscala ?? 1, t)
   })
 
   return <mesh geometry={geometria} material={material} frustumCulled={false} renderOrder={-10} />

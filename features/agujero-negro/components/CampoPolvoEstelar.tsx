@@ -95,7 +95,7 @@ export function CampoPolvoEstelar() {
     const seno = senoElevacion(camera.position)
     const vista = VISTAS_CAMARA[obtenerVista()]
     const t = pesoAspecto(seno, vista.pesoMinimoAspecto)
-    uniformes.uElevada.value = t
+    uniformes.uElevada.value = pesoAspecto(seno, vista.pesoMinimoFisica ?? vista.pesoMinimoAspecto)
     uniformes.uCenital.value = factorVistaCenital(seno)
     const aspecto = vista.aspecto
     uniformes.uBrilloPolvo.value = mezclar(EXPOSICION_CANTO, ajuste('polvoExposicion', aspecto.polvoExposicion), t)

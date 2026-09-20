@@ -28,6 +28,12 @@ uniform float uAtenuacionLejana;
 uniform float uCenital;
 // Radio donde el gas acaba de fundirse fuera del plano (la vista lo fija; de canto no se usa).
 uniform float uRadioGasFin;
+// Cuánto pesa el dobladillo de polvo sobre el gas cercano (0 = sin extinción; la vista lo fija).
+uniform float uDobladillo;
+// Gradiente de la bruma hacia la cara cercana (0 = bruma simétrica; la vista lo fija).
+uniform float uBrumaCercana;
+// Escala global de la bruma, también con la cámara en el plano (1 = calibración de canto).
+uniform float uBrumaEscala;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -403,7 +409,7 @@ void main() {
           // cara cercana pasa a oro a partir de 6. De canto no se aplica: ahí la extinción rasante
           // ya la modela enPlano.
           float alturaCruce = abs(ro.y) * max(R_DOBLADILLO - rm, 0.0) / max(length(ro.xz) - rm, 1.0);
-          float tauDobladillo = TAU_DOBLADILLO * exp(-0.5 * alturaCruce * alturaCruce / (SIGMA_DOBLADILLO * SIGMA_DOBLADILLO));
+          float tauDobladillo = TAU_DOBLADILLO * uDobladillo * exp(-0.5 * alturaCruce * alturaCruce / (SIGMA_DOBLADILLO * SIGMA_DOBLADILLO));
           // Sólo en el sector que mira a la cámara: el rayo que llega a un flanco pasa 2 σ por
           // encima del dobladillo y no debe atenuarse (la referencia mantiene los flancos en
           // crema hasta ±7.7 radios).
@@ -475,7 +481,15 @@ void main() {
   float apilamientoElevado = 2.3 * (1.0 - smoothstep(0.0, 0.95, rho));
   perfilBruma *= 1.0 + mix(apilamientoCanto, apilamientoElevado, uElevada);
   float segundoAnillo = exp(-pow((rho - 1.30) / 0.045, 2.0)) * step(1.0, rho);
-  float bruma = (0.070 * perfilBruma * anillosBruma + 0.02 * segundoAnillo) * capaPolvo;
+  // Con la cámara alta y cerca, la referencia mide dentro de la sombra un gradiente cálido que
+  // sube hacia la cara cercana (0.20 arriba → 0.61 en el centro → 0.76 abajo): es la luz de la
+  // cara cercana dispersada por el polvo que hay entre ella y la cámara. Se pesa por dónde cruza
+  // el rayo el plano del disco: antes del agujero (cara cercana, rayos que apuntan bajo el centro)
+  // pesa más; detrás, menos.
+  float sCruce = (rd.y < -1e-4) ? -ro.y / rd.y : 1e9;
+  float cercania = clamp((length(ro) - sCruce) / (0.5 * length(ro)), -1.0, 1.0);
+  float gradienteCercano = mix(1.0, clamp(0.55 + 1.3 * cercania, 0.15, 1.6), uElevada * uBrumaCercana);
+  float bruma = (0.070 * perfilBruma * anillosBruma + 0.02 * segundoAnillo) * capaPolvo * gradienteCercano * uBrumaEscala;
   // De canto la bruma es sepia saturada; desde arriba la referencia la mide crema tostado
   // (0.78, 0.63, 0.44 sRGB), así que el tono se abre hacia el ámbar claro.
   color += bruma * mix(vec3(1.0, 0.50, 0.17), vec3(1.0, 0.58, 0.27), uElevada);

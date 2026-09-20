@@ -23,7 +23,7 @@ const suavizar = (borde0: number, borde1: number, x: number): number => {
  */
 export const factorVistaElevada = (seno: number): number => suavizar(0.05, 0.28, seno)
 
-/** Peso con que entra el aspecto de una vista: por elevación, pero nunca por debajo de su mínimo. */
+/** Peso con que entra el aspecto (o la física) de una vista: por elevación, pero nunca por debajo de su mínimo. */
 export const pesoAspecto = (seno: number, pesoMinimo: number): number =>
   Math.max(factorVistaElevada(seno), pesoMinimo)
 

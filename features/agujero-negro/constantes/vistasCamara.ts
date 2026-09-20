@@ -1,7 +1,7 @@
 import { FOTOGRAMAS_CAMARA, type FotogramaCamara } from '../utils/fotogramasCamara'
 import { ENCUADRE_PANTALLA, INCLINACION_PANTALLA } from './parametrosAgujero'
 
-export type IdVista = 'canto' | 'elevada' | 'inferior' | 'cenital' | 'lejana'
+export type IdVista = 'canto' | 'anillo' | 'elevada' | 'elevadaCercana' | 'inferior' | 'cenital' | 'lejana'
 
 /** Parámetros de una vista que no dependen del scroll: cómo se coloca el agujero en pantalla. */
 export interface EncuadreVista {
@@ -40,6 +40,10 @@ export interface AspectoVista {
   readonly dobladillo: number
   /** Radio donde el gas acaba de fundirse fuera del plano (de canto sigue hasta 12). */
   readonly radioGas: number
+  /** Gradiente de la bruma hacia la cara cercana (0 = simétrica, 1 = calibrado con la cámara alta y cerca). */
+  readonly brumaCercana?: number
+  /** Escala global de la bruma, incluida la de canto (1 = calibración original). */
+  readonly brumaEscala?: number
 }
 
 export interface VistaCamara extends EncuadreVista {
@@ -56,6 +60,13 @@ export interface VistaCamara extends EncuadreVista {
    * gas) lo fija a 1.
    */
   readonly pesoMinimoAspecto: number
+  /**
+   * Peso mínimo de la FÍSICA fuera del plano (uElevada: fundido del gas, extinción del
+   * dobladillo, apagado de la extinción rasante, surcos, viraje a crema). Por defecto, el mismo
+   * que el del aspecto; una vista en el plano que quiere su propio aspecto sin esa física (la del
+   * anillo) lo deja a 0.
+   */
+  readonly pesoMinimoFisica?: number
 }
 
 /**
@@ -116,6 +127,43 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     aspecto: ASPECTO_ELEVADO,
     pesoMinimoAspecto: 0,
   },
+  anillo: {
+    id: 'anillo',
+    etiqueta: 'Ring',
+    descripcion: 'Camera in the plane and close in: the blade runs straight through the photon ring, sparks all around it.',
+    // Calibrado contra las capturas 11 y 14 del usuario (3456×1604): anillo de fotones de
+    // 310 px = 39 % de la altura → 18.5–20 unidades a fov 40°; sombra en el 54 % del ancho y el
+    // 32 % de la altura; el haz cruza el anillo por su centro: cámara exactamente en el plano
+    // (a 1° la perspectiva ya lo convertía en una hoja gruesa).
+    fotogramas: derivarRecorrido({ polar: Math.PI / 2, distancia: 19.5, fov: 40 }),
+    inclinacion: INCLINACION_PANTALLA,
+    encuadre: { x: 0.09, y: 0.34 },
+    // Física de canto (la cámara está en el plano) con su propio aspecto: en las capturas el haz
+    // es una línea fina de chispas con un núcleo de gas discreto, no una hoja saturada, la sombra
+    // queda oscura (0.10) dentro de un anillo de fotones nítido y las chispas salpican todo el
+    // anillo y el haz. De ahí la ganancia baja del gas, la bruma mínima, el bloom corto y el
+    // polvo vivo y nítido.
+    aspecto: {
+      // Ganancia de canto: bajarla (se probó 1.6 y 3.0) no adelgaza el haz, sólo lo apaga a un
+      // naranja sin brillo; el haz debe ser crema saturado como en la captura. Lo que lo mantiene
+      // estrecho tan cerca es el bloom mínimo.
+      ganancia: 6.5,
+      bruma: 0.15,
+      // La bruma de canto (calibrada a 42 unidades) llenaría la sombra tan de cerca; en la captura
+      // el interior del anillo queda oscuro (0.10 sRGB).
+      brumaEscala: 0.3,
+      luzArcos: 1,
+      bloom: { umbral: 1.05, intensidad: 1.0, radio: 0.35 },
+      polvoExposicion: 3.5,
+      polvoLejano: 0.5,
+      apertura: 0.5,
+      tamanoMaximo: 14,
+      dobladillo: 0,
+      radioGas: 40,
+    },
+    pesoMinimoAspecto: 1,
+    pesoMinimoFisica: 0,
+  },
   elevada: {
     id: 'elevada',
     etiqueta: 'Above',
@@ -126,6 +174,38 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     inclinacion: INCLINACION_PANTALLA,
     encuadre: { x: 0.0165, y: 0.355 },
     aspecto: ASPECTO_ELEVADO,
+    pesoMinimoAspecto: 0,
+  },
+  elevadaCercana: {
+    id: 'elevadaCercana',
+    etiqueta: 'Above close',
+    descripcion: 'Camera 16° over the disk and close in: the near face fills the frame and covers the lower half of the shadow.',
+    // Calibrado contra la captura 19 del usuario (3450×2084): anillo de fotones de 369 px = 35.4 %
+    // de la altura → 20.8 unidades a fov 40°; sombra en el 52.4 % del ancho y el 32.9 % de la
+    // altura. La cara cercana del gas cubre la sombra desde 0.36 R por debajo de su centro, lo que
+    // (con la curvatura de los rayos) exige 16° de elevación; a lo largo del eje menor la referencia
+    // lee 0.20 → 0.61 → 0.90 sRGB de arriba abajo dentro de la sombra (bruma más bloom de la cara
+    // cercana), 0.97 en la cara cercana hasta r ≈ 8 y una capucha oscura (0.10–0.17) sobre ella.
+    fotogramas: derivarRecorrido({ polar: Math.PI / 2 - 0.28, distancia: 20.8, fov: 40 }),
+    inclinacion: INCLINACION_PANTALLA,
+    encuadre: { x: 0.048, y: 0.343 },
+    aspecto: {
+      ganancia: 6.5,
+      // Bruma con gradiente hacia la cara cercana (brumaCercana): dentro de la sombra la referencia
+      // lee 0.20 → 0.61 → 0.76 de arriba abajo y así se reproduce (0.26 → 0.63 → 0.68).
+      bruma: 2.2,
+      luzArcos: 0.03,
+      bloom: { umbral: 0.6, intensidad: 2.0, radio: 0.8 },
+      polvoExposicion: 2.4,
+      polvoLejano: 0.5,
+      apertura: 0.6,
+      tamanoMaximo: 14,
+      // Sin dobladillo ni fundido del gas: la cara cercana satura a crema hasta r ≈ 8 y sigue
+      // en oro hasta 12, como en la referencia.
+      dobladillo: 0,
+      radioGas: 40,
+      brumaCercana: 1,
+    },
     pesoMinimoAspecto: 0,
   },
   inferior: {
@@ -156,20 +236,42 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     id: 'lejana',
     etiqueta: 'Wide',
     descripcion: 'Camera far out, slightly above the plane: the whole ring system around the hole.',
-    fotogramas: derivarRecorrido({ polar: 1.4, distancia: 70, fov: 40 }),
+    // Calibrado contra las capturas 5, 6, 13, 17 y 18 del usuario: anillo de 4.5–5.5 % de la
+    // altura → 60–80 unidades; sombra en el 54–57 % del ancho y el 41–46 % de la altura; unos 5°
+    // sobre el plano.
+    fotogramas: derivarRecorrido({ polar: 1.45, distancia: 60, fov: 40 }),
     inclinacion: INCLINACION_PANTALLA,
-    encuadre: { x: 0.02, y: 0.15 },
-    aspecto: ASPECTO_ELEVADO,
-    pesoMinimoAspecto: 0,
+    encuadre: { x: 0.09, y: 0.13 },
+    // De lejos y casi de canto (7°) el disco es una hoja saturada envuelta en un resplandor blando
+    // tres veces mayor que ella, con la capucha del lado lejano asomando encima, y el polvo una
+    // corriente tenue sin resolver: física de canto, ganancia de canto, bloom muy abierto y
+    // exposición del polvo baja.
+    aspecto: {
+      ganancia: 6.5,
+      bruma: 1.5,
+      luzArcos: 1,
+      bloom: { umbral: 0.5, intensidad: 3.2, radio: 0.9 },
+      polvoExposicion: 0.5,
+      polvoLejano: 0.5,
+      apertura: 1,
+      tamanoMaximo: 30,
+      dobladillo: 0,
+      radioGas: 40,
+    },
+    pesoMinimoAspecto: 1,
+    pesoMinimoFisica: 0,
   },
 }
 
-export const ORDEN_VISTAS: readonly IdVista[] = ['canto', 'elevada', 'inferior', 'cenital', 'lejana']
+export const ORDEN_VISTAS: readonly IdVista[] = ['canto', 'anillo', 'elevada', 'elevadaCercana', 'inferior', 'cenital', 'lejana']
 
 export const VISTA_INICIAL: IdVista = 'canto'
 
-/** Distancias a las que puede llegar el zoom libre: nunca dentro del gas (17) ni tan lejos que el disco sea un punto. */
-export const DISTANCIA_LIBRE = { minima: 18.5, maxima: 140 } as const
+/**
+ * Distancias a las que puede llegar el zoom libre. El mínimo entra en el borde del gas (17): las
+ * capturas del usuario a ~15 unidades, con el anillo enorme y el haz cruzándolo, se ven bien.
+ */
+export const DISTANCIA_LIBRE = { minima: 13, maxima: 140 } as const
 
 export const esIdVista = (valor: unknown): valor is IdVista =>
   typeof valor === 'string' && (ORDEN_VISTAS as readonly string[]).includes(valor)

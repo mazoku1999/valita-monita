@@ -23,10 +23,10 @@ export function SelectorVista() {
       aria-label="Camera"
       className="pointer-events-auto flex items-center gap-3 font-mono-narrativa text-[11px] uppercase tracking-[0.32em]"
     >
-      <span className="hidden text-gris-tenue lg:inline">Angle</span>
+      <span className="hidden text-gris-tenue xl:inline">Angle</span>
 
       {/* Pantallas anchas: todos los encuadres a la vista. */}
-      <span className="hidden items-center gap-3 md:flex">
+      <span className="hidden items-center gap-3 xl:flex">
         {ORDEN_VISTAS.map((id, posicion) => {
           const vista = VISTAS_CAMARA[id]
           const activa = id === vistaActiva && !libre
@@ -56,7 +56,7 @@ export function SelectorVista() {
         type="button"
         title={`Next angle: ${VISTAS_CAMARA[siguiente].etiqueta}`}
         onClick={() => establecerVista(siguiente)}
-        className={`md:hidden ${estiloBoton(!libre)}`}
+        className={`xl:hidden ${estiloBoton(!libre)}`}
       >
         {VISTAS_CAMARA[vistaActiva].etiqueta}
       </button>
