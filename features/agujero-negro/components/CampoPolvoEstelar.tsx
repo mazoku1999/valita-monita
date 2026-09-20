@@ -4,19 +4,17 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { PARAMETROS_AGUJERO } from '../constantes/parametrosAgujero'
+import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { POLVO_ESTELAR_FRAG, POLVO_ESTELAR_VERT } from '../shaders/polvoEstelar'
-import { VISTAS_CAMARA } from '../constantes/vistasCamara'
-import { ajuste, obtenerVista } from '../store/vistaCamaraStore'
-import { factorVistaCenital, mezclar, pesoAspecto, senoElevacion } from '../utils/elevacionCamara'
+import { ajuste } from '../store/vistaCamaraStore'
+import { ASPECTO_CANTO, aspectoEnCamara } from '../utils/campoAspecto'
 import { generarPolvoEstelar } from '../utils/generarPolvoEstelar'
 
 /**
  * Ganancia del polvo de canto (0.9): conserva el perfil del haz calibrado. Fuera del plano manda
- * el `aspecto` de la vista activa, mezclado por elevación.
+ * el `aspecto` de cada vista, interpolado por la cámara real (ver `utils/campoAspecto.ts`).
  */
-const EXPOSICION_CANTO = 0.9
-/** Tamaño máximo de grano de canto (px·dpr): los discos de bokeh calibrados con la referencia. */
-const TAMANO_MAXIMO_CANTO = 30
+const EXPOSICION_CANTO = ASPECTO_CANTO.polvoExposicion
 
 type UniformesPolvo = {
   uTiempo: THREE.IUniform<number>
@@ -92,16 +90,13 @@ export function CampoPolvoEstelar() {
     uniformes.uEscalaPuntos.value = 40 * escalaVista
     // El plano de enfoque sigue al agujero: lo que la cámara atraviesa se desenfoca en bokeh.
     uniformes.uFoco.value = camera.position.length()
-    const seno = senoElevacion(camera.position)
-    const vista = VISTAS_CAMARA[obtenerVista()]
-    const t = pesoAspecto(seno, vista.pesoMinimoAspecto)
-    uniformes.uElevada.value = pesoAspecto(seno, vista.pesoMinimoFisica ?? vista.pesoMinimoAspecto)
-    uniformes.uCenital.value = factorVistaCenital(seno)
-    const aspecto = vista.aspecto
-    uniformes.uBrilloPolvo.value = mezclar(EXPOSICION_CANTO, ajuste('polvoExposicion', aspecto.polvoExposicion), t)
+    const aspecto = aspectoEnCamara(camera, obtenerProgreso())
+    uniformes.uElevada.value = aspecto.elevada
+    uniformes.uCenital.value = aspecto.cenital
+    uniformes.uBrilloPolvo.value = ajuste('polvoExposicion', aspecto.polvoExposicion)
     uniformes.uPolvoLejano.value = aspecto.polvoLejano
-    uniformes.uApertura.value = 6 * escalaVista * mezclar(1, aspecto.apertura, t)
-    uniformes.uTamMax.value = mezclar(TAMANO_MAXIMO_CANTO, aspecto.tamanoMaximo, t) * gl.getPixelRatio()
+    uniformes.uApertura.value = 6 * escalaVista * aspecto.apertura
+    uniformes.uTamMax.value = aspecto.tamanoMaximo * gl.getPixelRatio()
     uniformes.uDobladillo.value = aspecto.dobladillo
   })
 

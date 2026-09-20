@@ -44,6 +44,11 @@ export interface AspectoVista {
   readonly brumaCercana?: number
   /** Escala global de la bruma, incluida la de canto (1 = calibración original). */
   readonly brumaEscala?: number
+  /**
+   * Amplitud de la corona de dispersión que envuelve el gas (1 = calibrada de canto contra la
+   * captura 22: el haz envuelto en un resplandor ancho y suave). Cada vista fija la suya.
+   */
+  readonly corona?: number
 }
 
 export interface VistaCamara extends EncuadreVista {
@@ -86,6 +91,10 @@ export const ASPECTO_ELEVADO: AspectoVista = {
   // prolongación densa de la banda.
   dobladillo: 1,
   radioGas: 10.2,
+  // Corona efectiva 0.35 a 12.6° (este valor pesa 0.83 y el de canto, 1, el resto): es la
+  // "falda" lisa bajo el borde del gas que mide la referencia elevada (0.50 sRGB a 1.6 R, 0.30
+  // a 2.1 R y 0.16 a 3.1 R en la cara cercana); con la corona entera la falda salía al doble.
+  corona: 0.22,
 }
 
 /**
@@ -110,6 +119,9 @@ export const ASPECTO_INFERIOR: AspectoVista = {
   dobladillo: 0,
   // Tan cerca, la perspectiva agranda ×2 el gas cercano: la referencia acaba la banda a ~8.5 radios.
   radioGas: 8.5,
+  // La referencia inferior deja el lado lejano casi negro más allá de 1.9 R (0.03 sRGB): la
+  // corona, que también ilumina detrás del agujero, se contiene.
+  corona: 0.15,
 }
 
 /** Recorrido que conserva el ritmo de azimut de canto con elevación, distancia y fov fijos. */
@@ -160,6 +172,10 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
       tamanoMaximo: 14,
       dobladillo: 0,
       radioGas: 40,
+      // En las capturas del anillo el haz es una línea fina y el interior queda oscuro (0.10
+      // sRGB): la corona casi se apaga (con 0.4 el interior subía a 0.48 y con 0.08 a 0.23,
+      // porque tan cerca los rayos que apuntan al agujero la cruzan entera y de frente).
+      corona: 0.02,
     },
     pesoMinimoAspecto: 1,
     pesoMinimoFisica: 0,
@@ -205,6 +221,9 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
       dobladillo: 0,
       radioGas: 40,
       brumaCercana: 1,
+      // El gradiente de la sombra (0.20 → 0.61 → 0.76) lo pone la bruma cercana; la corona
+      // entera lo aplanaba (0.54 arriba) y doblaba la falda del lado lejano.
+      corona: 0.15,
     },
     pesoMinimoAspecto: 0,
   },
@@ -229,7 +248,9 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     fotogramas: derivarRecorrido({ polar: 0.3, distancia: 30, fov: 41 }),
     inclinacion: 0,
     encuadre: { x: 0, y: 0.12 },
-    aspecto: ASPECTO_ELEVADO,
+    // Desde el cenit la corona se ve como un velo sobre el disco exterior (+0.08 sRGB entre 2 y
+    // 3.5 R con la corona entera): se contiene para que la superficie siga nítida.
+    aspecto: { ...ASPECTO_ELEVADO, corona: 0.3 },
     pesoMinimoAspecto: 0,
   },
   lejana: {
@@ -257,6 +278,9 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
       tamanoMaximo: 30,
       dobladillo: 0,
       radioGas: 40,
+      // El resplandor blando de las capturas lejanas ya lo pone el bloom abierto; la corona
+      // entera lo subía 0.1 sRGB entre 0.9 y 2.4 R.
+      corona: 0.6,
     },
     pesoMinimoAspecto: 1,
     pesoMinimoFisica: 0,

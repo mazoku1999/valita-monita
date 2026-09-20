@@ -5,16 +5,9 @@ import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { LENTE_GRAVITACIONAL_FRAG } from '../shaders/lenteGravitacional.frag'
 import { LENTE_GRAVITACIONAL_VERT } from '../shaders/lenteGravitacional.vert'
-import { VISTAS_CAMARA } from '../constantes/vistasCamara'
-import { ajuste, obtenerVista } from '../store/vistaCamaraStore'
-import { factorVistaCenital, mezclar, pesoAspecto, senoElevacion } from '../utils/elevacionCamara'
-
-/**
- * Ganancia del gas de canto (6.5): el haz satura a crema en toda su longitud, como en la
- * referencia. Fuera del plano manda el `aspecto` de la vista activa (ver `constantes/vistasCamara.ts`),
- * mezclado por elevación.
- */
-const GANANCIA_CANTO = 6.5
+import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
+import { ajuste } from '../store/vistaCamaraStore'
+import { ASPECTO_CANTO, aspectoEnCamara } from '../utils/campoAspecto'
 
 type UniformesLente = {
   uTiempo: THREE.IUniform<number>
@@ -31,6 +24,7 @@ type UniformesLente = {
   uDobladillo: THREE.IUniform<number>
   uBrumaCercana: THREE.IUniform<number>
   uBrumaEscala: THREE.IUniform<number>
+  uCorona: THREE.IUniform<number>
 }
 
 export function LenteGravitacionalQuad() {
@@ -41,7 +35,7 @@ export function LenteGravitacionalQuad() {
       uCamaraMundo: { value: new THREE.Matrix4() },
       uVistaProyeccion: { value: new THREE.Matrix4() },
       uPosCamara: { value: new THREE.Vector3() },
-      uBrillo: { value: GANANCIA_CANTO },
+      uBrillo: { value: ASPECTO_CANTO.ganancia },
       uBrumaElevada: { value: 0 },
       uElevada: { value: 0 },
       uAtenuacionLejana: { value: 1 },
@@ -50,6 +44,7 @@ export function LenteGravitacionalQuad() {
       uDobladillo: { value: 1 },
       uBrumaCercana: { value: 0 },
       uBrumaEscala: { value: 1 },
+      uCorona: { value: 1 },
     }
     const materialLente = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
@@ -80,21 +75,19 @@ export function LenteGravitacionalQuad() {
     uniformes.uCamaraMundo.value.copy(camera.matrixWorld)
     uniformes.uVistaProyeccion.value.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
     uniformes.uPosCamara.value.copy(camera.position)
-    const seno = senoElevacion(camera.position)
-    const vista = VISTAS_CAMARA[obtenerVista()]
-    const t = pesoAspecto(seno, vista.pesoMinimoAspecto)
-    const tFisica = pesoAspecto(seno, vista.pesoMinimoFisica ?? vista.pesoMinimoAspecto)
-    const aspecto = vista.aspecto
-    uniformes.uCenital.value = factorVistaCenital(seno)
-    uniformes.uBrillo.value = ajuste('ganancia', mezclar(GANANCIA_CANTO, aspecto.ganancia, t))
-    uniformes.uBrumaElevada.value = ajuste('bruma', aspecto.bruma) * t
-    uniformes.uElevada.value = tFisica
+    // El aspecto sale de la cámara real (ver `utils/campoAspecto.ts`): al orbitar o cambiar de
+    // encuadre, bruma, corona, arcos y física fuera del plano se funden con el movimiento.
+    const aspecto = aspectoEnCamara(camera, obtenerProgreso())
+    uniformes.uCenital.value = aspecto.cenital
+    uniformes.uBrillo.value = ajuste('ganancia', aspecto.ganancia)
+    uniformes.uBrumaElevada.value = ajuste('bruma', aspecto.brumaElevada)
+    uniformes.uElevada.value = aspecto.elevada
     uniformes.uAtenuacionLejana.value = ajuste('lejano', aspecto.luzArcos)
     uniformes.uRadioGasFin.value = aspecto.radioGas
     uniformes.uDobladillo.value = aspecto.dobladillo
-    uniformes.uBrumaCercana.value = aspecto.brumaCercana ?? 0
-    // La escala de la bruma sigue el peso del aspecto para que cambiar de vista sea un fundido.
-    uniformes.uBrumaEscala.value = mezclar(1, aspecto.brumaEscala ?? 1, t)
+    uniformes.uBrumaCercana.value = aspecto.brumaCercana
+    uniformes.uBrumaEscala.value = aspecto.brumaEscala
+    uniformes.uCorona.value = ajuste('corona', aspecto.corona)
   })
 
   return <mesh geometry={geometria} material={material} frustumCulled={false} renderOrder={-10} />

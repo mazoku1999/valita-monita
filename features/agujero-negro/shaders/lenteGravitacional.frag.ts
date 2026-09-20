@@ -34,6 +34,8 @@ uniform float uDobladillo;
 uniform float uBrumaCercana;
 // Escala global de la bruma, también con la cámara en el plano (1 = calibración de canto).
 uniform float uBrumaEscala;
+// Amplitud de la corona de dispersión que envuelve el gas (1 = calibración de canto; la vista la fija).
+uniform float uCorona;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -66,6 +68,25 @@ const float TAU_DOBLADILLO = 0.7;
 const float SIGMA_INV_NUCLEO = 26.3;
 const float SIGMA_INV_ATMOSFERA = 7.89;
 const float AMP_ATMOSFERA = 0.0076;
+// Corona de dispersión: polvo fino que envuelve el disco con una escala de altura de ~1 unidad
+// (treinta veces la lámina de gas, creciendo hacia fuera) y dispersa hacia delante la luz del
+// disco interior. Con la cámara en el plano, el rayo recorre la corona a lo largo (decenas de
+// unidades) y la luz del gas que viaja hacia la cámara se desvía en ángulos pequeños: el haz se
+// lee envuelto en un resplandor ancho, suave y crema (FWHM ≈ 0.85 R en la captura 22) que se
+// apaga hacia las puntas con el brillo del disco. La función de fase (Henyey-Greenstein) hace
+// que la cara cercana disperse mucho más que la lejana, como los arcos tenues de la referencia.
+// Una capa así de gruesa se ve igual de brillante desde arriba (a 12.6° la columna 2H/sin e
+// iguala la cuerda de canto y el ángulo de dispersión en la cara cercana es sólo la elevación),
+// así que su amplitud la fija cada vista (uCorona) y el campo de aspecto la funde entre encuadres.
+const float R_CORONA = 15.0;
+const float H_CORONA_0 = 0.78;
+const float H_CORONA_1 = 0.08;
+// Fase moderadamente hacia delante (g = 0.4): con g = 0.65 los rayos que apuntan al agujero
+// (cuya luz viaja casi a lo largo del rayo) recibían tres veces más corona que los que pasan a
+// 1.5 R y el resplandor se concentraba en el centro; con 0.4 se reparte a lo largo del haz,
+// como en la captura 22 (a ±0.5 R del eje: 0.65 sRGB en el centro, 0.60 a 1.5 R, 0.32 a 3 R).
+const float G_CORONA = 0.4;
+const float AMP_CORONA = 0.16;
 
 float hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
@@ -249,6 +270,10 @@ vec3 emisionDisco(vec3 p, float r, vec3 v, float textura) {
   // hasta 200 px del centro y se apaga entre 250 y 350 px. Sin torque en la ISCO el flujo del
   // disco fino se anula justo en el borde (Novikov-Thorne).
   float flujo = pow(x, 0.8) * (1.0 - exp(-(rE - R_IN) * 3.0));
+  // De canto el haz se apaga hacia las puntas: en la captura 22 el núcleo pasa de 0.97 sRGB en
+  // el centro a 0.78 de media a 3 R (7.8 unidades), mientras que con la meseta comprimida
+  // seguía saturado (0.94) hasta el final. Fuera del plano manda el fundido de uRadioGasFin.
+  flujo *= 1.0 - 0.5 * smoothstep(3.5, 9.0, rE) * (1.0 - uElevada);
 
   // Región de plunge: el gas que cae conserva parte de su calor, pero su luz sale corrida al rojo
   // y diluida (g³ respecto a la ISCO) y se apaga hacia el horizonte. Es el resplandor tenue y
@@ -370,6 +395,22 @@ void main() {
       vec3 vNueva = v + acel * paso;
       vec3 pNueva = p + vNueva * paso;
 
+      // Corona de dispersión (ver las constantes): emisividad por unidad de camino, con el perfil
+      // radial del flujo del disco, la caída exponencial en altura y la fase hacia delante.
+      if (r < R_CORONA) {
+        float hCorona = H_CORONA_0 + H_CORONA_1 * r;
+        // Perfil radial suave (r^-0.9): el resplandor sigue encendido hasta las puntas del haz
+        // (a 3 R la captura lee 0.36/0.28 sRGB a ±0.5 R del eje) y nace fuera de la ISCO, donde
+        // hay polvo que dispersar; con más corona interior el anillo se llenaba a blanco.
+        float perfilCorona = pow(R_IN / max(r, R_IN), 0.9) * smoothstep(R_IN, R_IN + 1.5, r)
+          * (1.0 - smoothstep(R_GAS - 1.0, R_CORONA, r));
+        float mu = -dot(p, v) / max(r * length(v), 1e-4);
+        float fase = pow((1.0 - G_CORONA) * (1.0 - G_CORONA) / (1.0 + G_CORONA * G_CORONA - 2.0 * G_CORONA * mu), 1.5);
+        float emisCorona = AMP_CORONA * uCorona * perfilCorona * exp(-ay / hCorona) * fase;
+        vec3 tinteCorona = mix(vec3(1.0, 0.82, 0.58), vec3(1.0, 0.62, 0.30), smoothstep(R_IN, 10.0, r));
+        color += T * emisCorona * tinteCorona * paso;
+      }
+
       if (enDisco) {
         vec3 pm = 0.5 * (p + pNueva);
         float rm = length(pm);
@@ -468,16 +509,20 @@ void main() {
   float bImpacto = length(cross(ro, rd));
   float rho = bImpacto / R_SOMBRA;
   float fuera = max(rho - 1.4, 0.0);
-  float anillosBruma = 0.94 + 0.06 * sin(rho * 30.0 + 1.7) * sin(rho * 11.0);
+  float anillosBruma = 0.965 + 0.035 * sin(rho * 30.0 + 1.7) * sin(rho * 11.0);
   // Meseta hasta 1.4 R, gaussiana corta y cola exponencial: calibrado contra la referencia
   // (sRGB medido: 1.15 R ≈ 104, 1.4 R ≈ 97, 1.7 R ≈ 63, 2.2 R ≈ 26, 2.6 R ≈ 20).
   // Desde arriba la cola exponencial pesa menos: el halo exterior lo pone el bloom.
-  float perfilBruma = exp(-pow(fuera / 0.33, 2.0)) + mix(0.42, 0.10, uElevada) * exp(-fuera / 1.0);
+  // Cola de canto calibrada con la captura 22 (medianas radiales fuera del haz: 0.20 sRGB a
+  // 2.1 R, 0.14 a 2.6 R, 0.09 a 3.1 R, 0.03 a 4 R); dentro de 2 R la corona pone el resto.
+  float perfilBruma = exp(-pow(fuera / 0.33, 2.0)) + mix(0.46, 0.10, uElevada) * exp(-fuera / 1.0);
   // Dentro de la sombra (rho < 1), arriba y abajo del haz, la referencia mide 139/99/63: la imagen
   // lensada del lado lejano se apila ahí, ~1.8 veces más brillante que a 1.15 R.
   // Desde arriba el apilamiento dentro de la sombra pesa más: la referencia elevada mide 0.83
   // en el centro frente a 0.55 junto al anillo.
-  float apilamientoCanto = 0.75 * (1.0 - smoothstep(0.2, 1.05, rho));
+  // (Con la corona, que ya llena la sombra con la luz dispersada delante del agujero, el
+  // apilamiento de canto baja de 0.75 a 0.4: la captura 22 lee 0.66 sRGB bajo el haz a 0.4 R.)
+  float apilamientoCanto = 0.4 * (1.0 - smoothstep(0.2, 1.05, rho));
   float apilamientoElevado = 2.3 * (1.0 - smoothstep(0.0, 0.95, rho));
   perfilBruma *= 1.0 + mix(apilamientoCanto, apilamientoElevado, uElevada);
   float segundoAnillo = exp(-pow((rho - 1.30) / 0.045, 2.0)) * step(1.0, rho);
@@ -492,9 +537,12 @@ void main() {
   float bruma = (0.070 * perfilBruma * anillosBruma + 0.02 * segundoAnillo) * capaPolvo * gradienteCercano * uBrumaEscala;
   // De canto la bruma es sepia saturada; desde arriba la referencia la mide crema tostado
   // (0.78, 0.63, 0.44 sRGB), así que el tono se abre hacia el ámbar claro.
-  color += bruma * mix(vec3(1.0, 0.50, 0.17), vec3(1.0, 0.58, 0.27), uElevada);
-  // Nivel de negro de película: el fondo de la referencia no es 0 sino (8,8,8) sRGB.
-  color += vec3(0.009);
+  // De canto la captura 22 mide el resplandor en oro pálido (0.72, 0.57, 0.38 sRGB a 0.8 R),
+  // menos saturado que el sepia original.
+  color += bruma * mix(vec3(1.0, 0.55, 0.22), vec3(1.0, 0.58, 0.27), uElevada);
+  // Nivel de negro de película: el fondo de la referencia no es 0 sino ~(7,7,7) sRGB (la
+  // captura 22 lee 0.03 a 4 R del agujero).
+  color += vec3(0.006);
 
   float profundidad = 1.0;
   if (hayHit || capturado) {

@@ -4,15 +4,15 @@ import { Bloom, EffectComposer, Noise, ToneMapping, Vignette } from '@react-thre
 import { useFrame } from '@react-three/fiber'
 import { BlendFunction, ToneMappingMode, type BloomEffect } from 'postprocessing'
 import { useRef } from 'react'
-import { VISTAS_CAMARA } from '../constantes/vistasCamara'
-import { ajuste, obtenerVista } from '../store/vistaCamaraStore'
-import { mezclar, pesoAspecto, senoElevacion } from '../utils/elevacionCamara'
+import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
+import { ajuste } from '../store/vistaCamaraStore'
+import { ASPECTO_CANTO, aspectoEnCamara } from '../utils/campoAspecto'
 
 /**
  * Bloom de canto: umbral por encima del gas comprimido (1.05) para que sólo el núcleo del haz
  * y las chispas más vivas florezcan y el filamento del anillo de fotones no se emborrone.
  */
-const BLOOM_CANTO = { umbral: 1.05, intensidad: 2.0, radio: 0.85 } as const
+const BLOOM_CANTO = ASPECTO_CANTO.bloom
 
 export function EfectosPost() {
   const bloom = useRef<BloomEffect>(null)
@@ -20,15 +20,14 @@ export function EfectosPost() {
   useFrame(({ camera }) => {
     const efecto = bloom.current
     if (!efecto) return
-    // Fuera del plano el bloom lo fija el aspecto de la vista activa (ver `constantes/vistasCamara.ts`):
-    // desde arriba, la falda lisa bajo el borde del gas que mide la referencia; el relleno de la
-    // sombra lo pone la bruma, no el bloom (con umbral 0.4 e intensidad 3.5 la banda perdía surcos).
-    const vista = VISTAS_CAMARA[obtenerVista()]
-    const t = pesoAspecto(senoElevacion(camera.position), vista.pesoMinimoAspecto)
-    const bloomVista = vista.aspecto.bloom
-    efecto.luminanceMaterial.threshold = ajuste('bloomUmbral', mezclar(BLOOM_CANTO.umbral, bloomVista.umbral, t))
-    efecto.intensity = ajuste('bloomIntensidad', mezclar(BLOOM_CANTO.intensidad, bloomVista.intensidad, t))
-    efecto.mipmapBlurPass.radius = ajuste('bloomRadio', mezclar(BLOOM_CANTO.radio, bloomVista.radio, t))
+    // Fuera del plano el bloom lo fija el aspecto de cada vista (ver `constantes/vistasCamara.ts`),
+    // interpolado por la cámara real (`utils/campoAspecto.ts`): desde arriba, la falda lisa bajo
+    // el borde del gas que mide la referencia; el relleno de la sombra lo pone la bruma, no el
+    // bloom (con umbral 0.4 e intensidad 3.5 la banda perdía surcos).
+    const aspecto = aspectoEnCamara(camera, obtenerProgreso())
+    efecto.luminanceMaterial.threshold = ajuste('bloomUmbral', aspecto.bloomUmbral)
+    efecto.intensity = ajuste('bloomIntensidad', aspecto.bloomIntensidad)
+    efecto.mipmapBlurPass.radius = ajuste('bloomRadio', aspecto.bloomRadio)
   })
 
   return (
