@@ -73,6 +73,13 @@ const float AMP_ATMOSFERA = 0.0076;
 // por vista y a la corona, que dependían del ángulo de la cámara.
 const float L_NIEBLA = 0.9;
 const vec3 TINTE_NIEBLA = vec3(1.0, 0.60, 0.28);
+// Balance de color de todo lo que emite el disco (gas, niebla, anillo; el cielo va aparte),
+// calibrado contra la captura 29 del usuario: su paleta es naranja melocotón, no sepia. Por
+// bandas de luminancia (sRGB), la referencia tiene r/b 1.84–2.0 en las sombras y el halo, 1.69
+// en el gas oro y 1.09 en el núcleo, frente a 2.47/2.46/1.91/1.26 aquí: un 32 % más de azul y
+// un 8 % más de verde en lineal (con 40 % las sombras quedaban por debajo, r/b 1.74) calcan las
+// seis bandas, y el tono baja 3–5° hacia el naranja rojizo. Normalizado a luminancia 1 para no cambiar la exposición calibrada.
+const vec3 BALANCE_COLOR = vec3(1.0, 1.08, 1.32) / 1.080;
 
 float hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
@@ -385,6 +392,7 @@ void main() {
   // Dirección con la que el rayo sale de la esfera de marcha (para el cielo lensado).
   vec3 dirSalida = rd;
   float salioLimpio = 1.0;
+  vec3 luzCielo = vec3(0.0);
 
   if (disc > 0.0 || c < 0.0) {
     float tIni = (c < 0.0) ? 0.0 : max(-b - sqrt(disc), 0.0);
@@ -497,7 +505,7 @@ void main() {
     // orbita, y se leían como rayas sueltas; en las referencias no hay estrellas junto al agujero.
     float deflexionCielo = acos(clamp(dot(dirSalida, rd), -1.0, 1.0));
     float cieloVisible = 1.0 - smoothstep(0.04, 0.2, deflexionCielo);
-    color += T * salioLimpio * cieloVisible * cielo(dirSalida);
+    luzCielo = T * salioLimpio * cieloVisible * cielo(dirSalida);
     // Parámetro de impacto efectivo del rayo (conservación de h y de la energía en el potencial
     // −h²/(2r³) del que deriva la aceleración): b² = h²/(1 − h²/r0³).
     float h2Rayo = dot(cross(ro, rd), cross(ro, rd));
@@ -521,6 +529,7 @@ void main() {
 
   // Nivel de negro de película: el fondo de la referencia no es 0 sino ~(7,7,7) sRGB (la
   // captura 22 lee 0.03 a 4 R del agujero).
+  color = color * BALANCE_COLOR + luzCielo;
   color += vec3(0.006);
 
   float profundidad = 1.0;
@@ -541,7 +550,8 @@ void main() {
     // mientras el resplandor a su alrededor conserva el oro. Desde arriba el viraje empieza
     // antes: en la referencia elevada los flancos del disco (luminancia ~1–1.3 antes de comprimir)
     // ya son crema (0.94, 0.87, 0.73 sRGB), no oro, y sólo la cara cercana externa queda dorada.
-    vec3 crema = comprimida * vec3(1.0, 0.93, 0.80);
+    // Crema más neutro: el núcleo de la referencia 29 es (0.92, 0.89, 0.84) sRGB, saturación 0.08.
+    vec3 crema = comprimida * vec3(1.0, 0.96, 0.90);
     color = mix(color, crema, 0.85 * smoothstep(0.7, 1.6, luminancia));
   }
   fragColor = vec4(color, 1.0);

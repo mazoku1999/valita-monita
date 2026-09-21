@@ -31,12 +31,15 @@ const RESPLANDOR_POLVO = { umbral: 0.5, radio: 0.6, niveles: 5, intensidad: 12 }
  */
 const BLOOM_CHISPAS = { umbral: 0.9, intensidad: 2.0, radio: 0.85 } as const
 
+/** El mismo balance de color que el gas y el polvo (ver el shader de la lente): naranja melocotón. */
+const BALANCE_COLOR = new THREE.Vector3(1.0, 1.08, 1.32).divideScalar(1.08)
+
 export function EfectosPost() {
   const efectoCamara = useMemo(
     () =>
       new EfectoGas({
         // Luz del gas dispersada: llega enrojecida (oro), no crema.
-        tinte: new THREE.Vector3(1.0, 0.8, 0.55),
+        tinte: new THREE.Vector3(1.0, 0.8, 0.55).multiply(BALANCE_COLOR),
         mipmapBlur: true,
         luminanceThreshold: RESPLANDOR_CAMARA.umbral,
         luminanceSmoothing: 0.2,
@@ -52,7 +55,7 @@ export function EfectosPost() {
     () =>
       new EfectoGas({
         componerGas: false,
-        tinte: new THREE.Vector3(1.0, 0.86, 0.66),
+        tinte: new THREE.Vector3(1.0, 0.86, 0.66).multiply(BALANCE_COLOR),
         mipmapBlur: true,
         luminanceThreshold: RESPLANDOR_POLVO.umbral,
         luminanceSmoothing: 0.2,

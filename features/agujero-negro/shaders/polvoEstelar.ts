@@ -188,6 +188,8 @@ void main() {
   // Las estrellas del fondo también tienen temperatura: un cielo real no es de puntos idénticos.
   col = mix(col, blanco, vEstrella * 0.6);
 
+  // El mismo balance de color que el gas (ver el shader de la lente): naranja melocotón, no sepia.
+  col *= vec3(1.0, 1.08, 1.32) / 1.080;
   gl_FragColor = vec4(col * forma * parpadeo * vAlfa * uBrilloPolvo, 1.0);
 }
 `
