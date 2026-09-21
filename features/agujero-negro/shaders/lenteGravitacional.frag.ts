@@ -527,10 +527,12 @@ void main() {
     color += visibleAnillo * resplandorAnillo * vec3(1.0, 0.60, 0.28) * (0.2 * uAnillo);
   }
 
-  // Nivel de negro de película: el fondo de la referencia no es 0 sino ~(7,7,7) sRGB (la
-  // captura 22 lee 0.03 a 4 R del agujero).
   color = color * BALANCE_COLOR + luzCielo;
-  color += vec3(0.006);
+  // Nivel de negro de película: el fondo de las capturas del usuario no es 0 sino ~0.03 sRGB
+  // (8/255) a 6–9 R del agujero, y es CÁLIDO (r/b ≈ 1.85 en la banda tenue); con 0.006 neutro
+  // quedaba en 0.01 tras el ACES y con 0.012 neutro la banda tenue perdía la mitad de su
+  // saturación (r/b 1.38).
+  color += vec3(0.0145, 0.0105, 0.0072);
 
   float profundidad = 1.0;
   if (hayHit || capturado) {

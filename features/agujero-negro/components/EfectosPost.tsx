@@ -21,7 +21,7 @@ import { EfectoGas } from '../utils/efectoGas'
  * En las capturas del usuario el pedestal mide 57 px a 38 unidades y 31–44 px a 19.5 (a 720 px de
  * alto): sólo la parte de polvo cambia entre ellas.
  */
-const RESPLANDOR_CAMARA = { umbral: 0.5, radio: 0.9, niveles: 7, intensidad: 6 } as const
+const RESPLANDOR_CAMARA = { umbral: 0.5, radio: 0.9, niveles: 7, intensidad: 4.5 } as const
 const RESPLANDOR_POLVO = { umbral: 0.5, radio: 0.6, niveles: 5, intensidad: 12 } as const
 
 /**
