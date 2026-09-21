@@ -35,7 +35,9 @@ export const TRANSICION_POLVO = {
   // engorda el haz. Con el núcleo de las chispas más fino (σ ≥ 0.27 px) el tope sube de 2.4 a 3.0
   // para que las estrellitas más vivas lleguen a blanco.
   brilloMaximo: 3.0,
-  radioFinal: 60,
+  // Horizonte del sistema de anillos: a 85 la banda de chispas cruza casi toda la pantalla vista
+  // desde 140 unidades (antes 60).
+  radioFinal: 85,
 } as const
 
 /**

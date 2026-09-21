@@ -45,8 +45,10 @@ const CUENTAS = {
   // original de 66 000 granos: 3 200 chispas por encima de 0.06 sRGB en una ventana de 900×700 de
   // la inferior. Se sube ×1.43 con un 15 % menos de luz por grano; como los granos se rasterizan
   // finos (σ ≥ 0.22 px) siguen leyéndose como chispas y no como arena.
-  anillos: 80000,
-  relleno: 14000,
+  // Con el horizonte de anillos en 85 (antes 60) la población sube un 20 % para conservar la
+  // densidad de la banda.
+  anillos: 96000,
+  relleno: 17000,
   // Cielo de fondo: desde la ronda de geodésicas RK4 lo dibuja el shader de la lente (estrellas
   // lensadas con la dirección real de escape del rayo); los sprites quedan a cero.
   estrellasLejanas: 0,
@@ -74,13 +76,13 @@ const supervivencia = (r: number): number => suavizar(R_INICIO, R_PLENITUD, r)
 const escalaTamano = (r: number): number => 0.3 + 0.7 * suavizar(R_INICIO, R_TAMANO, r)
 
 /**
- * Iluminados por el disco: el flujo recibido cae con el radio (ley suavizada, (13/r)^0.7: en la
+ * Iluminados por el disco: el flujo recibido cae con el radio (ley suavizada, (13/r)^0.5: en la
  * captura lejana 32 del usuario la banda de chispas sigue igual de viva a 40 unidades que a 15),
  * y los granos que rozan el gas (hasta ~16) además brillan por sí mismos al calentarse, para que
  * el haz se disuelva en chispas.
  */
 const brilloEn = (r: number): number =>
-  ENERGIA_POR_GRANO * Math.pow(R_BRILLO / r, 0.7) * (1 + 0.25 * (1 - suavizar(R_INICIO, 16, r)))
+  ENERGIA_POR_GRANO * Math.pow(R_BRILLO / r, 0.5) * (1 + 0.25 * (1 - suavizar(R_INICIO, 16, r)))
 
 const limitarBrillo = (brillo: number): number => Math.min(BRILLO_MAXIMO, brillo)
 
@@ -112,11 +114,11 @@ const construirAnillos = (aleatorio: () => number): Anillo[] => {
       // sus vecinos en un gradiente y no en aros aislados. La anchura varía de anillo a anillo
       // (0.55–1.45×): los hay afilados y los hay difusos, como en un sistema de anillos real.
       ancho: (0.14 + 0.035 * radio) * (0.55 + 0.9 * aleatorio()),
-      // Caída pronunciada: los anillos que pasan junto a la cámara (r ≈ 40) deben ser escasos
-      // para que el bokeh cercano sean unas pocas motas y no una nube por toda la pantalla.
-      // La caída era 1.9; en la referencia elevada los anillos exteriores (r ≈ 30–60, que rodean
-      // a la cámara) siguen poblados y llenan de chispas la mitad inferior de la pantalla.
-      peso: Math.pow(R_BRILLO / radio, 1.15) * supervivencia(radio) * (0.6 + 0.8 * aleatorio()),
+      // Caída moderada ((13/r)^0.85; fue 1.9 y luego 1.15): los anillos exteriores (r 40–85)
+      // tienen que seguir poblados para que la banda de chispas cruce la pantalla vista de lejos
+      // (el "horizonte" que pide el usuario), sin que el bokeh junto a la cámara de canto se
+      // convierta en una nube (se vigila contando manchas tenues).
+      peso: Math.pow(R_BRILLO / radio, 0.85) * supervivencia(radio) * (0.6 + 0.8 * aleatorio()),
       // Los escombros no se reparten uniformes por la órbita: se agrupan en arcos, como los
       // anillos de Neptuno. Cada anillo tiene entre 1 y 4 arcos y un contraste propio.
       modo: 1 + Math.floor(aleatorio() * 4),

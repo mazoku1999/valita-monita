@@ -14,7 +14,7 @@ import { MUNDO } from './LenteGravitacionalQuad'
 /**
  * Exposición del polvo a la distancia de referencia (0.9 a 38 unidades, la calibración de canto).
  * Más cerca, el flujo de cada grano crece con el cuadrado de la distancia (0.9·(38/D)²: la ley
- * que seguían las exposiciones por vista, 3.5 a 19.5). Más lejos la ley se suaviza a (38/D)^0.8:
+ * que seguían las exposiciones por vista, 3.5 a 19.5). Más lejos la ley se suaviza a (38/D)^0.6:
  * con 1/d² la banda de chispas se apagaba de lejos (0.06 sRGB a 10 R a 105 unidades) mientras que
  * en la captura lejana 32 del usuario sigue a 0.3 hasta ±15 R; una banda extensa vista de lejos
  * conserva su brillo superficial, y con granos subpíxel y bloom umbralizado la ley pura no lo hace.
@@ -22,7 +22,7 @@ import { MUNDO } from './LenteGravitacionalQuad'
 const EXPOSICION_REFERENCIA = 0.9
 const DISTANCIA_REFERENCIA = 38
 const EXPONENTE_CERCA = 2
-const EXPONENTE_LEJOS = 0.8
+const EXPONENTE_LEJOS = 0.6
 
 type UniformesPolvo = {
   uTiempo: THREE.IUniform<number>
