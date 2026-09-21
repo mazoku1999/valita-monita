@@ -41,10 +41,11 @@ export const TRANSICION_POLVO = {
 /**
  * Inclinación aparente del disco en pantalla (radianes), aplicada como roll de cámara.
  * El disco vive en el plano XZ del mundo; al rodar la cámara en vez de rotar el disco,
- * la línea del gas asciende hacia la derecha con el mismo ángulo en cualquier azimut.
- * Medido en la referencia: 26.5°.
+ * la línea del gas gira en pantalla con el mismo ángulo en cualquier azimut. En reposo la línea
+ * es horizontal (0); la inclinación viva la pone el cursor (ver `components/CamaraNarrativa.tsx`).
+ * Las referencias del usuario la tenían fija a 26.5° (0.4625).
  */
-export const INCLINACION_PANTALLA = 0.4625
+export const INCLINACION_PANTALLA = 0
 
 /**
  * Posición del agujero en pantalla como desplazamiento NDC respecto al centro
