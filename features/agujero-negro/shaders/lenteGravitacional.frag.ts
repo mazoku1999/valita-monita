@@ -76,10 +76,11 @@ const vec3 TINTE_NIEBLA = vec3(1.0, 0.60, 0.28);
 // Balance de color de todo lo que emite el disco (gas, niebla, anillo; el cielo va aparte),
 // calibrado contra la captura 29 del usuario: su paleta es naranja melocotón, no sepia. Por
 // bandas de luminancia (sRGB), la referencia tiene r/b 1.84–2.0 en las sombras y el halo, 1.69
-// en el gas oro y 1.09 en el núcleo, frente a 2.47/2.46/1.91/1.26 aquí: un 32 % más de azul y
-// un 8 % más de verde en lineal (con 40 % las sombras quedaban por debajo, r/b 1.74) calcan las
-// seis bandas, y el tono baja 3–5° hacia el naranja rojizo. Normalizado a luminancia 1 para no cambiar la exposición calibrada.
-const vec3 BALANCE_COLOR = vec3(1.0, 1.08, 1.32) / 1.080;
+// en el gas oro y 1.09 en el núcleo, frente a 2.47/2.46/1.91/1.26 aquí. Con (1, 1.08, 1.32) se
+// calcaban las seis bandas de las capturas 29/30; el usuario pidió después "un poquito más
+// anaranjado, de lejos etc.": sus capturas lejanas 5 y 6 leen r/b 2.15/1.94/1.49/1.13 por
+// bandas frente a 1.85/1.75/1.42/1.10 nuestras, y (1, 1.05, 1.2) las calca. Normalizado a luminancia 1 para no cambiar la exposición calibrada.
+const vec3 BALANCE_COLOR = vec3(1.0, 1.05, 1.2) / 1.050;
 
 float hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));

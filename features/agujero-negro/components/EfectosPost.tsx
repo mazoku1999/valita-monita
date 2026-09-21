@@ -32,7 +32,7 @@ const RESPLANDOR_POLVO = { umbral: 0.5, radio: 0.6, niveles: 5, intensidad: 12 }
 const BLOOM_CHISPAS = { umbral: 0.9, intensidad: 2.0, radio: 0.85 } as const
 
 /** El mismo balance de color que el gas y el polvo (ver el shader de la lente): naranja melocotón. */
-const BALANCE_COLOR = new THREE.Vector3(1.0, 1.08, 1.32).divideScalar(1.08)
+const BALANCE_COLOR = new THREE.Vector3(1.0, 1.05, 1.2).divideScalar(1.05)
 
 export function EfectosPost() {
   const efectoCamara = useMemo(

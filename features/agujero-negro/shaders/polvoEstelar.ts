@@ -189,7 +189,7 @@ void main() {
   col = mix(col, blanco, vEstrella * 0.6);
 
   // El mismo balance de color que el gas (ver el shader de la lente): naranja melocotón, no sepia.
-  col *= vec3(1.0, 1.08, 1.32) / 1.080;
+  col *= vec3(1.0, 1.05, 1.2) / 1.050;
   gl_FragColor = vec4(col * forma * parpadeo * vAlfa * uBrilloPolvo, 1.0);
 }
 `
