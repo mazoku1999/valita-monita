@@ -171,8 +171,8 @@ void main() {
   // (la mayoría cálidas, algunas blancas, unas pocas frías); el ámbar queda para el bokeh.
   // Paleta oro: en la captura lejana 32 del usuario la banda de chispas lee r/b 1.81/1.64 y
   // tono 29–33° (oro naranja); con crema (1, 0.93, 0.80) salía 1.57/1.46 y 26–27° (rosado pálido) y con (1, 0.86, 0.60) 1.67/1.52.
-  vec3 calida = vec3(1.00, 0.78, 0.46);
-  vec3 blancaCalida = vec3(1.00, 0.86, 0.62);
+  vec3 calida = vec3(1.00, 0.74, 0.40);
+  vec3 blancaCalida = vec3(1.00, 0.83, 0.56);
   vec3 fria = vec3(0.88, 0.93, 1.00);
   vec3 ambar = vec3(0.92, 0.46, 0.16);
   vec3 blanco = vec3(0.96, 0.97, 1.00);
