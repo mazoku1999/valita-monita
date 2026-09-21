@@ -65,13 +65,13 @@ const float SIGMA_INV_NUCLEO = 26.3;
 const float SIGMA_INV_ATMOSFERA = 7.89;
 const float AMP_ATMOSFERA = 0.0076;
 // Niebla interior: la atmósfera caliente y densa que rodea el agujero por dentro de la ISCO,
-// con densidad ∝ exp(−(r − 1)/L). Es un único medio para todos los ángulos: absorbe lo que pasa
+// con densidad ∝ exp(−(r − 1)/L), L = 0.9 (con 1.15 apagaba el borde interno del disco ×0.4). Es un único medio para todos los ángulos: absorbe lo que pasa
 // cerca del agujero (las imágenes lensadas del lado lejano y las de orden superior rodean el
 // agujero a r ≈ 1.5–3.5 y salen atenuadas; el rayo que llega a la cara cercana nunca baja de su
 // propio radio y apenas se atenúa) y brilla con la luz del disco que dispersa, que es lo que llena
 // la sombra de crema tostado. Sustituye a la extinción "en el plano", al dobladillo, a la bruma
 // por vista y a la corona, que dependían del ángulo de la cámara.
-const float L_NIEBLA = 1.15;
+const float L_NIEBLA = 0.9;
 const vec3 TINTE_NIEBLA = vec3(1.0, 0.60, 0.28);
 
 float hash21(vec2 p) {
@@ -297,7 +297,9 @@ float densidadPlano(vec3 p, float r, float suavizado, out float textura) {
 
   // El gas se apila contra la ISCO antes de caer: el borde interno es la zona más densa y
   // caliente, y visto desde arriba es el único anillo que llega a crema.
-  float nucleo = 1.0 + 1.1 * exp(-(rE - R_IN) * 0.55);
+  // (El borde interno se refuerza además porque su luz cruza la falda de la niebla interior,
+  // que lo atenúa ~×0.7 desde cualquier ángulo; de frente debe seguir siendo lo más brillante.)
+  float nucleo = 1.0 + 2.0 * exp(-(rE - R_IN) * 0.7);
   float atenuacionRadial = mix(0.5, 1.0, pow(R_IN / rE, 0.7));
   return perfilR * textura * nucleo * atenuacionRadial;
 }

@@ -45,10 +45,10 @@ void main() {
   float visible = 1.0 - captura * detras;
   // Niebla interior (la misma del shader de la lente, densidad ∝ exp(−(r − 1))): un grano que
   // queda DETRÁS del agujero se ve a través de ella con el parámetro de impacto de su rayo; la
-  // columna de niebla es ≈ 0.90·exp(−(b − 3)/1.3) (L = 1.15) (función de Bessel K1 ajustada). Así las
+  // columna de niebla es ≈ 0.48·exp(−(b − 3)/0.95) (L = 0.9) (función de Bessel K1 ajustada). Así las
   // chispas que rodean la sombra por detrás salen apagadas a cualquier ángulo, igual que los
   // arcos lensados del gas.
-  float columnaNiebla = 0.90 * exp(-(bAparente - 3.0) / 1.3);
+  float columnaNiebla = 0.48 * exp(-(bAparente - 3.0) / 0.95);
   visible *= exp(-uNiebla * columnaNiebla * detras);
   // Función de fase del polvo (Henyey-Greenstein, g = 0.15, normalizada a 1 en los flancos):
   // iluminado por el disco, un grano entre el agujero y la cámara dispersa hacia delante (×1.7)

@@ -99,9 +99,10 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     // entrar o salir de esta vista no hace rotar toda la pantalla.
     inclinacion: INCLINACION_PANTALLA,
     encuadre: ENCUADRE_PANTALLA,
-    // De frente el disco es ópticamente fino y a 6.5 de ganancia toda la mitad interna saturaba
-    // a un crema plano: con menos exposición sólo el borde interno queda claro y las estrías se ven.
-    aspecto: { ganancia: 3.6, apertura: 1, tamanoMaximo: 22 },
+    // La misma exposición que Above: al inclinar de una a otra no cambia nada, y de frente el
+    // disco (ópticamente fino) queda encendido, con el borde interno en crema, el resto en oro y
+    // el resplandor de cámara alrededor; con 3.6 salía apagado y pardo, sin brillo.
+    aspecto: { ganancia: 5.4, apertura: 1, tamanoMaximo: 22 },
   },
   lejana: {
     id: 'lejana',

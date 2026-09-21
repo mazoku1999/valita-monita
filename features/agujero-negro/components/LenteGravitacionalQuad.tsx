@@ -16,7 +16,7 @@ import { ASPECTO_CANTO, aspectoEnCamara } from '../utils/campoAspecto'
  * sólo en desarrollo para calibrar): opacidad y brillo de la niebla interior y amplitud del
  * anillo de fotones. Ver el shader de la lente.
  */
-export const MUNDO = { niebla: 5.0, nieblaLuz: 0.026, anillo: 0.85 } as const
+export const MUNDO = { niebla: 6.0, nieblaLuz: 0.026, anillo: 0.85 } as const
 
 type UniformesLente = {
   uTiempo: THREE.IUniform<number>
