@@ -51,7 +51,7 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     // 32 % de la altura; el haz cruza el anillo por su centro: cámara exactamente en el plano.
     fotogramas: derivarRecorrido({ polar: Math.PI / 2, distancia: 19.5, fov: 40 }),
     inclinacion: INCLINACION_PANTALLA,
-    encuadre: { x: 0.09, y: 0.34 },
+    encuadre: ENCUADRE_PANTALLA,
     // Tan cerca, las chispas son nítidas y pequeñas (apertura corta, tope de 14 px).
     aspecto: { ganancia: 6.5, apertura: 0.5, tamanoMaximo: 14 },
   },
@@ -63,7 +63,7 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     // altura, anillo de fotones = 24.4 % de la altura): con fov 41° eso exige 27.5 unidades.
     fotogramas: derivarRecorrido({ polar: 1.35, distancia: 27.5, fov: 41 }),
     inclinacion: INCLINACION_PANTALLA,
-    encuadre: { x: 0.0165, y: 0.355 },
+    encuadre: ENCUADRE_PANTALLA,
     aspecto: { ganancia: 5.4, apertura: 1, tamanoMaximo: 23 },
   },
   elevadaCercana: {
@@ -75,7 +75,7 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     // altura; la cara cercana cubre la sombra desde 0.36 R por debajo de su centro (16°).
     fotogramas: derivarRecorrido({ polar: Math.PI / 2 - 0.28, distancia: 20.8, fov: 40 }),
     inclinacion: INCLINACION_PANTALLA,
-    encuadre: { x: 0.048, y: 0.343 },
+    encuadre: ENCUADRE_PANTALLA,
     aspecto: { ganancia: 6.5, apertura: 0.6, tamanoMaximo: 14 },
   },
   inferior: {
@@ -87,7 +87,7 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     // la banda cercana cruza por encima de la sombra: 4.6° bajo el plano.
     fotogramas: derivarRecorrido({ polar: Math.PI / 2 + 0.08, distancia: 19.5, fov: 40 }),
     inclinacion: INCLINACION_PANTALLA,
-    encuadre: { x: 0.041, y: 0.304 },
+    encuadre: ENCUADRE_PANTALLA,
     aspecto: { ganancia: 6.0, apertura: 0.6, tamanoMaximo: 14 },
   },
   cenital: {
@@ -98,7 +98,7 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     // El mismo roll que las demás vistas: desde arriba sólo gira la imagen del disco, y así
     // entrar o salir de esta vista no hace rotar toda la pantalla.
     inclinacion: INCLINACION_PANTALLA,
-    encuadre: { x: 0, y: 0.12 },
+    encuadre: ENCUADRE_PANTALLA,
     // De frente el disco es ópticamente fino y a 6.5 de ganancia toda la mitad interna saturaba
     // a un crema plano: con menos exposición sólo el borde interno queda claro y las estrías se ven.
     aspecto: { ganancia: 3.6, apertura: 1, tamanoMaximo: 22 },
@@ -112,7 +112,7 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     // sobre el plano.
     fotogramas: derivarRecorrido({ polar: 1.45, distancia: 60, fov: 40 }),
     inclinacion: INCLINACION_PANTALLA,
-    encuadre: { x: 0.09, y: 0.13 },
+    encuadre: ENCUADRE_PANTALLA,
     aspecto: { ganancia: 6.5, apertura: 1, tamanoMaximo: 30 },
   },
 }

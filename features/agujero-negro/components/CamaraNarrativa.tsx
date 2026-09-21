@@ -34,25 +34,17 @@ interface EstadoCompleto {
 const limitar = (valor: number, minimo: number, maximo: number): number =>
   Math.min(maximo, Math.max(minimo, valor))
 
-const suavizar = (borde0: number, borde1: number, x: number): number => {
-  const t = limitar((x - borde0) / (borde1 - borde0), 0, 1)
-  return t * t * (3 - 2 * t)
-}
 
 const objetivoDeVista = (vista: VistaCamara, progreso: number): EstadoCompleto => {
   const fotograma = interpolarFotograma(progreso, vista.fotogramas)
-  // En el capítulo el agujero se encuadra a un lado del texto (el encuadre calibrado de cada
-  // vista); al llegar al epílogo, cuyo texto va centrado y donde se invita a orbitar, viaja al
-  // centro de la pantalla con un travelling suave.
-  const centrado = suavizar(0.7, 0.95, progreso)
   return {
     azimut: fotograma.azimut,
     polar: ajuste('polar', fotograma.polar),
     distancia: ajuste('distancia', fotograma.distancia),
     fov: ajuste('fov', fotograma.fov),
     inclinacion: ajuste('inclinacion', vista.inclinacion),
-    encuadreX: ajuste('encuadreX', vista.encuadre.x) * (1 - centrado),
-    encuadreY: ajuste('encuadreY', vista.encuadre.y) * (1 - centrado),
+    encuadreX: ajuste('encuadreX', vista.encuadre.x),
+    encuadreY: ajuste('encuadreY', vista.encuadre.y),
   }
 }
 

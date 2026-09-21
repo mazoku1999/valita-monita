@@ -489,8 +489,13 @@ void main() {
   }
 
   if (!capturado) {
-    // Cielo de fondo visto a través del gas (T) y lensado por la trayectoria real del rayo.
-    color += T * salioLimpio * cielo(dirSalida);
+    // Cielo de fondo visto a través del gas (T) y lensado por la trayectoria real del rayo. Las
+    // estrellas se apagan donde la luz se curva más de unos grados (b < ~10–15 unidades): allí la
+    // lente las estira en arcos tangenciales que giran alrededor de la sombra cuando la cámara
+    // orbita, y se leían como rayas sueltas; en las referencias no hay estrellas junto al agujero.
+    float deflexionCielo = acos(clamp(dot(dirSalida, rd), -1.0, 1.0));
+    float cieloVisible = 1.0 - smoothstep(0.04, 0.2, deflexionCielo);
+    color += T * salioLimpio * cieloVisible * cielo(dirSalida);
     // Parámetro de impacto efectivo del rayo (conservación de h y de la energía en el potencial
     // −h²/(2r³) del que deriva la aceleración): b² = h²/(1 − h²/r0³).
     float h2Rayo = dot(cross(ro, rd), cross(ro, rd));

@@ -48,10 +48,11 @@ export const INCLINACION_PANTALLA = 0.4625
 
 /**
  * Posición del agujero en pantalla como desplazamiento NDC respecto al centro
- * (x positivo = derecha, y positivo = arriba). En la referencia la sombra cae en el
- * 51.2 % del ancho y el 41.3 % de la altura.
+ * (x positivo = derecha, y positivo = arriba). Centrado en todas las vistas por petición del
+ * usuario (las referencias lo encuadraban a un lado y algo alto: 51–56 % del ancho, 32–41 % de
+ * la altura).
  */
-export const ENCUADRE_PANTALLA = { x: 0.024, y: 0.174 } as const
+export const ENCUADRE_PANTALLA = { x: 0, y: 0 } as const
 
 export const CAMARA_AGUJERO = {
   fov: 45,
