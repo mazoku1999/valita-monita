@@ -528,11 +528,10 @@ void main() {
   }
 
   color = color * BALANCE_COLOR + luzCielo;
-  // Nivel de negro de película: el fondo de las capturas del usuario no es 0 sino ~0.03 sRGB
-  // (8/255) a 6–9 R del agujero, y es CÁLIDO (r/b ≈ 1.85 en la banda tenue); con 0.006 neutro
-  // quedaba en 0.01 tras el ACES y con 0.012 neutro la banda tenue perdía la mitad de su
-  // saturación (r/b 1.38).
-  color += vec3(0.0145, 0.0105, 0.0072);
+  // Nivel de negro de película: neutro y oscuro (~0.01 sRGB tras el ACES). Se probó un negro
+  // más alto y cálido como el de las capturas del usuario (0.03 sRGB, r/b 1.85) y teñía todo el
+  // espacio de naranja: el usuario quiere el fondo oscuro y sólo el agujero cálido.
+  color += vec3(0.006);
 
   float profundidad = 1.0;
   if (hayHit || capturado) {
