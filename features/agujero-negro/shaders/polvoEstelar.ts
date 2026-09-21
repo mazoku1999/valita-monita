@@ -26,6 +26,7 @@ varying float vBokeh;
 varying float vEstrella;
 varying float vBrilloBase;
 varying float vTamPx;
+varying float vLejania;
 
 ${LENTE_DELGADA_GLSL}
 
@@ -86,7 +87,13 @@ void main() {
   // Suelo de rasterización de 1 px·dpr (nunca menos: por debajo de 1 px el rasterizador por
   // software se cuelga): un grano subpíxel se dibuja como una mancha gaussiana estable y su
   // energía se reparte con el alfa, en vez de encender 1 o 4 píxeles según dónde caiga su centro.
-  float tamMin = 1.0 * uPixelRatio;
+  // Los granos lejanos del agujero (r > 24) se dibujan más gruesos: vistos de lejos son todos
+  // subpíxel y con el suelo de 1 px se leían como motas idénticas a las cercanas. En el horizonte
+  // el sprite mínimo sube a 2.5 px, el núcleo gaussiano a 0.6 px de sigma (ver el fragment) y la
+  // energía a ×3.2 (un punto más ancho necesita más luz para no desaparecer al repartirla; un
+  // suelo de 1.7 px con ×1.4 no cambiaba nada visible). Los granos cercanos al agujero no cambian.
+  float lejania = smoothstep(24.0, 90.0, length(position.xz)) * (1.0 - esEstrella);
+  float tamMin = uPixelRatio * (1.0 + 1.5 * lejania);
   float tamPx = max(tamSuave, tamMin);
 
   float bokeh = coc / (coc + tamNitido + 0.6);
@@ -94,7 +101,7 @@ void main() {
   float conservacion = (tamNitido * tamNitido + 0.3) / (tam * tam + 0.3);
   // La energía total del grano es la de su tamaño real (con 1 px como suelo); si se rasteriza
   // más grande para estabilizarlo, el alfa baja en la misma proporción de área.
-  float tamEnergia = max(tamSuave, uPixelRatio);
+  float tamEnergia = max(tamSuave, uPixelRatio * (1.0 + 0.8 * lejania));
   float cobertura = (tamEnergia * tamEnergia) / (tamPx * tamPx);
   // Motas subpíxel: se apagan casi del todo. Lo que se ve son estrellitas de ≥ 1 px, no una
   // arena de puntos tenues; desde arriba se conserva algo más porque la banda se ve de frente y
@@ -116,6 +123,7 @@ void main() {
   vTono = aTono;
   vFase = aFase;
   vTamPx = tamPx;
+  vLejania = lejania;
 
   gl_PointSize = tamPx;
   gl_Position = projectionMatrix * mv;
@@ -134,6 +142,7 @@ varying float vBokeh;
 varying float vEstrella;
 varying float vBrilloBase;
 varying float vTamPx;
+varying float vLejania;
 
 void main() {
   vec2 c = gl_PointCoord - 0.5;
@@ -149,7 +158,11 @@ void main() {
   // un núcleo más estrecho la misma energía da un pico más alto, y por eso la chispa se lee más
   // fina y más clara a la vez.
   float sigmaNitida = 0.09 * vTamPx;
-  float sigma = max(0.22 * uPixelRatio, sigmaNitida);
+  // Los granos lejanos del agujero se dibujan más gruesos: el suelo de sigma sube de 0.22 a
+  // 0.6 px·dpr en el horizonte (el sprite ya es mayor, pero sin esto el núcleo gaussiano
+  // seguía teniendo la misma anchura y el punto se veía igual). La normalización conserva la
+  // energía: más ancho y algo menos alto.
+  float sigma = max(0.22 * uPixelRatio * (1.0 + 1.7 * vLejania), sigmaNitida);
   float normalizacion = (sigmaNitida * sigmaNitida) / (sigma * sigma);
   float nucleo = normalizacion * exp(-px * px / (2.0 * sigma * sigma));
   // Halo mínimo: una chispa real es un punto con una falda casi inexistente, no una mota difusa.

@@ -71,9 +71,15 @@ const supervivencia = (r: number): number => suavizar(R_INICIO, R_PLENITUD, r)
 
 /**
  * Disrupción de marea: cuanto más cerca del agujero, más fragmentados están los escombros.
- * Los granos junto al gas son motas subpíxel; los lejanos, fragmentos que dan el bokeh.
+ * Los granos junto al gas son motas subpíxel; los lejanos, fragmentos que dan el bokeh. Más
+ * allá de 24 unidades el tamaño sigue creciendo despacio (×1.25 en el horizonte, a 100): el
+ * usuario quiere las chispas lejanas del agujero un poco más gruesas y las cercanas igual. El
+ * grosor visible de lejos lo pone el shader del polvo (suelos de sprite, sigma y energía por
+ * lejanía); aquí el crecimiento se deja pequeño porque estos granos también pasan junto a la
+ * cámara de canto y con ×1.5 sus discos de bokeh eran mayores (manchas > 200 px: 7 → 16).
  */
-const escalaTamano = (r: number): number => 0.3 + 0.7 * suavizar(R_INICIO, R_TAMANO, r)
+const escalaTamano = (r: number): number =>
+  (0.3 + 0.7 * suavizar(R_INICIO, R_TAMANO, r)) * (1 + 0.25 * suavizar(R_TAMANO, 90, r))
 
 /**
  * Iluminados por el disco: el flujo recibido cae con el radio (ley suavizada, (13/r)^0.5: en la
