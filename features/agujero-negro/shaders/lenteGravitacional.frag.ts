@@ -138,6 +138,17 @@ vec3 aceleracionGeodesica(vec3 q, float h2) {
   return -1.5 * h2 * q / (r2 * r2 * sqrt(r2));
 }
 
+// Perigeo EXACTO de la geodésica con parámetro de impacto b (r_s = 1): la raíz mayor de
+// r³ − b²·r + b² = 0, en forma trigonométrica. Para b = 3√3/2 (el parámetro crítico) vale 1.5, la
+// esfera de fotones; por debajo el rayo cae al agujero. Con él, el anillo de fotones es un
+// círculo perfecto en pantalla y no depende de dónde se detuvo la marcha (antes se tomaba el
+// radio mínimo muestreado, que temblaba con el paso y quedaba mal cuando el gas de la cara
+// cercana absorbía el rayo antes de su perigeo: el anillo salía deforme y recortado).
+float perigeo(float b) {
+  float arg = clamp(-2.5980762 / max(b, 1e-3), -1.0, 1.0);
+  return (2.0 * b / 1.7320508) * cos(acos(arg) / 3.0);
+}
+
 vec3 hash33(vec3 p) {
   p = fract(p * vec3(0.1031, 0.1030, 0.0973));
   p += dot(p, p.yxz + 33.33);
@@ -362,7 +373,10 @@ void main() {
   // dentro de la niebla y cuya salida a través de ella es una constante absorbida en uAnillo).
   float T = 1.0;
   float TGas = 1.0;
-  float minR = length(ro + rd * max(-b, 0.0));
+  // Transmitancia del gas cuando el rayo pasa por su perigeo: lo que tapa al anillo de fotones
+  // (el gas que el rayo cruza DESPUÉS de rodear el agujero queda detrás del anillo y no lo tapa).
+  float TGasPerigeo = 1.0;
+  bool pasoPerigeo = false;
   bool capturado = false;
   bool hayHit = false;
   vec3 pHit = vec3(0.0);
@@ -381,7 +395,6 @@ void main() {
     for (int i = 0; i < MAX_PASOS; i++) {
       float r2 = dot(p, p);
       float r = sqrt(r2);
-      minR = min(minR, r);
 
       if (r < R_HORIZONTE) {
         capturado = true;
@@ -459,10 +472,17 @@ void main() {
             hayHit = true;
             pHit = pm;
           }
-          if (T < 0.02) break;
+          if (T < 0.02) {
+            if (!pasoPerigeo) TGasPerigeo = TGas;
+            break;
+          }
         }
       }
 
+      if (!pasoPerigeo && dot(pNueva, vNueva) > 0.0) {
+        pasoPerigeo = true;
+        TGasPerigeo = TGas;
+      }
       v = vNueva;
       p = pNueva;
     }
@@ -471,7 +491,12 @@ void main() {
   if (!capturado) {
     // Cielo de fondo visto a través del gas (T) y lensado por la trayectoria real del rayo.
     color += T * salioLimpio * cielo(dirSalida);
-    float dR = minR - R_FOTON;
+    // Parámetro de impacto efectivo del rayo (conservación de h y de la energía en el potencial
+    // −h²/(2r³) del que deriva la aceleración): b² = h²/(1 − h²/r0³).
+    float h2Rayo = dot(cross(ro, rd), cross(ro, rd));
+    float r0 = length(ro);
+    float bRayo = sqrt(h2Rayo / max(1.0 - h2Rayo / (r0 * r0 * r0), 1e-4));
+    float dR = perigeo(bRayo) - R_FOTON;
     float dRExt = max(dR, 0.0);
     // Anillo de fotones: filamento dorado nítido y completo en el borde de la sombra (las
     // imágenes de orden superior apiladas). Se ve a través del gas (TGas); su salida a través de
@@ -482,7 +507,7 @@ void main() {
     float resplandorAnillo = exp(-dRExt * 6.0) * smoothstep(-0.1, 0.02, dR);
     // El haz lo tapa sólo a medias (en las referencias el filamento sigue viéndose sobre el
     // gas que lo cruza, sin muescas).
-    float visibleAnillo = max(TGas, 0.45);
+    float visibleAnillo = max(TGasPerigeo, 0.45);
     color += visibleAnillo * nucleoAnillo * vec3(1.0, 0.70, 0.36) * uAnillo;
     color += visibleAnillo * resplandorAnillo * vec3(1.0, 0.60, 0.28) * (0.2 * uAnillo);
   }
