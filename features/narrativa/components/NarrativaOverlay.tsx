@@ -2,14 +2,16 @@
 
 import { useEffect } from 'react'
 import { aplicarVistaDesdeUrl } from '@/features/agujero-negro/store/vistaCamaraStore'
-import { CAPITULO_ACTUAL, EPILOGO } from '../contenido/capitulos'
 import { useSincronizarScroll } from '../hooks/useSincronizarScroll'
-import { CapituloSection } from './CapituloSection'
-import { EpilogoSection } from './EpilogoSection'
-import { NarrativaFooter } from './NarrativaFooter'
-import { NarrativaHeader } from './NarrativaHeader'
-import { ProgresoRail } from './ProgresoRail'
 
+/**
+ * Sin textos en la interfaz (petición del usuario): ni cabecera, ni capítulo, ni epílogo, ni pie,
+ * ni rail de progreso. Queda sólo el agujero negro. El recorrido de scroll se conserva con un
+ * carril invisible de la misma altura que tenían las secciones (60vh + 200vh + 100vh), para que
+ * el zoom y el recorrido de cámara ligados al scroll sigan funcionando igual. Los encuadres se
+ * eligen con `?vista=…` en la URL o arrastrando; los componentes de texto siguen en el repositorio
+ * por si se quieren recuperar.
+ */
 export function NarrativaOverlay() {
   useSincronizarScroll()
 
@@ -19,15 +21,8 @@ export function NarrativaOverlay() {
   }, [])
 
   return (
-    <>
-      <NarrativaHeader />
-      <ProgresoRail />
-      <main className="pointer-events-none relative z-10 select-none">
-        <div aria-hidden="true" className="h-[60vh]" />
-        <CapituloSection capitulo={CAPITULO_ACTUAL} />
-        <EpilogoSection epilogo={EPILOGO} />
-      </main>
-      <NarrativaFooter />
-    </>
+    <main className="pointer-events-none relative z-10 select-none">
+      <div aria-hidden="true" className="h-[360vh]" />
+    </main>
   )
 }
