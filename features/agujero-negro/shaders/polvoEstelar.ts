@@ -169,8 +169,10 @@ void main() {
   // Valores lineales: ACES desatura, así que aquí todo es más cálido de lo que parece.
   // Estrellitas: crema-blanco cálido con variación de temperatura como un campo estelar real
   // (la mayoría cálidas, algunas blancas, unas pocas frías); el ámbar queda para el bokeh.
-  vec3 calida = vec3(1.00, 0.93, 0.80);
-  vec3 blancaCalida = vec3(0.99, 0.97, 0.93);
+  // Paleta oro: en la captura lejana 32 del usuario la banda de chispas lee r/b 1.81/1.64 y
+  // tono 29–33° (oro naranja); con crema (1, 0.93, 0.80) salía 1.57/1.46 y 26–27° (rosado pálido) y con (1, 0.86, 0.60) 1.67/1.52.
+  vec3 calida = vec3(1.00, 0.82, 0.52);
+  vec3 blancaCalida = vec3(1.00, 0.89, 0.68);
   vec3 fria = vec3(0.88, 0.93, 1.00);
   vec3 ambar = vec3(0.92, 0.46, 0.16);
   vec3 blanco = vec3(0.96, 0.97, 1.00);
@@ -179,12 +181,12 @@ void main() {
   vec3 col = mix(calida, blancaCalida, smoothstep(0.35, 0.75, temperatura));
   col = mix(col, fria, smoothstep(0.9, 1.0, temperatura));
   // Ligero calentamiento hacia la periferia: iluminadas por el disco, más rojas cuanto más lejos.
-  col = mix(col, vec3(1.0, 0.80, 0.56), 0.18 * vTono);
+  col = mix(col, vec3(1.0, 0.78, 0.48), 0.3 * vTono);
   // Los discos de bokeh se leen ámbar translúcido, nunca gris: la acumulación aditiva los
   // empujaría a blanco si conservaran el tono claro de los granos en foco.
   col = mix(col, ambar, vBokeh * 0.85);
   // Las más vivas saturan a blanco cálido, como en una fotografía real.
-  col = mix(col, vec3(1.0, 0.97, 0.90), smoothstep(1.0, 2.8, vBrilloBase) * (1.0 - vBokeh));
+  col = mix(col, vec3(1.0, 0.94, 0.82), smoothstep(1.0, 2.8, vBrilloBase) * (1.0 - vBokeh));
   // Las estrellas del fondo también tienen temperatura: un cielo real no es de puntos idénticos.
   col = mix(col, blanco, vEstrella * 0.6);
 

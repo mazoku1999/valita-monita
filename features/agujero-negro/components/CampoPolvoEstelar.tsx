@@ -13,12 +13,16 @@ import { MUNDO } from './LenteGravitacionalQuad'
 
 /**
  * Exposición del polvo a la distancia de referencia (0.9 a 38 unidades, la calibración de canto).
- * El flujo de cada grano cae con el cuadrado de la distancia, así que la exposición efectiva es
- * 0.9·(38/D)²: es exactamente la ley que seguían las exposiciones que antes se fijaban a mano por
- * vista (3.5 a 19.5, 1.8 a 27.5, 0.5 a 60), ahora continua con la cámara real.
+ * Más cerca, el flujo de cada grano crece con el cuadrado de la distancia (0.9·(38/D)²: la ley
+ * que seguían las exposiciones por vista, 3.5 a 19.5). Más lejos la ley se suaviza a (38/D)^0.8:
+ * con 1/d² la banda de chispas se apagaba de lejos (0.06 sRGB a 10 R a 105 unidades) mientras que
+ * en la captura lejana 32 del usuario sigue a 0.3 hasta ±15 R; una banda extensa vista de lejos
+ * conserva su brillo superficial, y con granos subpíxel y bloom umbralizado la ley pura no lo hace.
  */
 const EXPOSICION_REFERENCIA = 0.9
 const DISTANCIA_REFERENCIA = 38
+const EXPONENTE_CERCA = 2
+const EXPONENTE_LEJOS = 0.8
 
 type UniformesPolvo = {
   uTiempo: THREE.IUniform<number>
@@ -89,7 +93,8 @@ export function CampoPolvoEstelar() {
     uniformes.uFoco.value = distancia
     const aspecto = aspectoEnCamara(camera, obtenerProgreso())
     const relacion = DISTANCIA_REFERENCIA / Math.max(distancia, 1)
-    uniformes.uBrilloPolvo.value = ajuste('polvoExposicion', EXPOSICION_REFERENCIA) * relacion * relacion
+    const exponente = relacion > 1 ? EXPONENTE_CERCA : ajuste('polvoExponente', EXPONENTE_LEJOS)
+    uniformes.uBrilloPolvo.value = ajuste('polvoExposicion', EXPOSICION_REFERENCIA) * Math.pow(relacion, exponente)
     uniformes.uApertura.value = 6 * escalaVista * aspecto.apertura
     uniformes.uTamMax.value = aspecto.tamanoMaximo * gl.getPixelRatio()
     uniformes.uNiebla.value = ajuste('niebla', MUNDO.niebla)

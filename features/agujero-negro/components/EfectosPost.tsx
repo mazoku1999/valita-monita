@@ -14,15 +14,17 @@ import { EfectoGas } from '../utils/efectoGas'
  * anillo, cielo), fijo en píxeles CSS (altura de referencia 720), y tiene dos partes físicas:
  * - `camara`: la dispersión en la óptica de la cámara, ancha y suave (mucho peso en los niveles
  *   gruesos): llena la sombra y pone la falda bajo la cara cercana; igual en todas las vistas.
- * - `polvo`: la dispersión hacia delante del polvo que hay entre la cámara y el agujero, estrecha
- *   (ángulos pequeños) e intensa, proporcional a la columna real de escombros delante de la cámara
+ * - `polvo`: la dispersión hacia delante del polvo que hay entre la cámara y el agujero, de
+ *   anchura media (seis niveles: en la captura lejana 32 el resplandor cae con una escala de ~3 R;
+ *   con ocho niveles se extendía a 10 R y con cinco no llegaba a 4 R), proporcional a la columna
+ *   real de escombros delante de la cámara
  *   (`utils/columnaPolvo.ts`): es el pedestal del haz de la captura 22 (cámara dentro del sistema
  *   de anillos), que a 19.5 unidades se reduce a la mitad y desde arriba desaparece.
  * En las capturas del usuario el pedestal mide 57 px a 38 unidades y 31–44 px a 19.5 (a 720 px de
  * alto): sólo la parte de polvo cambia entre ellas.
  */
 const RESPLANDOR_CAMARA = { umbral: 0.5, radio: 0.9, niveles: 7, intensidad: 4.5 } as const
-const RESPLANDOR_POLVO = { umbral: 0.5, radio: 0.6, niveles: 5, intensidad: 12 } as const
+const RESPLANDOR_POLVO = { umbral: 0.5, radio: 0.85, niveles: 6, intensidad: 7.5 } as const
 
 /**
  * Bloom de las chispas: la escena que entra al compositor sólo contiene el polvo (el gas se

@@ -74,11 +74,13 @@ const supervivencia = (r: number): number => suavizar(R_INICIO, R_PLENITUD, r)
 const escalaTamano = (r: number): number => 0.3 + 0.7 * suavizar(R_INICIO, R_TAMANO, r)
 
 /**
- * Iluminados por el disco: el flujo recibido cae con el radio, y los granos que rozan el gas
- * (hasta ~16) además brillan por sí mismos al calentarse, para que el haz se disuelva en chispas.
+ * Iluminados por el disco: el flujo recibido cae con el radio (ley suavizada, (13/r)^0.7: en la
+ * captura lejana 32 del usuario la banda de chispas sigue igual de viva a 40 unidades que a 15),
+ * y los granos que rozan el gas (hasta ~16) además brillan por sí mismos al calentarse, para que
+ * el haz se disuelva en chispas.
  */
 const brilloEn = (r: number): number =>
-  ENERGIA_POR_GRANO * Math.pow(R_BRILLO / r, 1.0) * (1 + 0.25 * (1 - suavizar(R_INICIO, 16, r)))
+  ENERGIA_POR_GRANO * Math.pow(R_BRILLO / r, 0.7) * (1 + 0.25 * (1 - suavizar(R_INICIO, 16, r)))
 
 const limitarBrillo = (brillo: number): number => Math.min(BRILLO_MAXIMO, brillo)
 
