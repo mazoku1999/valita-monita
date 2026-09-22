@@ -131,6 +131,10 @@ export function LenteGravitacionalQuad() {
     uniformes.uAnillo.value = ajuste('anillo', MUNDO.anillo)
     const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 40
     uniformes.uAnguloPixel.value = THREE.MathUtils.degToRad(fov) / Math.max(size.height, 1)
+    // Dentro del horizonte el gas ya no es una superficie delante de la cámara (todo se captura
+    // en el primer paso): no se escribe su profundidad, para que el anillo de papel de la escena
+    // final se dibuje con su propia oclusión.
+    recursos.mallaPantalla.visible = camera.position.length() > 1.05
 
     const objetivoPrevio = gl.getRenderTarget()
     const limpiezaPrevia = gl.autoClear

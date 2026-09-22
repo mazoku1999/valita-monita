@@ -5,6 +5,7 @@ import { CAMARA_AGUJERO } from '../constantes/parametrosAgujero'
 import { CamaraNarrativa } from './CamaraNarrativa'
 import { CampoPolvoEstelar } from './CampoPolvoEstelar'
 import { EfectosPost } from './EfectosPost'
+import { EscenaAnilloFinal } from './EscenaAnilloFinal'
 import { LenteGravitacionalQuad } from './LenteGravitacionalQuad'
 
 interface AgujeroNegroCanvasProps {
@@ -32,6 +33,7 @@ export function AgujeroNegroCanvas({ onListo }: AgujeroNegroCanvasProps) {
       <LenteGravitacionalQuad />
       <CampoPolvoEstelar />
       <CamaraNarrativa />
+      <EscenaAnilloFinal />
       <EfectosPost />
     </Canvas>
   )

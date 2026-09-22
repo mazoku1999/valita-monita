@@ -24,6 +24,11 @@ const DISTANCIA_REFERENCIA = 38
 const EXPONENTE_CERCA = 2
 const EXPONENTE_LEJOS = 0.45
 
+const suavizar = (borde0: number, borde1: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - borde0) / (borde1 - borde0)))
+  return t * t * (3 - 2 * t)
+}
+
 type UniformesPolvo = {
   uTiempo: THREE.IUniform<number>
   uEscalaPuntos: THREE.IUniform<number>
@@ -94,7 +99,9 @@ export function CampoPolvoEstelar() {
     const aspecto = aspectoEnCamara(camera, obtenerProgreso())
     const relacion = DISTANCIA_REFERENCIA / Math.max(distancia, 1)
     const exponente = relacion > 1 ? EXPONENTE_CERCA : ajuste('polvoExponente', EXPONENTE_LEJOS)
-    uniformes.uBrilloPolvo.value = ajuste('polvoExposicion', EXPOSICION_REFERENCIA) * Math.pow(relacion, exponente)
+    // Inmersión: al cruzar la niebla interior y el horizonte, las chispas de fuera se apagan.
+    const fuera = suavizar(1.2, 3.5, distancia)
+    uniformes.uBrilloPolvo.value = ajuste('polvoExposicion', EXPOSICION_REFERENCIA) * Math.pow(relacion, exponente) * fuera
     uniformes.uApertura.value = 6 * escalaVista * aspecto.apertura
     uniformes.uTamMax.value = aspecto.tamanoMaximo * gl.getPixelRatio()
     uniformes.uNiebla.value = ajuste('niebla', MUNDO.niebla)
