@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
+import { VIAJE } from '../constantes/viajeScroll'
 import { DISTANCIA_LIBRE, VISTAS_CAMARA, type VistaCamara } from '../constantes/vistasCamara'
 import { useArrastreOrbital } from '../hooks/useArrastreOrbital'
 import { useSeguirCursor } from '../hooks/useSeguirCursor'
@@ -20,27 +21,6 @@ const PASO_MAXIMO = 0.25
 // una constante más lenta (~0.6 s) para que cambiar de vista sea un travelling y no un corte.
 const RITMO_AZIMUT = 2.8
 const RITMO_VISTA = 1.6
-/**
- * Zoom ligado al scroll: la historia empieza con el agujero muy lejos (140 unidades, el anillo
- * de fotones mide un 5 % de la altura) y la cámara se acerca a lo largo de la página, con
- * interpolación logarítmica (el tamaño aparente crece a ritmo constante), hasta la distancia
- * calibrada del encuadre a mitad del scroll. Desde ahí empieza la INMERSIÓN: la cámara sigue
- * cayendo hacia el agujero, pasa por encima del disco, atraviesa la niebla del interior y cruza
- * el horizonte (todo se apaga); dentro aparece el anillo de papel (`EscenaAnilloFinal`).
- */
-const ZOOM_SCROLL = { distanciaInicial: 140, finAcercamiento: 0.5 } as const
-export const FASE_INMERSION = {
-  /** Progreso en que empieza la caída (desde la distancia del encuadre) y en que termina (dentro del horizonte). */
-  inicio: 0.5,
-  fin: 0.86,
-  /** Distancia final al centro (el horizonte está en 1). */
-  distanciaFinal: 0.35,
-  /** Elevación mínima durante la caída (radianes sobre el plano): se pasa por encima del gas, no a través. */
-  elevacionMinima: 0.17,
-  /** Progreso en que el anillo de papel empieza a aparecer y en que está pleno. */
-  anilloInicio: 0.86,
-  anilloPleno: 0.94,
-} as const
 /**
  * Seguimiento del cursor: la cámara orbita muy ligeramente siguiendo al ratón, como un arrastre
  * suave desde el centro hasta donde está el cursor (mismo sentido que arrastrar: el ratón abajo
@@ -69,18 +49,26 @@ const suavizar = (borde0: number, borde1: number, x: number): number => {
   return t * t * (3 - 2 * t)
 }
 
-/** Distancia de cámara según el scroll (ver ZOOM_SCROLL y FASE_INMERSION); una distancia fijada en la URL la anula. */
+/**
+ * Zoom ligado al scroll (reparto en `constantes/viajeScroll.ts`): la historia empieza con el
+ * agujero muy lejos y la cámara se acerca con interpolación logarítmica (el tamaño aparente
+ * crece a ritmo constante) hasta la distancia calibrada del encuadre. Desde ahí empieza la
+ * CAÍDA: la cámara sigue hacia el agujero, pasa por encima del disco, atraviesa la niebla del
+ * interior y cruza el horizonte (todo se apaga); dentro empieza el viaje por el túnel
+ * (`TunelAgujeroGusano`) y al final aparece el anillo de papel (`EscenaAnilloFinal`).
+ * Una distancia fijada en la URL (`?distancia=`) anula el recorrido.
+ */
 const distanciaConScroll = (distanciaFotograma: number, progreso: number): number => {
   const fijada = ajuste('distancia', Number.NaN)
   if (Number.isFinite(fijada)) return fijada
   const lnEncuadre = Math.log(distanciaFotograma)
-  if (progreso <= ZOOM_SCROLL.finAcercamiento) {
-    const acercamiento = suavizar(0, ZOOM_SCROLL.finAcercamiento, progreso)
-    const lnInicio = Math.log(ZOOM_SCROLL.distanciaInicial)
+  if (progreso <= VIAJE.acercamientoFin) {
+    const acercamiento = suavizar(0, VIAJE.acercamientoFin, progreso)
+    const lnInicio = Math.log(VIAJE.distanciaInicial)
     return Math.exp(lnInicio + (lnEncuadre - lnInicio) * acercamiento)
   }
-  const caida = suavizar(FASE_INMERSION.inicio, FASE_INMERSION.fin, progreso)
-  return Math.exp(lnEncuadre + (Math.log(FASE_INMERSION.distanciaFinal) - lnEncuadre) * caida)
+  const caida = suavizar(VIAJE.acercamientoFin, VIAJE.caidaFin, progreso)
+  return Math.exp(lnEncuadre + (Math.log(VIAJE.distanciaInterior) - lnEncuadre) * caida)
 }
 
 /**
@@ -89,10 +77,11 @@ const distanciaConScroll = (distanciaFotograma: number, progreso: number): numbe
  * encima (o por debajo) del disco y no atravesar la lámina de gas, que lavaría la imagen.
  */
 const polarConInmersion = (polarFotograma: number, progreso: number): number => {
-  const caida = suavizar(FASE_INMERSION.inicio, FASE_INMERSION.inicio + 0.2, progreso)
+  // La elevación se gana en la primera mitad de la caída, antes de llegar al gas.
+  const caida = suavizar(VIAJE.acercamientoFin, VIAJE.acercamientoFin + 0.55 * (VIAJE.caidaFin - VIAJE.acercamientoFin), progreso)
   if (caida <= 0) return polarFotograma
   const lado = polarFotograma <= Math.PI / 2 ? -1 : 1
-  const limite = Math.PI / 2 + lado * FASE_INMERSION.elevacionMinima
+  const limite = Math.PI / 2 + lado * VIAJE.elevacionMinima
   const objetivo = lado < 0 ? Math.min(polarFotograma, limite) : Math.max(polarFotograma, limite)
   return polarFotograma + (objetivo - polarFotograma) * caida
 }

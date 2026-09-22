@@ -7,6 +7,7 @@ import { CampoPolvoEstelar } from './CampoPolvoEstelar'
 import { EfectosPost } from './EfectosPost'
 import { EscenaAnilloFinal } from './EscenaAnilloFinal'
 import { LenteGravitacionalQuad } from './LenteGravitacionalQuad'
+import { TunelAgujeroGusano } from './TunelAgujeroGusano'
 
 interface AgujeroNegroCanvasProps {
   onListo?: () => void
@@ -33,6 +34,7 @@ export function AgujeroNegroCanvas({ onListo }: AgujeroNegroCanvasProps) {
       <LenteGravitacionalQuad />
       <CampoPolvoEstelar />
       <CamaraNarrativa />
+      <TunelAgujeroGusano />
       <EscenaAnilloFinal />
       <EfectosPost />
     </Canvas>

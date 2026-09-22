@@ -5,11 +5,11 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { AnilloPapel } from '@/features/anillo-papel/components/AnilloPapel'
-import { FASE_INMERSION } from './CamaraNarrativa'
+import { VIAJE } from '../constantes/viajeScroll'
 
-/** El anillo se coloca delante de la cámara, a esta distancia y con esta escala. */
+/** El anillo se coloca delante de la cámara, a esta distancia y con esta escala (pequeño: ~un cuarto de la altura). */
 const DISTANCIA_ANILLO = 1.0
-const ESCALA_ANILLO = 0.21
+const ESCALA_ANILLO = 0.11
 /** El girasol sube hasta +1.6 radios sobre el centro de la banda: se baja el conjunto para centrarlo. */
 const DESPLAZAMIENTO_VERTICAL = -0.45
 
@@ -19,8 +19,8 @@ const suavizar = (borde0: number, borde1: number, x: number): number => {
 }
 
 /**
- * Escena final: una vez dentro del horizonte (todo negro), el anillo de papel aparece delante de
- * la cámara, crece y gira despacio. Se ancla al marco de la cámara para que el arrastre y el
+ * Escena final: tras el viaje por el túnel y el destello de salida, el anillo de papel aparece
+ * delante de la cámara, crece y se balancea despacio. Se ancla al marco de la cámara para que el arrastre y el
  * seguimiento del cursor no lo saquen de cuadro.
  */
 export function EscenaAnilloFinal() {
@@ -41,7 +41,7 @@ export function EscenaAnilloFinal() {
   useFrame(({ camera }, delta) => {
     const grupo = ancla.current
     if (!grupo) return
-    const aparicion = suavizar(FASE_INMERSION.anilloInicio, FASE_INMERSION.anilloPleno, obtenerProgreso())
+    const aparicion = suavizar(VIAJE.anilloInicio, VIAJE.anilloPleno, obtenerProgreso())
     grupo.visible = aparicion > 0.002
     if (!grupo.visible) return
 

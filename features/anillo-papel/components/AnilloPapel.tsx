@@ -313,6 +313,10 @@ export const AnilloPapel = forwardRef<THREE.Group, AnilloPapelProps>(function An
 ) {
   const paleta = useMemo(() => ({ ...COLORES_POR_DEFECTO, ...colores }), [colores])
   const recursos = useMemo(() => construir(radio, anchoBanda, paleta, semilla), [radio, anchoBanda, paleta, semilla])
+  // Las luces direccionales apuntan al centro del anillo (su destino por defecto es el origen del
+  // MUNDO, y la luz cambiaba según dónde se colocara el anillo). La hemisférica toma su "cielo" de
+  // su posición absoluta, así que se pone muy alta en el marco del anillo para que domine.
+  const objetivoLuz = useMemo(() => new THREE.Object3D(), [])
 
   useEffect(() => () => recursos.liberar(), [recursos])
 
@@ -321,9 +325,20 @@ export const AnilloPapel = forwardRef<THREE.Group, AnilloPapelProps>(function An
       <primitive object={recursos.grupo} />
       {luces && (
         <>
-          <hemisphereLight args={['#fff6e8', '#5a4630', 2.2]} />
-          <directionalLight position={[1.6 * radio, 2.6 * radio, 2.2 * radio]} intensity={4.5} color="#fff1da" />
-          <directionalLight position={[-2.2 * radio, 0.8 * radio, 1.4 * radio]} intensity={1.6} color="#dfe8ff" />
+          <primitive object={objetivoLuz} />
+          <hemisphereLight args={['#fff6e8', '#5a4630', 2.2]} position={[0, 1000 * radio, 0]} />
+          <directionalLight
+            position={[1.6 * radio, 2.6 * radio, 2.2 * radio]}
+            intensity={4.5}
+            color="#fff1da"
+            target={objetivoLuz}
+          />
+          <directionalLight
+            position={[-2.2 * radio, 0.8 * radio, 1.4 * radio]}
+            intensity={1.6}
+            color="#dfe8ff"
+            target={objetivoLuz}
+          />
         </>
       )}
     </group>
