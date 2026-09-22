@@ -1,39 +1,32 @@
 'use client'
 
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { VIAJE } from '../constantes/viajeScroll'
-import { DESTELLO_FRAG, SALIDA_FRAG, TUNEL_FRAG, TUNEL_VERT } from '../shaders/tunelAgujeroGusano'
+import { ajuste } from '../store/vistaCamaraStore'
+import { AGUJERO_GUSANO_FRAG, AGUJERO_GUSANO_VERT, DESTELLO_FRAG, PLANO_VERT } from '../shaders/agujeroGusano'
 
-/** Geometría y ritmo del túnel (unidades de la escena; la cámara va en el origen del grupo). */
-const TUNEL = {
-  radioInterior: 1.0,
-  radioExterior: 1.8,
-  /** Longitud por delante de la cámara y tramo que queda detrás. */
-  largo: 70,
-  detras: 4,
-  /** Unidades que recorre el paisaje a lo largo de toda la fase del túnel (lo que avanza con el scroll). */
-  recorrido: 420,
-  /** Deriva en unidades por segundo cuando no se hace scroll: el túnel sigue vivo. */
-  deriva: 1.5,
+/** Recorrido de la cámara por el agujero de gusano (ver el shader: garganta de radio 1 y longitud 3). */
+const GUSANO = {
+  /** l al empezar (fuera de la boca de este lado) y al terminar (fuera de la boca del otro lado). */
+  lInicio: -5.5,
+  lFin: 5.5,
   /** Suavizado del avance ligado al scroll (los pasos de la rueda no dan tirones). */
   ritmoAvance: 4,
-  /** Seguimiento de la orientación de la cámara: a corto plazo el túnel queda fijo en el mundo (~0.8 s). */
+  /** Balanceo lento de la posición cuando no se hace scroll (amplitud en l y frecuencia en rad/s). */
+  balanceo: 0.12,
+  balanceoRitmo: 0.4,
+  /** Desenfoque de movimiento: una muestra más por cada tanto de l recorrido en el fotograma (máximo 3). */
+  lPorMuestra: 0.03,
+  /** Seguimiento de la orientación de la cámara: a corto plazo el eje queda fijo en el mundo (~0.8 s). */
   ritmoGiro: 1.2,
-  /** Luz de la salida: distancia delante de la cámara, escala máxima y resplandor tenue permanente en el punto de fuga. */
-  salidaDistancia: 12,
-  salidaEscala: 6,
-  salidaMinima: 0.06,
-  /** Progreso (antes de `tunelFin`) en que la luz de la salida empieza a crecer y en que arranca el destello. */
-  salidaAntes: 0.06,
-  destelloAntes: 0.015,
-  /** Fracción de la fase del túnel en que el color pasa del naranja de la entrada al azul. */
-  enfriamiento: 0.25,
-  /** Cruce del horizonte: el túnel aparece mientras la distancia al centro baja de 1.1 a 0.75. */
+  /** Cruce del horizonte: el paso aparece mientras la distancia al centro baja de 1.1 a 0.75. */
   entradaDesde: 1.1,
   entradaHasta: 0.75,
+  /** Progreso (antes de `tunelFin`) en que arranca el destello de salida. */
+  destelloAntes: 0.015,
 } as const
 
 const limitar = (valor: number, minimo: number, maximo: number): number =>
@@ -44,18 +37,19 @@ const suavizar = (borde0: number, borde1: number, x: number): number => {
   return t * t * (3 - 2 * t)
 }
 
-/** Material HDR aditivo (uno + uno): las capas se suman y el bloom enciende lo más brillante. */
+/** Material HDR aditivo (uno + uno) sin profundidad: se suma sobre el negro del interior. */
 const materialAditivo = (
   vertexShader: string,
   fragmentShader: string,
   uniforms: Record<string, THREE.IUniform>,
-  side: THREE.Side = THREE.FrontSide,
+  glsl3: boolean,
 ): THREE.ShaderMaterial =>
   new THREE.ShaderMaterial({
+    glslVersion: glsl3 ? THREE.GLSL3 : null,
     vertexShader,
     fragmentShader,
     uniforms,
-    side,
+    side: THREE.DoubleSide,
     transparent: true,
     depthTest: false,
     depthWrite: false,
@@ -65,64 +59,48 @@ const materialAditivo = (
     blendDst: THREE.OneFactor,
   })
 
-const geometriaTubo = (radio: number): THREE.CylinderGeometry => {
-  const geometria = new THREE.CylinderGeometry(radio, radio, TUNEL.largo + TUNEL.detras, 128, 1, true)
-  // El eje del cilindro pasa a Z (la cámara mira hacia -Z) y el tubo va de -largo a +detras.
-  geometria.rotateX(Math.PI / 2)
-  geometria.translate(0, 0, (TUNEL.detras - TUNEL.largo) / 2)
-  return geometria
-}
-
-const DESTELLO_VERT = /* glsl */ `
-void main() {
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`
-
 /**
  * Viaje por el interior del agujero, estilo Interstellar: al cruzar el horizonte (todo negro) la
- * cámara entra en un túnel de estelas de luz que avanza con el scroll durante la fase larga del
- * viaje (ver `constantes/viajeScroll.ts`); al final, la luz de la salida crece hasta un destello
- * blanco del que sale el anillo de papel (`EscenaAnilloFinal`). El túnel se ancla a la posición
- * de la cámara y sigue su orientación con retraso, de modo que el arrastre y el seguimiento del
- * cursor mueven el punto de fuga como si el túnel estuviera fijo en el mundo.
+ * cámara recorre un agujero de gusano trazado por píxel (`shaders/agujeroGusano.ts`) durante la
+ * fase del túnel (ver `constantes/viajeScroll.ts`): la boca del otro lado se ve delante como una
+ * esfera de cielo lensado que crece hasta rodearnos, dentro los cielos se enrollan por las
+ * paredes y se retuercen al avanzar, y al salir el cielo del otro lado se abre; un destello blanco
+ * remata la salida y de él sale el anillo de papel (`EscenaAnilloFinal`). El eje del agujero de
+ * gusano sigue la orientación de la cámara con retraso, de modo que el arrastre y el cursor
+ * mueven la vista como si el eje estuviera fijo en el mundo.
  */
 export function TunelAgujeroGusano() {
+  const { size } = useThree()
   const ancla = useRef<THREE.Group>(null)
   const [movimientoReducido, setMovimientoReducido] = useState(false)
   const iniciado = useRef(false)
   const tiempo = useRef(0)
-  const avanceSuave = useRef(0)
+  const lSuave = useRef<number>(GUSANO.lInicio)
+  const lPrevio = useRef<number>(GUSANO.lInicio)
+  const rotacion = useRef(new THREE.Matrix4())
+  const inversa = useRef(new THREE.Quaternion())
 
   const recursos = useMemo(() => {
-    const crearTubo = (radio: number, semilla: number, brillo: number) => {
-      const uniforms = {
-        uAvance: { value: 0 },
-        uTiempo: { value: 0 },
-        uOpacidad: { value: 0 },
-        uCalor: { value: 1 },
-        uSemilla: { value: semilla },
-        uBrillo: { value: brillo },
-      }
-      const geometria = geometriaTubo(radio)
-      const material = materialAditivo(TUNEL_VERT, TUNEL_FRAG, uniforms, THREE.BackSide)
-      const malla = new THREE.Mesh(geometria, material)
-      malla.frustumCulled = false
-      return { uniforms, geometria, material, malla }
+    const uniformsGusano = {
+      uProyInversa: { value: new THREE.Matrix4() },
+      uCamaraMundo: { value: new THREE.Matrix4() },
+      uMarcoInverso: { value: new THREE.Matrix3() },
+      uL: { value: GUSANO.lInicio as number },
+      uDeltaL: { value: 0 },
+      uMuestras: { value: 1 },
+      uTiempo: { value: 0 },
+      uOpacidad: { value: 0 },
+      uAnguloPixel: { value: 0.001 },
     }
-    const interior = crearTubo(TUNEL.radioInterior, 3, 1)
-    const exterior = crearTubo(TUNEL.radioExterior, 29, 0.5)
-
-    const uniformsSalida = { uSalida: { value: 0 } }
-    const geometriaSalida = new THREE.CircleGeometry(1, 64)
-    const materialSalida = materialAditivo(TUNEL_VERT, SALIDA_FRAG, uniformsSalida, THREE.DoubleSide)
-    const salida = new THREE.Mesh(geometriaSalida, materialSalida)
-    salida.position.set(0, 0, -TUNEL.salidaDistancia)
-    salida.frustumCulled = false
+    const geometriaPantalla = new THREE.PlaneGeometry(2, 2)
+    const materialGusano = materialAditivo(AGUJERO_GUSANO_VERT, AGUJERO_GUSANO_FRAG, uniformsGusano, true)
+    const gusano = new THREE.Mesh(geometriaPantalla, materialGusano)
+    gusano.frustumCulled = false
+    gusano.renderOrder = -5
 
     const uniformsDestello = { uDestello: { value: 0 } }
     const geometriaDestello = new THREE.PlaneGeometry(2, 2)
-    const materialDestello = materialAditivo(DESTELLO_VERT, DESTELLO_FRAG, uniformsDestello, THREE.DoubleSide)
+    const materialDestello = materialAditivo(PLANO_VERT, DESTELLO_FRAG, uniformsDestello, false)
     const destello = new THREE.Mesh(geometriaDestello, materialDestello)
     destello.position.set(0, 0, -0.3)
     destello.scale.setScalar(4)
@@ -130,19 +108,13 @@ export function TunelAgujeroGusano() {
     destello.renderOrder = 1000
 
     return {
-      interior,
-      exterior,
-      salida,
-      uniformsSalida,
+      gusano,
+      uniformsGusano,
       destello,
       uniformsDestello,
       liberar: () => {
-        interior.geometria.dispose()
-        interior.material.dispose()
-        exterior.geometria.dispose()
-        exterior.material.dispose()
-        geometriaSalida.dispose()
-        materialSalida.dispose()
+        geometriaPantalla.dispose()
+        materialGusano.dispose()
         geometriaDestello.dispose()
         materialDestello.dispose()
       },
@@ -166,13 +138,12 @@ export function TunelAgujeroGusano() {
     const progreso = obtenerProgreso()
     const distancia = camera.position.length()
 
-    // El túnel aparece al cruzar el horizonte y se apaga justo tras el destello de salida.
-    const entrada = suavizar(TUNEL.entradaDesde, TUNEL.entradaHasta, distancia)
+    // El paso aparece al cruzar el horizonte y se apaga justo tras el destello de salida.
+    const entrada = suavizar(GUSANO.entradaDesde, GUSANO.entradaHasta, distancia)
     const apagado = 1 - suavizar(VIAJE.tunelFin, VIAJE.tunelFin + 0.015, progreso)
     const opacidad = entrada * apagado
-    const salida = suavizar(VIAJE.tunelFin - TUNEL.salidaAntes, VIAJE.tunelFin, progreso)
     const destello =
-      suavizar(VIAJE.tunelFin - TUNEL.destelloAntes, VIAJE.tunelFin, progreso) *
+      suavizar(VIAJE.tunelFin - GUSANO.destelloAntes, VIAJE.tunelFin, progreso) *
       (1 - suavizar(VIAJE.tunelFin, VIAJE.destelloFin, progreso))
     grupo.visible = opacidad > 0.002 || destello > 0.001
     if (!grupo.visible) {
@@ -180,42 +151,52 @@ export function TunelAgujeroGusano() {
       return
     }
 
-    // Anclado a la cámara; la orientación la sigue con retraso (paralaje del punto de fuga).
+    // Anclado a la cámara; la orientación del eje la sigue con retraso (paralaje).
     grupo.position.copy(camera.position)
     if (!iniciado.current) {
       grupo.quaternion.copy(camera.quaternion)
       iniciado.current = true
+      lSuave.current = GUSANO.lInicio
+      lPrevio.current = GUSANO.lInicio
     } else {
-      grupo.quaternion.slerp(camera.quaternion, 1 - Math.exp(-paso * TUNEL.ritmoGiro))
+      grupo.quaternion.slerp(camera.quaternion, 1 - Math.exp(-paso * GUSANO.ritmoGiro))
     }
 
     if (!movimientoReducido) tiempo.current += paso
-    const fraccionTunel = limitar((progreso - VIAJE.caidaFin) / (VIAJE.tunelFin - VIAJE.caidaFin), 0, 1)
-    const avanceObjetivo = fraccionTunel * TUNEL.recorrido
-    avanceSuave.current += (avanceObjetivo - avanceSuave.current) * (1 - Math.exp(-paso * TUNEL.ritmoAvance))
-    const avance = avanceSuave.current + tiempo.current * TUNEL.deriva
-    const calor = 1 - suavizar(0, TUNEL.enfriamiento, fraccionTunel)
+    const fraccion = limitar((progreso - VIAJE.caidaFin) / (VIAJE.tunelFin - VIAJE.caidaFin), 0, 1)
+    const lObjetivo = GUSANO.lInicio + (GUSANO.lFin - GUSANO.lInicio) * fraccion
+    lSuave.current += (lObjetivo - lSuave.current) * (1 - Math.exp(-paso * GUSANO.ritmoAvance))
+    const balanceo = movimientoReducido ? 0 : GUSANO.balanceo * Math.sin(tiempo.current * GUSANO.balanceoRitmo)
+    const l = lSuave.current + balanceo
+    const deltaL = l - lPrevio.current
+    lPrevio.current = l
 
-    for (const tubo of [recursos.interior, recursos.exterior]) {
-      tubo.uniforms.uAvance.value = avance
-      tubo.uniforms.uTiempo.value = tiempo.current
-      tubo.uniforms.uOpacidad.value = opacidad
-      tubo.uniforms.uCalor.value = calor
-    }
-    // La salida: un resplandor tenue en el punto de fuga durante todo el viaje que, al final,
-    // crece deprisa (cúbico) hasta ser un sol; el destello blanco remata la salida.
-    recursos.uniformsSalida.uSalida.value = (TUNEL.salidaMinima + (1 - TUNEL.salidaMinima) * salida) * opacidad
-    recursos.salida.visible = opacidad > 0.002
-    recursos.salida.scale.setScalar(TUNEL.salidaEscala * (0.12 + 0.88 * salida * salida * salida))
+    const u = recursos.uniformsGusano
+    camera.updateMatrixWorld()
+    u.uProyInversa.value.copy(camera.projectionMatrixInverse)
+    u.uCamaraMundo.value.copy(camera.matrixWorld)
+    inversa.current.copy(grupo.quaternion).invert()
+    rotacion.current.makeRotationFromQuaternion(inversa.current)
+    u.uMarcoInverso.value.setFromMatrix4(rotacion.current)
+    u.uL.value = l
+    u.uDeltaL.value = deltaL
+    // Muestras del desenfoque según lo recorrido en el fotograma; `?gusanoMuestras=1` lo desactiva
+    // en desarrollo (capturas de calibración sin estelas).
+    const maximoMuestras = Math.round(ajuste('gusanoMuestras', 3))
+    u.uMuestras.value = Math.min(maximoMuestras, 1 + Math.min(2, Math.floor(Math.abs(deltaL) / GUSANO.lPorMuestra)))
+    u.uTiempo.value = tiempo.current
+    u.uOpacidad.value = opacidad
+    const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 45
+    u.uAnguloPixel.value = THREE.MathUtils.degToRad(fov) / Math.max(size.height, 1)
+    recursos.gusano.visible = opacidad > 0.002
+
     recursos.uniformsDestello.uDestello.value = destello * destello
     recursos.destello.visible = destello > 0.001
   })
 
   return (
     <group ref={ancla} visible={false}>
-      <primitive object={recursos.exterior.malla} />
-      <primitive object={recursos.interior.malla} />
-      <primitive object={recursos.salida} />
+      <primitive object={recursos.gusano} />
       <primitive object={recursos.destello} />
     </group>
   )
