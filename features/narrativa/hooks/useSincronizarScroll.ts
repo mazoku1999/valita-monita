@@ -3,9 +3,16 @@
 import { useEffect } from 'react'
 import { establecerProgreso } from '../store/progresoScrollStore'
 
+/**
+ * Progreso de scroll de la narrativa (0..1). El viaje empieza siempre arriba: se desactiva la
+ * restauración de posición del navegador (al recargar volvía al punto anterior y la cámara
+ * "viajaba sola" hasta allí) y la página se pone en 0 al montar.
+ */
 export function useSincronizarScroll(): void {
   useEffect(() => {
     let solicitud = 0
+    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'
+    window.scrollTo(0, 0)
 
     const medir = (): void => {
       solicitud = 0

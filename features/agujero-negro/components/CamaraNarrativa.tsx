@@ -109,6 +109,7 @@ export function CamaraNarrativa() {
   const estadoActual = useRef<EstadoCompleto>(objetivoDeVista(VISTAS_CAMARA[obtenerVista()], 0))
   const versionVista = useRef(obtenerVersionVista())
   const giroAcumulado = useRef(0)
+  const primerFotograma = useRef(true)
   const [movimientoReducido, setMovimientoReducido] = useState(false)
 
   useEffect(() => {
@@ -133,6 +134,13 @@ export function CamaraNarrativa() {
       volverAlEncuadre()
     }
     sumarZoom(consumirZoomPendiente())
+
+    // Primer fotograma: la cámara se coloca directamente donde toca (progreso inicial, vista de
+    // la URL), sin un travelling desde el estado por defecto.
+    if (primerFotograma.current) {
+      primerFotograma.current = false
+      Object.assign(actual, objetivo)
+    }
 
     actual.azimut += (objetivo.azimut - actual.azimut) * kAzimut
     actual.polar += (objetivo.polar - actual.polar) * kVista

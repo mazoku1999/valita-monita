@@ -170,7 +170,9 @@
   }
   html {
     background-color: var(--color-cosmos);
-    scroll-behavior: smooth;
+    /* Sin scroll suave: el recorrido lo lleva el usuario con la rueda; un salto programático
+       (restauración de posición al recargar) se animaba y parecía un scroll automático. */
+    scroll-behavior: auto;
   }
   body {
     @apply bg-cosmos text-crema;
@@ -178,11 +180,5 @@
   ::selection {
     background-color: color-mix(in oklab, var(--color-oro) 35%, transparent);
     color: var(--color-crema);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
   }
 }
