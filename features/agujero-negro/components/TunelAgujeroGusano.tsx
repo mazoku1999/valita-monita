@@ -22,11 +22,21 @@ const GUSANO = {
   lPorMuestra: 0.03,
   /** Seguimiento de la orientación de la cámara: a corto plazo el eje queda fijo en el mundo (~0.8 s). */
   ritmoGiro: 1.2,
-  /** Cruce del horizonte: el paso aparece mientras la distancia al centro baja de 1.1 a 0.75. */
-  entradaDesde: 1.1,
-  entradaHasta: 0.75,
+  /**
+   * Entrada: la boca aparece ya dentro del horizonte, cuando la luz de fuera ha salido de la
+   * pantalla y la vista de frente es negra (la distancia al centro baja de 0.6 a 0.4).
+   */
+  entradaDesde: 0.6,
+  entradaHasta: 0.4,
   /** Progreso (antes de `tunelFin`) en que arranca el destello de salida. */
   destelloAntes: 0.015,
+  /**
+   * Luz del cielo de este lado al empezar el paso (fracción de la normal) y tramo del paso en el
+   * que se enciende: la boca aparece primero sola en la oscuridad y el resplandor de alrededor
+   * llega después, en vez de pasar de negro a un fondo pardo de golpe.
+   */
+  luzCercanaInicial: 0.12,
+  luzCercanaTramo: 0.3,
 } as const
 
 const limitar = (valor: number, minimo: number, maximo: number): number =>
@@ -91,6 +101,7 @@ export function TunelAgujeroGusano() {
       uTiempo: { value: 0 },
       uOpacidad: { value: 0 },
       uAnguloPixel: { value: 0.001 },
+      uLuzCercana: { value: 1 },
     }
     const geometriaPantalla = new THREE.PlaneGeometry(2, 2)
     const materialGusano = materialAditivo(AGUJERO_GUSANO_VERT, AGUJERO_GUSANO_FRAG, uniformsGusano, true)
@@ -186,6 +197,8 @@ export function TunelAgujeroGusano() {
     u.uMuestras.value = Math.min(maximoMuestras, 1 + Math.min(2, Math.floor(Math.abs(deltaL) / GUSANO.lPorMuestra)))
     u.uTiempo.value = tiempo.current
     u.uOpacidad.value = opacidad
+    u.uLuzCercana.value =
+      GUSANO.luzCercanaInicial + (1 - GUSANO.luzCercanaInicial) * suavizar(0, GUSANO.luzCercanaTramo, fraccion)
     const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 45
     u.uAnguloPixel.value = THREE.MathUtils.degToRad(fov) / Math.max(size.height, 1)
     recursos.gusano.visible = opacidad > 0.002

@@ -1,4 +1,5 @@
 import { PARAMETROS_AGUJERO } from '../constantes/parametrosAgujero'
+import { CORRIMIENTO_OBSERVADOR_GLSL } from './corrimientoObservador'
 
 const f = (valor: number): string => valor.toFixed(4)
 
@@ -22,6 +23,11 @@ const f = (valor: number): string => valor.toFixed(4)
  * disco, niebla interior (absorbe y brilla), anillo de fotones y cielo. Ningún término depende
  * de la elevación de la cámara ni de la vista elegida; lo único que cambia con la vista es la
  * exposición (uBrillo), como en una cámara.
+ *
+ * En la caída la cámara es un observador en caída libre de verdad (uObservador, ver
+ * `utils/observadorCaida.ts`): cada píxel lanza el rayo que le corresponde en su marco propio, con
+ * la aberración y el corrimiento de frecuencia de un observador que se mueve casi a la velocidad
+ * de la luz, y puede cruzar el horizonte sin que la imagen se corte.
  */
 export const LENTE_GRAVITACIONAL_FRAG = /* glsl */ `
 uniform float uTiempo;
@@ -37,6 +43,11 @@ uniform float uNieblaLuz;
 uniform float uAnillo;
 // Tamaño angular de un píxel (rad): fija el tamaño mínimo de las estrellas del cielo de fondo.
 uniform float uAnguloPixel;
+// Movimiento de la cámara (ver utils/observadorCaida.ts): energía específica E de su geodésica
+// radial y velocidad propia de caída K = −dr/dτ. E = 1, K = 0 es la cámara de los encuadres.
+uniform vec2 uObservador;
+// Corrimiento g del borde de la sombra: la exposición de la cámara en caída (1 fuera de ella).
+uniform float uGReferencia;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -81,6 +92,8 @@ const vec3 TINTE_NIEBLA = vec3(1.0, 0.60, 0.28);
 // anaranjado, de lejos etc.": sus capturas lejanas 5 y 6 leen r/b 2.15/1.94/1.49/1.13 por
 // bandas frente a 1.85/1.75/1.42/1.10 nuestras, y (1, 1.05, 1.2) las calca. Normalizado a luminancia 1 para no cambiar la exposición calibrada.
 const vec3 BALANCE_COLOR = vec3(1.0, 1.05, 1.2) / 1.050;
+
+${CORRIMIENTO_OBSERVADOR_GLSL}
 
 float hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
@@ -373,7 +386,28 @@ void main() {
   vec3 ro = uPosCamara;
   vec3 rd = normalize((uCamaraMundo * vec4(dirVista, 0.0)).xyz);
 
-  float b = dot(ro, rd);
+  // Óptica de la cámara en caída libre radial. rd es la dirección del píxel en el marco PROPIO
+  // de la cámara (sus ejes transversales coinciden con los del mundo y el radial es r̂). La luz que
+  // llega desde ahí, con su energía en el infinito normalizada a 1, sale hacia atrás en el tiempo
+  // con velocidad inicial v0 = g·(rd + ((E − 1)·dr + K)·r̂), donde dr = rd·r̂ y
+  // g = 1/(E + K·dr) es la frecuencia medida por la cámara respecto a la del infinito; su
+  // parámetro de impacto es b = r·|rd × r̂|·g. Con E = 1 y K = 0, v0 = rd (la cámara de siempre).
+  // Al caer, la aberración concentra hacia delante lo que rodea la sombra (la sombra se ve menor
+  // que para un observador quieto: 42° de radio al cruzar el horizonte, no el cielo entero) y lo
+  // de delante llega corrido al azul.
+  float r0 = length(ro);
+  vec3 radialCamara = ro / max(r0, 1e-4);
+  float drCamara = dot(rd, radialCamara);
+  float denominador = uObservador.x + uObservador.y * drCamara;
+  // Dentro del horizonte (K > E) la luz que llegaría desde delante tendría energía negativa:
+  // vendría del otro lado (en un agujero real, la superficie de la estrella que colapsó, corrida
+  // al rojo infinito). Es la negrura que crece por delante hasta ocupar medio cielo.
+  bool otroLado = denominador <= 1e-3;
+  float gCamara = 1.0 / max(denominador, 1e-3);
+  vec3 v0 = gCamara * (rd + ((uObservador.x - 1.0) * drCamara + uObservador.y) * radialCamara);
+  vec3 dirRayo = normalize(v0);
+
+  float b = dot(ro, dirRayo);
   float c = dot(ro, ro) - R_BORDE * R_BORDE;
   float disc = b * b - c;
 
@@ -391,15 +425,21 @@ void main() {
   bool hayHit = false;
   vec3 pHit = vec3(0.0);
   // Dirección con la que el rayo sale de la esfera de marcha (para el cielo lensado).
-  vec3 dirSalida = rd;
+  vec3 dirSalida = dirRayo;
   float salioLimpio = 1.0;
   vec3 luzCielo = vec3(0.0);
 
-  if (disc > 0.0 || c < 0.0) {
+  if (otroLado) {
+    capturado = true;
+    pHit = ro;
+  } else if (disc > 0.0 || c < 0.0) {
     float tIni = (c < 0.0) ? 0.0 : max(-b - sqrt(disc), 0.0);
     float jitter = hash21(gl_FragCoord.xy);
-    vec3 p = ro + rd * (tIni + jitter * 0.06);
-    vec3 v = rd;
+    // El desfase aleatorio del arranque desplaza el punto de partida sin corregir la velocidad:
+    // desde la esfera de marcha es inocuo, pero con la cámara junto al agujero cambiaría la
+    // energía del rayo (h²/r³ varía mucho en 0.06 unidades) y la sombra saldría con grano.
+    vec3 p = ro + dirRayo * (tIni + jitter * 0.06 * smoothstep(3.0, 6.0, r0));
+    vec3 v = v0;
     vec3 hv = cross(p, v);
     float h2 = dot(hv, hv);
 
@@ -407,7 +447,10 @@ void main() {
       float r2 = dot(p, p);
       float r = sqrt(r2);
 
-      if (r < R_HORIZONTE) {
+      // El rayo cae al agujero cuando cruza el horizonte hacia dentro. Con la cámara dentro, la
+      // luz que le llega viene siempre de radios mayores (hacia atrás en el tiempo r crece): esos
+      // rayos salen primero y sólo se capturan si vuelven a caer.
+      if (r < R_HORIZONTE && dot(p, v) < 0.0) {
         capturado = true;
         pHit = p;
         break;
@@ -425,6 +468,10 @@ void main() {
       float ay = abs(p.y);
       float ens = ensanche(r);
       float paso = clamp(r * 0.04, 0.05, 0.7);
+      // Paso afín acotado por el recorrido espacial (|v|·paso ≤ 0.1·r): cerca del agujero la
+      // rapidez del rayo es √(1 + b²/r³) y, con la cámara dentro del horizonte, llega a ~10. Fuera
+      // de la caída no cambia nada (|v| < 2 ahí).
+      paso = min(paso, 0.1 * r / length(v));
       // El gas se muestrea también en la región de plunge, hasta casi el horizonte. La lámina
       // cuenta desde que el paso va a entrar en ella (abs(v.y)·paso): un rayo casi perpendicular,
       // como los de la vista cenital, cruzaba la lámina entera dentro de un paso grueso y la
@@ -450,7 +497,9 @@ void main() {
       // la luz del disco que dispersa: constante por dentro de la ISCO (la niebla ve el disco
       // desde dentro) y cayendo con 1/r² hacia fuera, donde el disco queda cada vez más lejos.
       {
-        float densNiebla = exp(-(r - R_HORIZONTE) / L_NIEBLA);
+        // La niebla es la atmósfera de fuera del horizonte: dentro no hay nada que se sostenga
+        // (el gas cae a la singularidad en un instante), así que se anula al cruzarlo.
+        float densNiebla = exp(-(r - R_HORIZONTE) / L_NIEBLA) * smoothstep(0.8, 1.0, r);
         float aNiebla = 1.0 - exp(-uNiebla * densNiebla * paso);
         float iluminacion = min(1.0, 12.25 / r2);
         color += T * uNieblaLuz * iluminacion * TINTE_NIEBLA * aNiebla;
@@ -462,7 +511,7 @@ void main() {
         float rm = length(pm);
         // Imágenes de orden superior (rayos que rodean el agujero más de 80°): la referencia
         // las muestra como un filamento tenue pegado a la sombra, no como aros brillantes.
-        float deflexion = acos(clamp(dot(normalize(vNueva), rd), -1.0, 1.0));
+        float deflexion = acos(clamp(dot(normalize(vNueva), dirRayo), -1.0, 1.0));
         float lensado = smoothstep(1.4, 2.2, deflexion);
         float textura;
         float densPlano = densidadPlano(pm, rm, lensado, textura);
@@ -504,15 +553,19 @@ void main() {
     // estrellas se apagan donde la luz se curva más de unos grados (b < ~10–15 unidades): allí la
     // lente las estira en arcos tangenciales que giran alrededor de la sombra cuando la cámara
     // orbita, y se leían como rayas sueltas; en las referencias no hay estrellas junto al agujero.
-    float deflexionCielo = acos(clamp(dot(dirSalida, rd), -1.0, 1.0));
+    float deflexionCielo = acos(clamp(dot(dirSalida, dirRayo), -1.0, 1.0));
     float cieloVisible = 1.0 - smoothstep(0.04, 0.2, deflexionCielo);
     luzCielo = T * salioLimpio * cieloVisible * cielo(dirSalida);
     // Parámetro de impacto efectivo del rayo (conservación de h y de la energía en el potencial
-    // −h²/(2r³) del que deriva la aceleración): b² = h²/(1 − h²/r0³).
-    float h2Rayo = dot(cross(ro, rd), cross(ro, rd));
-    float r0 = length(ro);
-    float bRayo = sqrt(h2Rayo / max(1.0 - h2Rayo / (r0 * r0 * r0), 1e-4));
-    float dR = perigeo(bRayo) - R_FOTON;
+    // −h²/(2r³) del que deriva la aceleración): b² = h²/(|v0|² − h²/r0³).
+    vec3 hRayo = cross(ro, v0);
+    float h2Rayo = dot(hRayo, hRayo);
+    float bRayo = sqrt(h2Rayo / max(dot(v0, v0) - h2Rayo / (r0 * r0 * r0), 1e-4));
+    // El anillo está en el perigeo del rayo. Desde fuera de la esfera de fotones sólo lo tiene
+    // por delante el rayo que se acerca al agujero; al caer, la aberración trae a la pantalla luz
+    // que se aleja de él (hacia atrás en el tiempo) y esa nunca pasa junto a la esfera de fotones.
+    bool perigeoDelante = r0 <= R_FOTON || dot(ro, v0) < 0.0;
+    float dR = perigeoDelante ? perigeo(bRayo) - R_FOTON : 1e3;
     float dRExt = max(dR, 0.0);
     // Anillo de fotones: filamento dorado nítido y completo en el borde de la sombra (las
     // imágenes de orden superior apiladas). Se ve a través del gas (TGas); su salida a través de
@@ -529,6 +582,11 @@ void main() {
   }
 
   color = color * BALANCE_COLOR + luzCielo;
+  // Corrimiento de la cámara en caída (1 fuera de ella): lo de delante llega más azul y lo que
+  // rodea la sombra más brillante que el resto (brillo ∝ g², suavizado del g⁴ de una fuente
+  // extensa, relativo a la exposición que sigue al borde de la sombra).
+  vec3 tinte = tinteCamara(gCamara, uGReferencia);
+  color *= tinte * brilloCamara(gCamara, uGReferencia, 2.0);
   // Nivel de negro de película: neutro y oscuro (~0.01 sRGB tras el ACES). Se probó un negro
   // más alto y cálido como el de las capturas del usuario (0.03 sRGB, r/b 1.85) y teñía todo el
   // espacio de naranja: el usuario quiere el fondo oscuro y sólo el agujero cálido.
@@ -553,7 +611,8 @@ void main() {
     // antes: en la referencia elevada los flancos del disco (luminancia ~1–1.3 antes de comprimir)
     // ya son crema (0.94, 0.87, 0.73 sRGB), no oro, y sólo la cara cercana externa queda dorada.
     // Crema más neutro: el núcleo de la referencia 29 es (0.92, 0.89, 0.84) sRGB, saturación 0.08.
-    vec3 crema = comprimida * vec3(1.0, 0.96, 0.90);
+    // (El crema lleva el tinte de la cámara: al caer, lo saturado blanquea con la velocidad.)
+    vec3 crema = comprimida * vec3(1.0, 0.96, 0.90) * tinte;
     color = mix(color, crema, 0.85 * smoothstep(0.7, 1.6, luminancia));
   }
   fragColor = vec4(color, 1.0);

@@ -9,7 +9,8 @@ import { POLVO_ESTELAR_FRAG, POLVO_ESTELAR_VERT } from '../shaders/polvoEstelar'
 import { ajuste } from '../store/vistaCamaraStore'
 import { aspectoEnCamara } from '../utils/campoAspecto'
 import { generarPolvoEstelar } from '../utils/generarPolvoEstelar'
-import { MUNDO } from './LenteGravitacionalQuad'
+import { gBordeSombra, observadorEnCamara, tiempoVisto } from '../utils/observadorCaida'
+import { factorNieblaCercana, MUNDO } from './LenteGravitacionalQuad'
 
 /**
  * Exposición del polvo a la distancia de referencia (0.9 a 38 unidades, la calibración de canto).
@@ -23,6 +24,7 @@ const EXPOSICION_REFERENCIA = 0.9
 const DISTANCIA_REFERENCIA = 38
 const EXPONENTE_CERCA = 2
 const EXPONENTE_LEJOS = 0.45
+const DISTANCIA_MINIMA_LEY = 13
 
 const suavizar = (borde0: number, borde1: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - borde0) / (borde1 - borde0)))
@@ -39,6 +41,8 @@ type UniformesPolvo = {
   uRadioSombra: THREE.IUniform<number>
   uTamMax: THREE.IUniform<number>
   uNiebla: THREE.IUniform<number>
+  uObservador: THREE.IUniform<THREE.Vector2>
+  uGReferencia: THREE.IUniform<number>
 }
 
 export function CampoPolvoEstelar() {
@@ -64,6 +68,8 @@ export function CampoPolvoEstelar() {
       uRadioSombra: { value: PARAMETROS_AGUJERO.radioSombra },
       uTamMax: { value: 30 },
       uNiebla: { value: MUNDO.niebla },
+      uObservador: { value: new THREE.Vector2(1, 0) },
+      uGReferencia: { value: 1 },
     }
 
     const mat = new THREE.ShaderMaterial({
@@ -88,7 +94,6 @@ export function CampoPolvoEstelar() {
 
   useFrame(({ clock, camera }) => {
     const escalaVista = size.height / 900
-    uniformes.uTiempo.value = clock.getElapsedTime()
     uniformes.uPixelRatio.value = gl.getPixelRatio()
     // Escala base de los granos: más fina que la original (50) para que el campo se lea como
     // chispas y no como motas.
@@ -96,15 +101,25 @@ export function CampoPolvoEstelar() {
     // El plano de enfoque sigue al agujero: lo que la cámara atraviesa se desenfoca en bokeh.
     const distancia = camera.position.length()
     uniformes.uFoco.value = distancia
-    const aspecto = aspectoEnCamara(camera, obtenerProgreso())
-    const relacion = DISTANCIA_REFERENCIA / Math.max(distancia, 1)
+    const progreso = obtenerProgreso()
+    const aspecto = aspectoEnCamara(camera, progreso)
+    // La ley 1/d² vale mientras los granos están a una distancia proporcional a la del agujero; en
+    // la zambullida la cámara ya está dentro del sistema de anillos (empieza en 8.5) y los granos
+    // no se acercan con ella: la exposición se queda en la del zoom libre más cercano (13).
+    const relacion = DISTANCIA_REFERENCIA / Math.max(distancia, DISTANCIA_MINIMA_LEY)
     const exponente = relacion > 1 ? EXPONENTE_CERCA : ajuste('polvoExponente', EXPONENTE_LEJOS)
-    // Inmersión: al cruzar la niebla interior y el horizonte, las chispas de fuera se apagan.
-    const fuera = suavizar(1.2, 3.5, distancia)
+    // Inmersión: las chispas siguen hasta el horizonte (la aberración las aprieta alrededor de la
+    // sombra) y se apagan al cruzarlo.
+    const fuera = suavizar(0.9, 2.2, distancia)
     uniformes.uBrilloPolvo.value = ajuste('polvoExposicion', EXPOSICION_REFERENCIA) * Math.pow(relacion, exponente) * fuera
     uniformes.uApertura.value = 6 * escalaVista * aspecto.apertura
     uniformes.uTamMax.value = aspecto.tamanoMaximo * gl.getPixelRatio()
-    uniformes.uNiebla.value = ajuste('niebla', MUNDO.niebla)
+    uniformes.uNiebla.value = ajuste('niebla', MUNDO.niebla) * factorNieblaCercana(distancia)
+    const observador = observadorEnCamara(distancia, progreso)
+    uniformes.uObservador.value.set(observador.energia, observador.caida)
+    const gReferencia = observador.caida > 0 ? gBordeSombra(observador, distancia) : 1
+    uniformes.uGReferencia.value = gReferencia
+    uniformes.uTiempo.value = tiempoVisto(clock.getElapsedTime(), gReferencia)
   })
 
   return <points geometry={geometria} material={material} frustumCulled={false} />

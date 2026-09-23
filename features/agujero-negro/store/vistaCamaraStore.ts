@@ -28,6 +28,7 @@ export type ClaveAjuste =
   | 'polvoExposicion'
   | 'polvoExponente'
   | 'gusanoMuestras'
+  | 'nieblaCaida'
 
 export type AjustesCalibracion = Partial<Record<ClaveAjuste, number>>
 
@@ -53,6 +54,7 @@ const CLAVES_AJUSTE: readonly ClaveAjuste[] = [
   'polvoExposicion',
   'polvoExponente',
   'gusanoMuestras',
+  'nieblaCaida',
 ]
 
 type Escucha = () => void

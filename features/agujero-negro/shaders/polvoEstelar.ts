@@ -1,3 +1,4 @@
+import { CORRIMIENTO_OBSERVADOR_GLSL } from './corrimientoObservador'
 import { LENTE_DELGADA_GLSL } from './lenteDelgada'
 
 export const POLVO_ESTELAR_VERT = /* glsl */ `
@@ -12,6 +13,10 @@ uniform float uTamMax;
 // Opacidad de la niebla interior (la misma del shader de la lente): apaga los granos que se ven a
 // través de ella, detrás del agujero.
 uniform float uNiebla;
+// Cámara en caída (ver utils/observadorCaida.ts): energía E y velocidad propia K de su geodésica,
+// y el corrimiento del borde de la sombra al que se ajusta la exposición.
+uniform vec2 uObservador;
+uniform float uGReferencia;
 
 attribute float aTamano;
 attribute float aTono;
@@ -27,8 +32,10 @@ varying float vEstrella;
 varying float vBrilloBase;
 varying float vTamPx;
 varying float vLejania;
+varying float vCorrimiento;
 
 ${LENTE_DELGADA_GLSL}
+${CORRIMIENTO_OBSERVADOR_GLSL}
 
 void main() {
   vec3 pos = position;
@@ -42,6 +49,23 @@ void main() {
   float bAparente;
   float detras;
   vec3 posAparente = lensar(pos, cameraPosition, magnificacion, bAparente, detras);
+  // Cámara en caída: la dirección aparente del grano se inclina hacia la de avance (aberración con
+  // la velocidad respecto al observador quieto, v = K/E) y su luz llega con g = 1/(E + K·n·r̂), la
+  // misma ley que el gas; al acercarse al horizonte los anillos de escombros que rodean la cámara
+  // se ven apretados alrededor de la sombra, más brillantes y más azules.
+  vCorrimiento = 1.0;
+  if (uObservador.y > 0.0) {
+    vec3 haciaGrano = posAparente - cameraPosition;
+    float distanciaGrano = length(haciaGrano);
+    vec3 n = haciaGrano / max(distanciaGrano, 1e-4);
+    vec3 avance = -normalize(cameraPosition);
+    float v = min(uObservador.y / uObservador.x, 0.999);
+    float gamma = inversesqrt(1.0 - v * v);
+    float cosAvance = dot(n, avance);
+    vec3 nAberrada = normalize(n + ((gamma - 1.0) * cosAvance + gamma * v) * avance);
+    posAparente = cameraPosition + nAberrada * distanciaGrano;
+    vCorrimiento = 1.0 / max(uObservador.x - uObservador.y * dot(nAberrada, avance), 1e-3);
+  }
   float captura = 1.0 - smoothstep(uRadioSombra, uRadioSombra + 0.3, bAparente);
   float visible = 1.0 - captura * detras;
   // Niebla interior (la misma del shader de la lente, densidad ∝ exp(−(r − 1))): un grano que
@@ -116,7 +140,9 @@ void main() {
 
   // Los discos de bokeh de los granos que pasan junto a la cámara se contienen un poco.
   float contencionBokeh = mix(1.0, 0.7, bokeh);
-  vAlfa = mix(alfaPolvo, alfaEstrella, esEstrella) * visible * magnificacion * contencionBokeh;
+  // Fuente puntual: brillo ∝ g² en física, suavizado a g como el gas (g⁴ → g²).
+  float brilloCaida = brilloCamara(vCorrimiento, uGReferencia, 1.0);
+  vAlfa = mix(alfaPolvo, alfaEstrella, esEstrella) * visible * magnificacion * contencionBokeh * brilloCaida;
   vBrilloBase = aBrillo;
   vBokeh = bokeh;
   vEstrella = esEstrella;
@@ -143,6 +169,10 @@ varying float vEstrella;
 varying float vBrilloBase;
 varying float vTamPx;
 varying float vLejania;
+varying float vCorrimiento;
+uniform float uGReferencia;
+
+${CORRIMIENTO_OBSERVADOR_GLSL}
 
 void main() {
   vec2 c = gl_PointCoord - 0.5;
@@ -205,6 +235,8 @@ void main() {
 
   // El mismo balance de color que el gas (ver el shader de la lente): naranja melocotón, no sepia.
   col *= vec3(1.0, 1.05, 1.2) / 1.050;
+  // Corrimiento de la cámara en caída (1 fuera de ella).
+  col *= tinteCamara(vCorrimiento, uGReferencia);
   gl_FragColor = vec4(col * forma * parpadeo * vAlfa * uBrilloPolvo, 1.0);
 }
 `

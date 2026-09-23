@@ -37,6 +37,10 @@ uniform float uTiempo;
 uniform float uOpacidad;
 // Tamaño angular de un píxel (rad): tamaño mínimo de las estrellas.
 uniform float uAnguloPixel;
+// Luz del cielo de este lado (0..1). Recién cruzado el horizonte, lo que llega desde atrás es la
+// luz de fuera alcanzando a una cámara que cae casi a la velocidad de la luz: muy corrida al rojo
+// y tenue. Se enciende en el primer tramo del paso, mientras la boca del otro lado crece.
+uniform float uLuzCercana;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -186,7 +190,10 @@ vec3 trazar(vec3 dirW, float lc) {
   // Desde aquí el rayo ya es casi recto: le queda girar asin(b / r) hasta el infinito.
   phi += asin(clamp(b / radioEn(l), 0.0, 1.0));
   vec3 n = EJE * cos(phi) + tang * sin(phi);
-  return l > 0.0 ? cieloLejano(n) : cieloCercano(n);
+  if (l > 0.0) return cieloLejano(n);
+  // Tenue y más rojo mientras la cámara acaba de caer (ver uLuzCercana).
+  vec3 tinteRojo = mix(vec3(1.0, 0.45, 0.25), vec3(1.0), uLuzCercana);
+  return cieloCercano(n) * tinteRojo * uLuzCercana;
 }
 
 void main() {

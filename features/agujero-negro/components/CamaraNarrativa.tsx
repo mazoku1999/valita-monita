@@ -50,13 +50,67 @@ const suavizar = (borde0: number, borde1: number, x: number): number => {
 }
 
 /**
+ * Puntos de paso de la caída: fracción del tramo de caída → distancia al centro (la primera es la
+ * del encuadre). El ritmo se reparte por lo que se ve, no por la distancia: la cámara en caída
+ * libre ve la sombra crecer cada vez más despacio (la aberración la encoge: 13° de radio a 8
+ * unidades, 25° a 3, 42.6° al cruzar el horizonte), así que el tramo entre 8 y 1.2 unidades, donde
+ * lo que rodea la sombra se aprieta en un anillo de luz cada vez más blanco, recibe la mitad del
+ * scroll; tras el horizonte la vista de frente se apaga enseguida y ese tramo se acorta.
+ */
+const PASOS_CAIDA: readonly { readonly fraccion: number; readonly distancia: number }[] = [
+  { fraccion: 0.3, distancia: 8 },
+  { fraccion: 0.55, distancia: 3 },
+  { fraccion: 0.8, distancia: 1.2 },
+  { fraccion: 0.92, distancia: 0.7 },
+  { fraccion: 1, distancia: VIAJE.distanciaInterior },
+]
+
+/**
+ * Campo de visión de la zambullida: se abre mientras la sombra crece (de 6 a 1.5 unidades) para
+ * que el anillo de luz que la rodea siga en pantalla hasta cruzar el horizonte, y vuelve al del
+ * encuadre ya dentro, con la vista de frente a oscuras (de 0.65 a 0.45), antes de que aparezca la
+ * boca del agujero de gusano.
+ */
+const FOV_ZAMBULLIDA = 62
+
+/**
+ * Interpolación cúbica monótona (Fritsch-Carlson) con pendiente nula en los extremos: la
+ * distancia no se pasa de ningún punto de paso ni se detiene en los intermedios.
+ */
+const interpolarMonotono = (x: number, xs: readonly number[], ys: readonly number[]): number => {
+  const n = xs.length
+  if (x <= xs[0]) return ys[0]
+  if (x >= xs[n - 1]) return ys[n - 1]
+  const pendientes = xs.map((_, i) => {
+    if (i === 0 || i === n - 1) return 0
+    const antes = (ys[i] - ys[i - 1]) / (xs[i] - xs[i - 1])
+    const despues = (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i])
+    if (antes * despues <= 0) return 0
+    return (2 * antes * despues) / (antes + despues)
+  })
+  let i = 0
+  while (x > xs[i + 1]) i += 1
+  const h = xs[i + 1] - xs[i]
+  const t = (x - xs[i]) / h
+  const t2 = t * t
+  const t3 = t2 * t
+  return (
+    (2 * t3 - 3 * t2 + 1) * ys[i] +
+    (t3 - 2 * t2 + t) * h * pendientes[i] +
+    (-2 * t3 + 3 * t2) * ys[i + 1] +
+    (t3 - t2) * h * pendientes[i + 1]
+  )
+}
+
+/**
  * Zoom ligado al scroll (reparto en `constantes/viajeScroll.ts`): la historia empieza con el
  * agujero muy lejos y la cámara se acerca con interpolación logarítmica (el tamaño aparente
  * crece a ritmo constante) hasta la distancia calibrada del encuadre. Desde ahí empieza la
- * CAÍDA: la cámara sigue hacia el agujero, pasa por encima del disco, atraviesa la niebla del
- * interior y cruza el horizonte (todo se apaga); dentro empieza el viaje por el túnel
- * (`TunelAgujeroGusano`) y al final aparece el anillo de papel (`EscenaAnilloFinal`).
- * Una distancia fijada en la URL (`?distancia=`) anula el recorrido.
+ * CAÍDA libre (ver `utils/observadorCaida.ts`): la cámara sigue hacia el agujero por encima del
+ * disco y cruza el horizonte sin que pase nada en ese instante, como en la realidad; dentro, la
+ * luz de fuera se retira hacia los bordes, empieza el viaje por el túnel (`TunelAgujeroGusano`)
+ * y al final aparece el anillo de papel (`EscenaAnilloFinal`). Una distancia fijada en la URL
+ * (`?distancia=`) anula el recorrido.
  */
 const distanciaConScroll = (distanciaFotograma: number, progreso: number): number => {
   const fijada = ajuste('distancia', Number.NaN)
@@ -67,8 +121,18 @@ const distanciaConScroll = (distanciaFotograma: number, progreso: number): numbe
     const lnInicio = Math.log(VIAJE.distanciaInicial)
     return Math.exp(lnInicio + (lnEncuadre - lnInicio) * acercamiento)
   }
-  const caida = suavizar(VIAJE.acercamientoFin, VIAJE.caidaFin, progreso)
-  return Math.exp(lnEncuadre + (Math.log(VIAJE.distanciaInterior) - lnEncuadre) * caida)
+  const fraccion = limitar((progreso - VIAJE.acercamientoFin) / (VIAJE.caidaFin - VIAJE.acercamientoFin), 0, 1)
+  const fracciones = [0, ...PASOS_CAIDA.map((paso) => paso.fraccion)]
+  const logaritmos = [lnEncuadre, ...PASOS_CAIDA.map((paso) => Math.log(Math.min(paso.distancia, distanciaFotograma)))]
+  return Math.exp(interpolarMonotono(fraccion, fracciones, logaritmos))
+}
+
+/** Campo de visión en la caída según la distancia al centro (ver FOV_ZAMBULLIDA). */
+const fovConInmersion = (fovFotograma: number, distancia: number, progreso: number): number => {
+  if (progreso <= VIAJE.acercamientoFin) return fovFotograma
+  const apertura = suavizar(Math.log(6), Math.log(1.5), Math.log(Math.max(distancia, 1e-3)))
+  const cierre = suavizar(Math.log(0.65), Math.log(0.45), Math.log(Math.max(distancia, 1e-3)))
+  return fovFotograma + (FOV_ZAMBULLIDA - fovFotograma) * apertura * (1 - cierre)
 }
 
 /**
@@ -88,11 +152,18 @@ const polarConInmersion = (polarFotograma: number, progreso: number): number => 
 
 const objetivoDeVista = (vista: VistaCamara, progreso: number): EstadoCompleto => {
   const fotograma = interpolarFotograma(progreso, vista.fotogramas)
+  // La caída parte de la distancia del encuadre al terminar el acercamiento (la misma con la que
+  // `utils/observadorCaida.ts` suelta al observador), no de la del fotograma actual.
+  const distanciaEncuadre =
+    progreso > VIAJE.acercamientoFin
+      ? interpolarFotograma(VIAJE.acercamientoFin, vista.fotogramas).distancia
+      : fotograma.distancia
+  const distancia = distanciaConScroll(distanciaEncuadre, progreso)
   return {
     azimut: fotograma.azimut,
     polar: polarConInmersion(ajuste('polar', fotograma.polar), progreso),
-    distancia: distanciaConScroll(fotograma.distancia, progreso),
-    fov: ajuste('fov', fotograma.fov),
+    distancia,
+    fov: ajuste('fov', fovConInmersion(fotograma.fov, distancia, progreso)),
     inclinacion: ajuste('inclinacion', vista.inclinacion),
     encuadreX: ajuste('encuadreX', vista.encuadre.x),
     encuadreY: ajuste('encuadreY', vista.encuadre.y),

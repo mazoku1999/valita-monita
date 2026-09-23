@@ -9,7 +9,9 @@ import { LENTE_GRAVITACIONAL_VERT } from '../shaders/lenteGravitacional.vert'
 import { PANTALLA_GAS_FRAG, PANTALLA_GAS_VERT } from '../shaders/pantallaGas'
 import { refBufferGas } from '../store/mallaGas'
 import { ajuste } from '../store/vistaCamaraStore'
+import { suavizar } from '../utils/aleatorio'
 import { ASPECTO_CANTO, aspectoEnCamara } from '../utils/campoAspecto'
+import { exposicionZambullida, gBordeSombra, observadorEnCamara, tiempoVisto } from '../utils/observadorCaida'
 
 /**
  * Constantes del mundo (las mismas desde cualquier ángulo y distancia; ajustables desde la URL
@@ -17,6 +19,15 @@ import { ASPECTO_CANTO, aspectoEnCamara } from '../utils/campoAspecto'
  * anillo de fotones. Ver el shader de la lente.
  */
 export const MUNDO = { niebla: 6.0, nieblaLuz: 0.026, anillo: 0.85 } as const
+
+/**
+ * La niebla interior es lo que se ve desde lejos a través de columnas largas de gas tenue junto
+ * al agujero: de cerca ese gas es transparente. En la caída (la cámara por dentro de 13 unidades,
+ * donde no llega ningún encuadre: el zoom libre para ahí) se disipa hasta desaparecer a 3.5, y la
+ * sombra, el anillo y el disco se ven a pelo en vez de a través de una bruma parda.
+ */
+export const factorNieblaCercana = (distancia: number): number =>
+  ajuste('nieblaCaida', 1) > 0.5 ? suavizar(3.5, 13, distancia) : 1
 
 type UniformesLente = {
   uTiempo: THREE.IUniform<number>
@@ -29,6 +40,8 @@ type UniformesLente = {
   uNieblaLuz: THREE.IUniform<number>
   uAnillo: THREE.IUniform<number>
   uAnguloPixel: THREE.IUniform<number>
+  uObservador: THREE.IUniform<THREE.Vector2>
+  uGReferencia: THREE.IUniform<number>
 }
 
 /**
@@ -52,6 +65,8 @@ export function LenteGravitacionalQuad() {
       uNieblaLuz: { value: MUNDO.nieblaLuz },
       uAnillo: { value: MUNDO.anillo },
       uAnguloPixel: { value: 0.001 },
+      uObservador: { value: new THREE.Vector2(1, 0) },
+      uGReferencia: { value: 1 },
     }
     const geometria = new THREE.PlaneGeometry(2, 2)
     const materialLente = new THREE.ShaderMaterial({
@@ -119,15 +134,24 @@ export function LenteGravitacionalQuad() {
     if (buffer.width !== ancho || buffer.height !== alto) buffer.setSize(ancho, alto)
 
     camera.updateMatrixWorld()
-    uniformes.uTiempo.value = clock.getElapsedTime()
     uniformes.uProyInversa.value.copy(camera.projectionMatrixInverse)
     uniformes.uCamaraMundo.value.copy(camera.matrixWorld)
     uniformes.uVistaProyeccion.value.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
     uniformes.uPosCamara.value.copy(camera.position)
-    // Exposición del gas: el único ajuste por vista (ver `utils/campoAspecto.ts`).
-    uniformes.uBrillo.value = ajuste('ganancia', aspectoEnCamara(camera, obtenerProgreso()).ganancia)
-    uniformes.uNiebla.value = ajuste('niebla', MUNDO.niebla)
-    uniformes.uNieblaLuz.value = ajuste('nieblaLuz', MUNDO.nieblaLuz)
+    const progreso = obtenerProgreso()
+    const distancia = camera.position.length()
+    // Exposición del gas: el ajuste por vista (ver `utils/campoAspecto.ts`) y, en la zambullida,
+    // el diafragma que se cierra mientras el disco llena la pantalla.
+    uniformes.uBrillo.value =
+      ajuste('ganancia', aspectoEnCamara(camera, progreso).ganancia) * exposicionZambullida(distancia, progreso)
+    const niebla = factorNieblaCercana(distancia)
+    uniformes.uNiebla.value = ajuste('niebla', MUNDO.niebla) * niebla
+    uniformes.uNieblaLuz.value = ajuste('nieblaLuz', MUNDO.nieblaLuz) * niebla
+    const observador = observadorEnCamara(distancia, progreso)
+    uniformes.uObservador.value.set(observador.energia, observador.caida)
+    const gReferencia = observador.caida > 0 ? gBordeSombra(observador, distancia) : 1
+    uniformes.uGReferencia.value = gReferencia
+    uniformes.uTiempo.value = tiempoVisto(clock.getElapsedTime(), gReferencia)
     uniformes.uAnillo.value = ajuste('anillo', MUNDO.anillo)
     const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 40
     uniformes.uAnguloPixel.value = THREE.MathUtils.degToRad(fov) / Math.max(size.height, 1)

@@ -7,6 +7,7 @@ import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { ajuste } from '../store/vistaCamaraStore'
 import { columnaPolvo } from '../utils/columnaPolvo'
+import { suavizar } from '../utils/aleatorio'
 import { EfectoGas } from '../utils/efectoGas'
 
 /**
@@ -75,7 +76,11 @@ export function EfectosPost() {
   useFrame(({ camera }) => {
     // Ajustables desde la URL sólo en desarrollo (ver `store/vistaCamaraStore.ts`).
     efectoCamara.luminanceMaterial.threshold = ajuste('bloomUmbral', RESPLANDOR_CAMARA.umbral)
-    efectoCamara.intensity = ajuste('resplandorBase', RESPLANDOR_CAMARA.intensidad)
+    // En la zambullida (por dentro de 13 unidades, donde no llega ningún encuadre) el disco y el
+    // anillo ocupan media pantalla y el resplandor ancho de la óptica la velaba de gris; se
+    // reduce para que la sombra siga negra junto al anillo de luz.
+    const zambullida = suavizar(2, 13, camera.position.length())
+    efectoCamara.intensity = ajuste('resplandorBase', RESPLANDOR_CAMARA.intensidad) * (0.2 + 0.8 * zambullida)
     efectoCamara.mipmapBlurPass.radius = ajuste('bloomRadio', RESPLANDOR_CAMARA.radio)
     const niveles = Math.round(ajuste('bloomNiveles', RESPLANDOR_CAMARA.niveles))
     if (efectoCamara.mipmapBlurPass.levels !== niveles) {
