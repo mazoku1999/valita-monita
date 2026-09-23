@@ -1,14 +1,15 @@
 /**
  * Reparto del scroll del viaje completo (progreso 0..1 sobre un carril de `CARRIL_VH`):
  *
- *   0 ──── acercamiento ──── caída al horizonte ──── túnel (agujero de gusano) ──── destello ── anillo ── 1
+ *   0 ── acercamiento ── caída al horizonte ── paso por el agujero de gusano ── sistema solar ── anillo ── 1
  *
  * Los tramos se definen en vh para que alargar uno no cambie el ritmo de los demás; los
  * componentes leen las fracciones de progreso derivadas. El usuario pidió que la entrada fuera
- * un viaje "estilo Interstellar en el agujero de gusano" y que el anillo de papel apareciera
- * sólo al final, más pequeño; con 600vh de túnel le pareció "muy largo": ahora son 300vh.
+ * un viaje "estilo Interstellar en el agujero de gusano" (con 600vh de túnel le pareció "muy
+ * largo": son 300vh) y que al salir el viaje nos llevara a nuestro sistema solar, visto desde
+ * lejos, antes del anillo de papel, que queda para el final.
  */
-export const CARRIL_VH = 1000
+export const CARRIL_VH = 1300
 
 const enProgreso = (vh: number): number => vh / CARRIL_VH
 
@@ -23,11 +24,15 @@ export const VIAJE = {
   distanciaInterior: 0.35,
   /** Elevación mínima durante la caída (radianes sobre el plano): se pasa por encima del gas, no a través. */
   elevacionMinima: 0.17,
-  /** Fin del túnel: la luz de la salida llena la pantalla (destello). */
+  /** Fin del paso por el agujero de gusano: la cámara sale por la boca del otro lado. */
   tunelFin: enProgreso(780),
-  /** El destello de salida se ha apagado del todo. */
-  destelloFin: enProgreso(820),
-  /** El anillo de papel aparece entre estos dos progresos y se queda hasta el final. */
-  anilloInicio: enProgreso(800),
-  anilloPleno: enProgreso(900),
+  /** El sistema solar aparece delante mientras se sale por la boca y está entero aquí. */
+  sistemaInicio: enProgreso(740),
+  sistemaPleno: enProgreso(830),
+  /** El cielo trazado del otro lado del agujero de gusano se funde con el del sistema solar. */
+  cieloSistemaInicio: enProgreso(765),
+  cieloSistemaPleno: enProgreso(835),
+  /** El anillo de papel aparece entre estos dos progresos, con el sistema solar detrás, y se queda. */
+  anilloInicio: enProgreso(1150),
+  anilloPleno: enProgreso(1250),
 } as const

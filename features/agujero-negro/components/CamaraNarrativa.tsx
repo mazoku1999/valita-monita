@@ -108,8 +108,9 @@ const interpolarMonotono = (x: number, xs: readonly number[], ys: readonly numbe
  * crece a ritmo constante) hasta la distancia calibrada del encuadre. Desde ahí empieza la
  * CAÍDA libre (ver `utils/observadorCaida.ts`): la cámara sigue hacia el agujero por encima del
  * disco y cruza el horizonte sin que pase nada en ese instante, como en la realidad; dentro, la
- * luz de fuera se retira hacia los bordes, empieza el viaje por el túnel (`TunelAgujeroGusano`)
- * y al final aparece el anillo de papel (`EscenaAnilloFinal`). Una distancia fijada en la URL
+ * luz de fuera se retira hacia los bordes, empieza el viaje por el agujero de gusano
+ * (`TunelAgujeroGusano`), que desemboca en nuestro sistema solar (`EscenaSistemaSolar`), y al final
+ * aparece el anillo de papel (`EscenaAnilloFinal`). Una distancia fijada en la URL
  * (`?distancia=`) anula el recorrido.
  */
 const distanciaConScroll = (distanciaFotograma: number, progreso: number): number => {
@@ -151,19 +152,15 @@ const polarConInmersion = (polarFotograma: number, progreso: number): number => 
 }
 
 /**
- * Azimut del recorrido. Una caída libre radial no gira alrededor del agujero: durante la caída el
- * azimut se queda en el del final del acercamiento (antes seguía el ritmo de los fotogramas y la
- * escena rotaba ~30° mientras se caía, un movimiento orbital que la óptica de la cámara no tiene).
- * Tras la caída sigue ese ritmo desplazado por lo que se congeló, sin un giro brusco al empezar el
- * túnel (dentro del agujero sólo se ve de frente la boca, anclada a la cámara).
+ * Azimut del recorrido. Una caída libre radial no gira alrededor del agujero: desde que empieza la
+ * caída el azimut se queda en el del final del acercamiento (antes seguía el ritmo de los
+ * fotogramas y la escena rotaba ~30° mientras se caía, un movimiento orbital que la óptica de la
+ * cámara no tiene). Después, dentro del agujero, la vista (el túnel y el sistema solar) va en un
+ * marco que sigue la orientación de la cámara con retraso: si la cámara siguiera girando con el
+ * scroll, el sistema solar se desplazaría por la pantalla al hacer scroll deprisa.
  */
-const azimutConCaida = (vista: VistaCamara, progreso: number, azimutFotograma: number): number => {
-  if (progreso <= VIAJE.acercamientoFin) return azimutFotograma
-  const azimutInicioCaida = interpolarFotograma(VIAJE.acercamientoFin, vista.fotogramas).azimut
-  if (progreso <= VIAJE.caidaFin) return azimutInicioCaida
-  const azimutFinCaida = interpolarFotograma(VIAJE.caidaFin, vista.fotogramas).azimut
-  return azimutFotograma - (azimutFinCaida - azimutInicioCaida)
-}
+const azimutConCaida = (vista: VistaCamara, progreso: number, azimutFotograma: number): number =>
+  progreso <= VIAJE.acercamientoFin ? azimutFotograma : interpolarFotograma(VIAJE.acercamientoFin, vista.fotogramas).azimut
 
 const objetivoDeVista = (vista: VistaCamara, progreso: number): EstadoCompleto => {
   const fotograma = interpolarFotograma(progreso, vista.fotogramas)

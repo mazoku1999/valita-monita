@@ -34,6 +34,8 @@ uniform float uL;
 uniform float uDeltaL;
 uniform int uMuestras;
 uniform float uTiempo;
+// Giro acumulado de los cielos alrededor del eje (rad): avanza durante el paso y se detiene al salir.
+uniform float uGiro;
 uniform float uOpacidad;
 // Tamaño angular de un píxel (rad): tamaño mínimo de las estrellas.
 uniform float uAnguloPixel;
@@ -202,10 +204,9 @@ void main() {
   vec3 dirVista = normalize(ojo.xyz / ojo.w);
   vec3 dirMundo = normalize((uCamaraMundo * vec4(dirVista, 0.0)).xyz);
   vec3 dirW = normalize(uMarcoInverso * dirMundo);
-  // Giro lento de los cielos alrededor del eje: el paisaje sigue vivo sin scroll.
-  float giro = uTiempo * 0.012;
-  float c = cos(giro);
-  float s = sin(giro);
+  // Giro lento de los cielos alrededor del eje: el paisaje sigue vivo sin scroll durante el paso.
+  float c = cos(uGiro);
+  float s = sin(uGiro);
   dirW = vec3(c * dirW.x - s * dirW.y, s * dirW.x + c * dirW.y, dirW.z);
 
   // Desenfoque de movimiento: se promedia el tramo recorrido en el fotograma; el desplazamiento
@@ -223,23 +224,5 @@ void main() {
   }
   color /= float(muestras);
   fragColor = vec4(color * uOpacidad, 1.0);
-}
-`
-
-/** Vértices de un plano anclado a la cámara (destello). */
-export const PLANO_VERT = /* glsl */ `
-void main() {
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`
-
-/** Destello: un plano blanco HDR delante de la cámara (aditivo) que lava la pantalla al salir. */
-export const DESTELLO_FRAG = /* glsl */ `
-precision highp float;
-
-uniform float uDestello;
-
-void main() {
-  gl_FragColor = vec4(vec3(uDestello * 5.0), 1.0);
 }
 `

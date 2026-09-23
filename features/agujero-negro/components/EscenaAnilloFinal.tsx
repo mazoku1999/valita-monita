@@ -19,8 +19,8 @@ const suavizar = (borde0: number, borde1: number, x: number): number => {
 }
 
 /**
- * Escena final: tras el viaje por el túnel y el destello de salida, el anillo de papel aparece
- * delante de la cámara, crece y se balancea despacio. Se ancla al marco de la cámara para que el arrastre y el
+ * Escena final: tras el paso por el agujero de gusano y la llegada al sistema solar, el anillo de
+ * papel aparece delante de la cámara (con el sistema solar detrás), crece y se balancea despacio. Se ancla al marco de la cámara para que el arrastre y el
  * seguimiento del cursor no lo saquen de cuadro.
  */
 export function EscenaAnilloFinal() {

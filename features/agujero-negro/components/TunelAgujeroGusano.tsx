@@ -1,12 +1,13 @@
 'use client'
 
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { VIAJE } from '../constantes/viajeScroll'
 import { ajuste } from '../store/vistaCamaraStore'
-import { AGUJERO_GUSANO_FRAG, AGUJERO_GUSANO_VERT, DESTELLO_FRAG, PLANO_VERT } from '../shaders/agujeroGusano'
+import { AGUJERO_GUSANO_FRAG, AGUJERO_GUSANO_VERT } from '../shaders/agujeroGusano'
+import { CIELO_SISTEMA_FRAG, CIELO_SISTEMA_VERT } from '../shaders/cieloSistemaSolar'
 
 /** Recorrido de la cámara por el agujero de gusano (ver el shader: garganta de radio 1 y longitud 3). */
 const GUSANO = {
@@ -28,8 +29,8 @@ const GUSANO = {
    */
   entradaDesde: 0.6,
   entradaHasta: 0.4,
-  /** Progreso (antes de `tunelFin`) en que arranca el destello de salida. */
-  destelloAntes: 0.015,
+  /** Giro lento de los cielos alrededor del eje durante el paso (rad/s); al salir se detiene. */
+  giroCielo: 0.012,
   /**
    * Luz del cielo de este lado al empezar el paso (fracción de la normal) y tramo del paso en el
    * que se enciende: la boca aparece primero sola en la oscuridad y el resplandor de alrededor
@@ -52,10 +53,9 @@ const materialAditivo = (
   vertexShader: string,
   fragmentShader: string,
   uniforms: Record<string, THREE.IUniform>,
-  glsl3: boolean,
 ): THREE.ShaderMaterial =>
   new THREE.ShaderMaterial({
-    glslVersion: glsl3 ? THREE.GLSL3 : null,
+    glslVersion: THREE.GLSL3,
     vertexShader,
     fragmentShader,
     uniforms,
@@ -70,21 +70,23 @@ const materialAditivo = (
   })
 
 /**
- * Viaje por el interior del agujero, estilo Interstellar: al cruzar el horizonte (todo negro) la
- * cámara recorre un agujero de gusano trazado por píxel (`shaders/agujeroGusano.ts`) durante la
- * fase del túnel (ver `constantes/viajeScroll.ts`): la boca del otro lado se ve delante como una
- * esfera de cielo lensado que crece hasta rodearnos, dentro los cielos se enrollan por las
- * paredes y se retuercen al avanzar, y al salir el cielo del otro lado se abre; un destello blanco
- * remata la salida y de él sale el anillo de papel (`EscenaAnilloFinal`). El eje del agujero de
- * gusano sigue la orientación de la cámara con retraso, de modo que el arrastre y el cursor
- * mueven la vista como si el eje estuviera fijo en el mundo.
+ * Viaje por el interior del agujero, estilo Interstellar: ya dentro del horizonte la cámara
+ * recorre un agujero de gusano trazado por píxel (`shaders/agujeroGusano.ts`) durante la fase del
+ * túnel (ver `constantes/viajeScroll.ts`): la boca del otro lado se ve delante como una esfera de
+ * cielo lensado que crece hasta rodearnos, dentro los cielos se enrollan por las paredes y se
+ * retuercen al avanzar, y al salir se abre el cielo del otro lado: el de nuestro sistema solar, que
+ * sigue siendo el fondo de la escena siguiente (`EscenaSistemaSolar`, que va como hija de este
+ * marco). El eje del agujero de gusano sigue la orientación de la cámara con retraso, de modo que
+ * el arrastre y el cursor mueven la vista como si el eje estuviera fijo en el mundo; los hijos
+ * comparten ese marco, así que el sistema solar queda fijo respecto a su cielo.
  */
-export function TunelAgujeroGusano() {
+export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
   const { size } = useThree()
   const ancla = useRef<THREE.Group>(null)
   const [movimientoReducido, setMovimientoReducido] = useState(false)
   const iniciado = useRef(false)
   const tiempo = useRef(0)
+  const giroCielo = useRef(0)
   const lSuave = useRef<number>(GUSANO.lInicio)
   const lPrevio = useRef<number>(GUSANO.lInicio)
   const rotacion = useRef(new THREE.Matrix4())
@@ -99,35 +101,41 @@ export function TunelAgujeroGusano() {
       uDeltaL: { value: 0 },
       uMuestras: { value: 1 },
       uTiempo: { value: 0 },
+      uGiro: { value: 0 },
       uOpacidad: { value: 0 },
       uAnguloPixel: { value: 0.001 },
       uLuzCercana: { value: 1 },
     }
     const geometriaPantalla = new THREE.PlaneGeometry(2, 2)
-    const materialGusano = materialAditivo(AGUJERO_GUSANO_VERT, AGUJERO_GUSANO_FRAG, uniformsGusano, true)
+    const materialGusano = materialAditivo(AGUJERO_GUSANO_VERT, AGUJERO_GUSANO_FRAG, uniformsGusano)
     const gusano = new THREE.Mesh(geometriaPantalla, materialGusano)
     gusano.frustumCulled = false
     gusano.renderOrder = -5
 
-    const uniformsDestello = { uDestello: { value: 0 } }
-    const geometriaDestello = new THREE.PlaneGeometry(2, 2)
-    const materialDestello = materialAditivo(PLANO_VERT, DESTELLO_FRAG, uniformsDestello, false)
-    const destello = new THREE.Mesh(geometriaDestello, materialDestello)
-    destello.position.set(0, 0, -0.3)
-    destello.scale.setScalar(4)
-    destello.frustumCulled = false
-    destello.renderOrder = 1000
+    // Cielo del sistema solar: comparte cámara, marco y giro con el agujero de gusano (los mismos
+    // objetos de uniforme) y lo sustituye al salir por la boca.
+    const uniformsCielo = {
+      uProyInversa: uniformsGusano.uProyInversa,
+      uCamaraMundo: uniformsGusano.uCamaraMundo,
+      uMarcoInverso: uniformsGusano.uMarcoInverso,
+      uGiro: uniformsGusano.uGiro,
+      uAnguloPixel: uniformsGusano.uAnguloPixel,
+      uOpacidad: { value: 0 },
+    }
+    const materialCielo = materialAditivo(CIELO_SISTEMA_VERT, CIELO_SISTEMA_FRAG, uniformsCielo)
+    const cielo = new THREE.Mesh(geometriaPantalla, materialCielo)
+    cielo.frustumCulled = false
+    cielo.renderOrder = -6
 
     return {
       gusano,
       uniformsGusano,
-      destello,
-      uniformsDestello,
+      cielo,
+      uniformsCielo,
       liberar: () => {
         geometriaPantalla.dispose()
         materialGusano.dispose()
-        geometriaDestello.dispose()
-        materialDestello.dispose()
+        materialCielo.dispose()
       },
     }
   }, [])
@@ -149,14 +157,10 @@ export function TunelAgujeroGusano() {
     const progreso = obtenerProgreso()
     const distancia = camera.position.length()
 
-    // El paso aparece al cruzar el horizonte y se apaga justo tras el destello de salida.
-    const entrada = suavizar(GUSANO.entradaDesde, GUSANO.entradaHasta, distancia)
-    const apagado = 1 - suavizar(VIAJE.tunelFin, VIAJE.tunelFin + 0.015, progreso)
-    const opacidad = entrada * apagado
-    const destello =
-      suavizar(VIAJE.tunelFin - GUSANO.destelloAntes, VIAJE.tunelFin, progreso) *
-      (1 - suavizar(VIAJE.tunelFin, VIAJE.destelloFin, progreso))
-    grupo.visible = opacidad > 0.002 || destello > 0.001
+    // El paso aparece ya dentro del horizonte y, tras la salida, su cielo del otro lado se queda
+    // como fondo del sistema solar hasta el final.
+    const opacidad = suavizar(GUSANO.entradaDesde, GUSANO.entradaHasta, distancia)
+    grupo.visible = opacidad > 0.002
     if (!grupo.visible) {
       iniciado.current = false
       return
@@ -174,6 +178,9 @@ export function TunelAgujeroGusano() {
     }
 
     if (!movimientoReducido) tiempo.current += paso
+    // Los cielos giran despacio mientras se atraviesa el paso y se quedan quietos al salir: fuera,
+    // el sistema solar y su cielo (la Vía Láctea) no giran uno respecto del otro.
+    if (!movimientoReducido && progreso < VIAJE.tunelFin) giroCielo.current += paso * GUSANO.giroCielo
     const fraccion = limitar((progreso - VIAJE.caidaFin) / (VIAJE.tunelFin - VIAJE.caidaFin), 0, 1)
     const lObjetivo = GUSANO.lInicio + (GUSANO.lFin - GUSANO.lInicio) * fraccion
     lSuave.current += (lObjetivo - lSuave.current) * (1 - Math.exp(-paso * GUSANO.ritmoAvance))
@@ -196,21 +203,25 @@ export function TunelAgujeroGusano() {
     const maximoMuestras = Math.round(ajuste('gusanoMuestras', 3))
     u.uMuestras.value = Math.min(maximoMuestras, 1 + Math.min(2, Math.floor(Math.abs(deltaL) / GUSANO.lPorMuestra)))
     u.uTiempo.value = tiempo.current
-    u.uOpacidad.value = opacidad
+    u.uGiro.value = giroCielo.current
+    // Al salir por la boca, el cielo trazado del otro lado se funde con el del sistema solar (más
+    // fino y oscuro, sin la lente del agujero de gusano); después sólo se dibuja éste.
+    const cambioCielo = suavizar(VIAJE.cieloSistemaInicio, VIAJE.cieloSistemaPleno, progreso)
+    u.uOpacidad.value = opacidad * (1 - cambioCielo)
+    recursos.uniformsCielo.uOpacidad.value = opacidad * cambioCielo
+    recursos.cielo.visible = opacidad * cambioCielo > 0.002
     u.uLuzCercana.value =
       GUSANO.luzCercanaInicial + (1 - GUSANO.luzCercanaInicial) * suavizar(0, GUSANO.luzCercanaTramo, fraccion)
     const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 45
     u.uAnguloPixel.value = THREE.MathUtils.degToRad(fov) / Math.max(size.height, 1)
-    recursos.gusano.visible = opacidad > 0.002
-
-    recursos.uniformsDestello.uDestello.value = destello * destello
-    recursos.destello.visible = destello > 0.001
+    recursos.gusano.visible = u.uOpacidad.value > 0.002
   })
 
   return (
     <group ref={ancla} visible={false}>
       <primitive object={recursos.gusano} />
-      <primitive object={recursos.destello} />
+      <primitive object={recursos.cielo} />
+      {children}
     </group>
   )
 }

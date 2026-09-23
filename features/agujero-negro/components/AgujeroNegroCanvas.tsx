@@ -6,6 +6,7 @@ import { CamaraNarrativa } from './CamaraNarrativa'
 import { CampoPolvoEstelar } from './CampoPolvoEstelar'
 import { EfectosPost } from './EfectosPost'
 import { EscenaAnilloFinal } from './EscenaAnilloFinal'
+import { EscenaSistemaSolar } from './EscenaSistemaSolar'
 import { LenteGravitacionalQuad } from './LenteGravitacionalQuad'
 import { TunelAgujeroGusano } from './TunelAgujeroGusano'
 
@@ -34,7 +35,9 @@ export function AgujeroNegroCanvas({ onListo }: AgujeroNegroCanvasProps) {
       <LenteGravitacionalQuad />
       <CampoPolvoEstelar />
       <CamaraNarrativa />
-      <TunelAgujeroGusano />
+      <TunelAgujeroGusano>
+        <EscenaSistemaSolar />
+      </TunelAgujeroGusano>
       <EscenaAnilloFinal />
       <EfectosPost />
     </Canvas>
