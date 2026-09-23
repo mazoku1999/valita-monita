@@ -150,6 +150,21 @@ const polarConInmersion = (polarFotograma: number, progreso: number): number => 
   return polarFotograma + (objetivo - polarFotograma) * caida
 }
 
+/**
+ * Azimut del recorrido. Una caída libre radial no gira alrededor del agujero: durante la caída el
+ * azimut se queda en el del final del acercamiento (antes seguía el ritmo de los fotogramas y la
+ * escena rotaba ~30° mientras se caía, un movimiento orbital que la óptica de la cámara no tiene).
+ * Tras la caída sigue ese ritmo desplazado por lo que se congeló, sin un giro brusco al empezar el
+ * túnel (dentro del agujero sólo se ve de frente la boca, anclada a la cámara).
+ */
+const azimutConCaida = (vista: VistaCamara, progreso: number, azimutFotograma: number): number => {
+  if (progreso <= VIAJE.acercamientoFin) return azimutFotograma
+  const azimutInicioCaida = interpolarFotograma(VIAJE.acercamientoFin, vista.fotogramas).azimut
+  if (progreso <= VIAJE.caidaFin) return azimutInicioCaida
+  const azimutFinCaida = interpolarFotograma(VIAJE.caidaFin, vista.fotogramas).azimut
+  return azimutFotograma - (azimutFinCaida - azimutInicioCaida)
+}
+
 const objetivoDeVista = (vista: VistaCamara, progreso: number): EstadoCompleto => {
   const fotograma = interpolarFotograma(progreso, vista.fotogramas)
   // La caída parte de la distancia del encuadre al terminar el acercamiento (la misma con la que
@@ -160,7 +175,7 @@ const objetivoDeVista = (vista: VistaCamara, progreso: number): EstadoCompleto =
       : fotograma.distancia
   const distancia = distanciaConScroll(distanciaEncuadre, progreso)
   return {
-    azimut: fotograma.azimut,
+    azimut: azimutConCaida(vista, progreso, fotograma.azimut),
     polar: polarConInmersion(ajuste('polar', fotograma.polar), progreso),
     distancia,
     fov: ajuste('fov', fovConInmersion(fotograma.fov, distancia, progreso)),
