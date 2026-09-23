@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { AnilloPapel } from '@/features/anillo-papel/components/AnilloPapel'
-import { VIAJE } from '../constantes/viajeScroll'
 
 /** El anillo se coloca delante de la cámara, a esta distancia y con esta escala (pequeño: ~un cuarto de la altura). */
 const DISTANCIA_ANILLO = 1.0
@@ -19,11 +18,19 @@ const suavizar = (borde0: number, borde1: number, x: number): number => {
 }
 
 /**
- * Escena final: tras el paso por el agujero de gusano y la llegada al sistema solar, el anillo de
- * papel aparece delante de la cámara (con el sistema solar detrás), crece y se balancea despacio. Se ancla al marco de la cámara para que el arrastre y el
- * seguimiento del cursor no lo saquen de cuadro.
+ * Anillo de papel delante de la cámara: aparece entre los progresos `inicio` y `pleno`, crece y se
+ * balancea despacio. Se ancla al marco de la cámara para que el arrastre y el seguimiento del
+ * cursor no lo saquen de cuadro. Por ahora no está en el viaje (el usuario lo quitó del final y
+ * quizá vuelva): para reponerlo, montarlo en el Canvas con los progresos del tramo que toque.
  */
-export function EscenaAnilloFinal() {
+export interface EscenaAnilloFinalProps {
+  /** Progreso de scroll en que empieza a aparecer. */
+  inicio: number
+  /** Progreso en que está entero. */
+  pleno: number
+}
+
+export function EscenaAnilloFinal({ inicio, pleno }: EscenaAnilloFinalProps) {
   const ancla = useRef<THREE.Group>(null)
   const giro = useRef<THREE.Group>(null)
   const [movimientoReducido, setMovimientoReducido] = useState(false)
@@ -41,7 +48,7 @@ export function EscenaAnilloFinal() {
   useFrame(({ camera }, delta) => {
     const grupo = ancla.current
     if (!grupo) return
-    const aparicion = suavizar(VIAJE.anilloInicio, VIAJE.anilloPleno, obtenerProgreso())
+    const aparicion = suavizar(inicio, pleno, obtenerProgreso())
     grupo.visible = aparicion > 0.002
     if (!grupo.visible) return
 

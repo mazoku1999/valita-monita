@@ -38,6 +38,8 @@ const GUSANO = {
    */
   luzCercanaInicial: 0.12,
   luzCercanaTramo: 0.3,
+  /** Exposición del cielo del otro lado durante el paso (vuelve a 1 en el último 20 % para salir). */
+  exposicionPaso: 2.4,
 } as const
 
 const limitar = (valor: number, minimo: number, maximo: number): number =>
@@ -48,7 +50,12 @@ const suavizar = (borde0: number, borde1: number, x: number): number => {
   return t * t * (3 - 2 * t)
 }
 
-/** Material HDR aditivo (uno + uno) sin profundidad: se suma sobre el negro del interior. */
+/**
+ * Material HDR aditivo (uno + uno) para un cielo de pantalla completa: se suma sobre el negro del
+ * interior. Va en la cola de transparentes, que three.js dibuja DESPUÉS de lo opaco, así que tiene
+ * que respetar la profundidad (el quad está en el plano lejano): sin ella el cielo se sumaba
+ * encima de los planetas (estrellas en el lado de noche de la Tierra y un velo sobre el de día).
+ */
 const materialAditivo = (
   vertexShader: string,
   fragmentShader: string,
@@ -61,7 +68,7 @@ const materialAditivo = (
     uniforms,
     side: THREE.DoubleSide,
     transparent: true,
-    depthTest: false,
+    depthTest: true,
     depthWrite: false,
     blending: THREE.CustomBlending,
     blendEquation: THREE.AddEquation,
@@ -105,6 +112,7 @@ export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
       uOpacidad: { value: 0 },
       uAnguloPixel: { value: 0.001 },
       uLuzCercana: { value: 1 },
+      uExposicionLejana: { value: 1 },
     }
     const geometriaPantalla = new THREE.PlaneGeometry(2, 2)
     const materialGusano = materialAditivo(AGUJERO_GUSANO_VERT, AGUJERO_GUSANO_FRAG, uniformsGusano)
@@ -210,6 +218,7 @@ export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
     u.uOpacidad.value = opacidad * (1 - cambioCielo)
     recursos.uniformsCielo.uOpacidad.value = opacidad * cambioCielo
     recursos.cielo.visible = opacidad * cambioCielo > 0.002
+    u.uExposicionLejana.value = 1 + (GUSANO.exposicionPaso - 1) * (1 - suavizar(0.8, 1, fraccion))
     u.uLuzCercana.value =
       GUSANO.luzCercanaInicial + (1 - GUSANO.luzCercanaInicial) * suavizar(0, GUSANO.luzCercanaTramo, fraccion)
     const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 45

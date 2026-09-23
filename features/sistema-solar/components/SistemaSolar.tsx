@@ -21,6 +21,7 @@ import {
 import {
   ANILLOS_FRAG,
   ANILLOS_VERT,
+  ATMOSFERA_FRAG,
   CINTURON_FRAG,
   CINTURON_VERT,
   ORBITA_FRAG,
@@ -28,14 +29,18 @@ import {
   PLANETA_FRAG,
   PLANETA_VERT,
   SOL_FRAG,
+  TIERRA_FRAG,
 } from '../shaders/sistemaSolar'
+import { crearTexturasTierra, type TexturasTierra } from '../utils/texturaTierra'
 
 /**
  * Nuestro sistema solar, todo generado por código (sin imágenes): el Sol con su corona, los ocho
  * planetas en sus órbitas reales (elementos de JPL, posiciones del día de hoy) girando con sus
  * periodos de Kepler acelerados, sus ejes y días reales, los anillos de Saturno con la sombra del
  * planeta, el cinturón de asteroides con sus huecos de Kirkwood y el de Kuiper, y la estela de
- * cada órbita. Distancias y tamaños comprimidos para que se vea (ver `datos/planetas.ts`).
+ * cada órbita. La Tierra lleva su mapa real (continentes, desiertos, hielo), nubes, océano con el
+ * reflejo del Sol, atmósfera y luces de ciudades, para verla de cerca, y la Luna la acompaña.
+ * Distancias y tamaños comprimidos para que se vea (ver `datos/planetas.ts`).
  *
  * Marco local: el Sol en el origen, la eclíptica en el plano XZ y el norte eclíptico en +Y.
  * Uso: `<SistemaSolar />` dentro de un `<Canvas>`; no necesita luces de la escena (cada material
@@ -61,7 +66,39 @@ export interface SistemaSolarProps {
    * cinturón de asteroides se vería como un anillo macizo).
    */
   distanciaReferencia?: number
+  /** Multiplicador del reloj de las órbitas (1 = `segundosPorAnio`); los giros bajan menos. */
+  ritmo?: { readonly current: number }
+  /** Visibilidad de las guías (órbitas y cinturones), 0..1. */
+  guias?: { readonly current: number }
+  /** Visibilidad de la Luna, 0..1 (su órbita real dura tres segundos a ritmo 1: sólo se muestra despacio). */
+  luna?: { readonly current: number }
+  /** Recibe la malla de la Tierra (su `position` está en el marco del sistema) para seguirla. */
+  tierra?: { current: THREE.Object3D | null }
+  /**
+   * Tamaño de los demás planetas respecto al suyo (1) al acercarse a la Tierra (0): con las
+   * distancias comprimidas, Venus, Saturno o Neptuno quedarían enormes junto a la cámara; vistos
+   * desde cerca de la Tierra son puntos de luz, como en la realidad.
+   */
+  lejanos?: { readonly current: number }
 }
+
+/** Estado de un fotograma del sistema. */
+interface EstadoFotograma {
+  anios: number
+  segundos: number
+  segundosGiro: number
+  aparicion: number
+  pixeles: number
+  escala: number
+  brilloCinturones: number
+  guias: number
+  luna: number
+  lejanos: number
+  exposicionSol: number
+}
+
+/** La Luna: radio real relativo a la Tierra y órbita comprimida (a escala serían 60 radios). */
+const LUNA = { radio: 0.273, distancia: 4.5, periodoAnios: 27.32 / 365.25, inclinacion: (5.1 * Math.PI) / 180 } as const
 
 /** Tinte de la estela de cada órbita: el color del planeta, apagado. */
 const TINTE_ORBITA: Readonly<Record<IdPlaneta, readonly [number, number, number]>> = {
@@ -177,6 +214,7 @@ interface PlanetaEnEscena {
   readonly material: THREE.ShaderMaterial
   readonly inclinacion: THREE.Quaternion
   readonly materialOrbita: THREE.ShaderMaterial
+  readonly orbita: THREE.LineLoop
 }
 
 function crearSistema(fecha: Date) {
@@ -212,18 +250,29 @@ function crearSistema(fecha: Date) {
   const polo = new THREE.Vector3()
   const punto = new THREE.Vector3()
 
+  // La Tierra se ve de cerca al final: esfera más fina y mapas pintados (se generan una vez, en
+  // diferido, para no frenar la carga de la página; hasta entonces lleva mapas vacíos).
+  const geometriaTierra = new THREE.SphereGeometry(1, 160, 80)
+  const vacia = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1)
+  vacia.needsUpdate = true
+  liberables.push(geometriaTierra, vacia)
+  let mapasTierra: TexturasTierra | null = null
+
   const planetas: PlanetaEnEscena[] = PLANETAS.map((datos) => {
+    const esTierra = datos.id === 'tierra'
     const material = new THREE.ShaderMaterial({
       vertexShader: PLANETA_VERT,
-      fragmentShader: PLANETA_FRAG,
+      fragmentShader: esTierra ? TIERRA_FRAG : PLANETA_FRAG,
       uniforms: {
         uAspecto: { value: datos.aspecto },
         uSol: { value: new THREE.Vector3() },
         uAparicion: { value: 0 },
         uTiempo: { value: 0 },
+        uMapa: { value: vacia },
+        uPoblacion: { value: vacia },
       },
     })
-    const malla = new THREE.Mesh(geometriaPlaneta, material)
+    const malla = new THREE.Mesh(esTierra ? geometriaTierra : geometriaPlaneta, material)
     malla.scale.setScalar(radioVisible(datos.radio))
     raiz.add(malla)
     const [longitudPolo, latitudPolo] = ROTACION[datos.id].polo
@@ -260,8 +309,46 @@ function crearSistema(fecha: Date) {
     orbita.frustumCulled = false
     raiz.add(orbita)
     liberables.push(material, geometriaOrbita, materialOrbita)
-    return { id: datos.id, datos, malla, material, inclinacion, materialOrbita }
+    return { id: datos.id, datos, malla, material, inclinacion, materialOrbita, orbita }
   })
+
+  const tierra = planetas.find((planeta) => planeta.id === 'tierra')
+  // Atmósfera: cáscara aditiva un 3.5 % mayor que la Tierra, hija de su malla.
+  const materialAtmosfera = new THREE.ShaderMaterial({
+    vertexShader: PLANETA_VERT,
+    fragmentShader: ATMOSFERA_FRAG,
+    uniforms: { uSol: { value: new THREE.Vector3() }, uAparicion: { value: 0 } },
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  })
+  const atmosfera = new THREE.Mesh(geometriaTierra, materialAtmosfera)
+  atmosfera.scale.setScalar(1.035)
+  tierra?.malla.add(atmosfera)
+  liberables.push(materialAtmosfera)
+
+  // La Luna: siempre la misma cara hacia la Tierra, con mares y cráteres (aspecto 8).
+  const materialLuna = new THREE.ShaderMaterial({
+    vertexShader: PLANETA_VERT,
+    fragmentShader: PLANETA_FRAG,
+    uniforms: {
+      uAspecto: { value: 8 },
+      uSol: { value: new THREE.Vector3() },
+      uAparicion: { value: 0 },
+      uTiempo: { value: 0 },
+    },
+  })
+  const luna = new THREE.Mesh(geometriaPlaneta, materialLuna)
+  raiz.add(luna)
+  liberables.push(materialLuna)
+
+  /** Pinta los mapas de la Tierra (unos 200 ms): se llama en diferido tras montar. */
+  const cargarMapasTierra = (): void => {
+    if (mapasTierra || !tierra) return
+    mapasTierra = crearTexturasTierra()
+    tierra.material.uniforms.uMapa.value = mapasTierra.mapa
+    tierra.material.uniforms.uPoblacion.value = mapasTierra.poblacion
+  }
 
   // Anillos de Saturno en su plano ecuatorial, con la sombra del planeta.
   const saturno = planetas.find((planeta) => planeta.id === 'saturno')
@@ -316,34 +403,57 @@ function crearSistema(fecha: Date) {
   const posicionSol = new THREE.Vector3()
   const giro = new THREE.Quaternion()
 
+  const direccionLuna = new THREE.Vector3()
+
   /** Coloca todo en `anios` de simulación desde la fecha de partida y aplica el fundido. */
-  const actualizar = (
-    anios: number,
-    segundos: number,
-    aparicion: number,
-    pixeles: number,
-    escala: number,
-    brilloCinturones: number,
-  ): void => {
+  const actualizar = ({
+    anios,
+    segundos,
+    segundosGiro,
+    aparicion,
+    pixeles,
+    escala,
+    brilloCinturones,
+    guias,
+    luna: visibilidadLuna,
+    lejanos,
+    exposicionSol,
+  }: EstadoFotograma): void => {
     const siglos = siglosIniciales + anios / 100
     raiz.updateWorldMatrix(true, false)
     sol.getWorldPosition(posicionSol)
-    materialSol.uniforms.uAparicion.value = aparicion
+    materialSol.uniforms.uAparicion.value = aparicion * exposicionSol
     materialSol.uniforms.uTiempo.value = segundos
-    materialCorona.color.setRGB(0.9, 0.62, 0.36).multiplyScalar(aparicion)
+    materialCorona.color.setRGB(0.9, 0.62, 0.36).multiplyScalar(aparicion * exposicionSol * exposicionSol)
 
     for (const planeta of planetas) {
       aEscalaVisible(posicionHeliocentrica(planeta.datos, siglos, planeta.malla.position))
-      planeta.malla.scale.setScalar(radioVisible(planeta.datos.radio) * escala)
+      const esTierra = planeta.id === 'tierra'
+      const alejamiento = esTierra ? 1 : 0.12 + 0.88 * lejanos
+      planeta.malla.scale.setScalar(radioVisible(planeta.datos.radio) * escala * alejamiento)
       const periodo = ROTACION[planeta.id].periodo
-      giro.setFromAxisAngle(arriba, ((2 * Math.PI * segundos) / periodo) % (2 * Math.PI))
+      giro.setFromAxisAngle(arriba, ((2 * Math.PI * segundosGiro) / periodo) % (2 * Math.PI))
       planeta.malla.quaternion.copy(planeta.inclinacion).multiply(giro)
       const uniformes = planeta.material.uniforms
       uniformes.uSol.value.copy(posicionSol)
-      uniformes.uAparicion.value = aparicion
+      uniformes.uAparicion.value = aparicion * (esTierra ? 1 : 0.45 + 0.55 * lejanos)
       uniformes.uTiempo.value = segundos
       planeta.materialOrbita.uniforms.uAnomaliaPlaneta.value = anomaliaEnFecha(planeta.datos, siglos)
-      planeta.materialOrbita.uniforms.uAparicion.value = aparicion
+      planeta.materialOrbita.uniforms.uAparicion.value = aparicion * guias
+      planeta.orbita.visible = guias > 0.002
+    }
+
+    if (tierra) {
+      materialAtmosfera.uniforms.uSol.value.copy(posicionSol)
+      materialAtmosfera.uniforms.uAparicion.value = aparicion
+      // La Luna gira alrededor de la Tierra en su plano (5.1° sobre la eclíptica).
+      const angulo = (2 * Math.PI * anios) / LUNA.periodoAnios + 1.1
+      direccionLuna.set(Math.cos(angulo), Math.sin(angulo) * Math.sin(LUNA.inclinacion), -Math.sin(angulo) * Math.cos(LUNA.inclinacion))
+      luna.position.copy(tierra.malla.position).addScaledVector(direccionLuna, LUNA.distancia * escala)
+      luna.scale.setScalar(radioVisible(1) * LUNA.radio * escala)
+      luna.visible = visibilidadLuna > 0.002
+      materialLuna.uniforms.uSol.value.copy(posicionSol)
+      materialLuna.uniforms.uAparicion.value = aparicion * visibilidadLuna
     }
 
     if (saturno) {
@@ -354,7 +464,9 @@ function crearSistema(fecha: Date) {
       saturno.malla.getWorldPosition(materialAnillos.uniforms.uCentroPlaneta.value)
       materialAnillos.uniforms.uRadioPlaneta.value = saturno.malla.scale.x
       materialAnillos.uniforms.uSol.value.copy(posicionSol)
-      materialAnillos.uniforms.uAparicion.value = aparicion
+      // Reducidos a un punto, sus bandas finas titilarían como polvo: se apagan antes que el planeta.
+      materialAnillos.uniforms.uAparicion.value = aparicion * lejanos * lejanos
+      anillos.visible = lejanos > 0.01
     }
 
     for (const [material, tamano] of [
@@ -363,14 +475,21 @@ function crearSistema(fecha: Date) {
     ] as const) {
       material.uniforms.uAnios.value = anios
       material.uniforms.uTamano.value = Math.max(1, tamano * pixeles)
-      material.uniforms.uAparicion.value = aparicion * brilloCinturones
+      material.uniforms.uAparicion.value = aparicion * brilloCinturones * guias
     }
+    asteroides.visible = guias > 0.002
+    kuiper.visible = guias > 0.002
   }
 
   return {
     raiz,
+    tierra: tierra?.malla ?? null,
     actualizar,
-    liberar: () => liberables.forEach((recurso) => recurso.dispose()),
+    cargarMapasTierra,
+    liberar: () => {
+      liberables.forEach((recurso) => recurso.dispose())
+      mapasTierra?.liberar()
+    },
   }
 }
 
@@ -381,31 +500,63 @@ export function SistemaSolar({
   quieto = false,
   escalaPlanetas,
   distanciaReferencia = 90,
+  ritmo,
+  guias,
+  luna,
+  tierra,
+  lejanos,
 }: SistemaSolarProps) {
   const sistema = useMemo(() => crearSistema(fecha ?? new Date()), [fecha])
-  const segundos = useRef(0)
+  const relojes = useRef({ orbitas: 0, giros: 0, segundos: 0 })
   const posiciones = useRef({ camara: new THREE.Vector3(), sol: new THREE.Vector3() })
 
   useEffect(() => () => sistema.liberar(), [sistema])
+
+  // Los mapas de la Tierra se pintan poco después de montar, fuera del primer fotograma.
+  useEffect(() => {
+    const espera = window.setTimeout(() => sistema.cargarMapasTierra(), 1500)
+    return () => window.clearTimeout(espera)
+  }, [sistema])
+
+  useEffect(() => {
+    if (tierra) tierra.current = sistema.tierra
+  }, [sistema, tierra])
 
   useFrame(({ gl, camera }, delta) => {
     const valor = aparicion?.current ?? 1
     sistema.raiz.visible = valor > 0.002
     if (!sistema.raiz.visible) return
-    // El reloj sólo corre mientras se ve: al aparecer, los planetas están donde están hoy.
-    if (!quieto) segundos.current += Math.min(delta, 0.25)
+    // Los relojes sólo corren mientras se ve: al aparecer, los planetas están donde están hoy. Con
+    // el ritmo bajo (al acercarse a la Tierra) las órbitas casi se detienen y los giros van a un
+    // tercio: la Tierra sigue rotando a la vista.
+    if (!quieto) {
+      const paso = Math.min(delta, 0.25)
+      const factor = ritmo?.current ?? 1
+      relojes.current.orbitas += paso * factor
+      relojes.current.giros += paso * Math.max(factor, 0.35)
+      relojes.current.segundos += paso
+    }
     const { camara, sol } = posiciones.current
     camera.getWorldPosition(camara)
     sistema.raiz.getWorldPosition(sol)
-    const brilloCinturones = Math.min(1, Math.pow(distanciaReferencia / Math.max(camara.distanceTo(sol), 1e-3), 0.9))
-    sistema.actualizar(
-      segundos.current / segundosPorAnio,
-      segundos.current,
-      valor,
-      gl.getPixelRatio(),
-      escalaPlanetas?.current ?? 1,
+    const distanciaSol = Math.max(camara.distanceTo(sol), 1e-3)
+    const brilloCinturones = Math.min(1, Math.pow(distanciaReferencia / distanciaSol, 0.9))
+    // Con el Sol cerca la cámara cierra el diafragma: su disco sigue blanco pero su resplandor
+    // (el bloom de un disco grande a ×5) ya no vela media pantalla.
+    const exposicionSol = Math.min(1, Math.max(0.3, Math.pow(distanciaSol / (0.7 * distanciaReferencia), 1.3)))
+    sistema.actualizar({
+      anios: relojes.current.orbitas / segundosPorAnio,
+      segundos: relojes.current.segundos,
+      segundosGiro: relojes.current.giros,
+      aparicion: valor,
+      pixeles: gl.getPixelRatio(),
+      escala: escalaPlanetas?.current ?? 1,
       brilloCinturones,
-    )
+      guias: guias?.current ?? 1,
+      luna: luna?.current ?? 1,
+      lejanos: lejanos?.current ?? 1,
+      exposicionSol,
+    })
   })
 
   return <primitive object={sistema.raiz} />

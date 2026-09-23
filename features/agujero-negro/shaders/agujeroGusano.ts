@@ -1,3 +1,5 @@
+import { CIELO_NUESTRO_GLSL } from './cieloNuestro'
+
 /**
  * Paso por un agujero de gusano, trazado por píxel (el mismo enfoque que el disco: nada es una
  * textura de rayas). Métrica esféricamente simétrica ds² = −dt² + dl² + r(l)²·dΩ² con el perfil
@@ -5,7 +7,8 @@
  * campana que se abre suavemente hacia un espacio plano (anchura de lente controlada por M).
  * Geodésicas nulas en el plano de cada rayo: dl/dλ = v, dv/dλ = b²·r'(l)/r³, dφ/dλ = b/r², con
  * b = r(l_c)·sin ψ (ψ = ángulo con el eje). Un rayo que sale por l → +∞ ve el cielo del OTRO
- * lado (galaxia, nebulosas, estrellas); el que vuelve a l → −∞ ve el cielo de este lado (oscuro,
+ * lado, el de nuestra galaxia (`cieloNuestro.ts`: la Vía Láctea dorada y estrellas con la misma
+ * paleta que el cielo del agujero negro); el que vuelve a l → −∞ ve el cielo de este lado (oscuro,
  * con el resplandor cálido del disco a nuestra espalda). Dentro de la garganta los rayos giran en
  * hélice (dφ = tan ψ · dl / RHO): las bocas se ven como esferas delante y detrás y las paredes
  * muestran los dos cielos enrollados y comprimidos hacia los lados, que se retuercen al avanzar.
@@ -43,6 +46,9 @@ uniform float uAnguloPixel;
 // luz de fuera alcanzando a una cámara que cae casi a la velocidad de la luz: muy corrida al rojo
 // y tenue. Se enciende en el primer tramo del paso, mientras la boca del otro lado crece.
 uniform float uLuzCercana;
+// Exposición del cielo del otro lado: dentro del paso, a oscuras, la cámara abre el diafragma y
+// los anillos de la Vía Láctea enrollada se ven; al salir vuelve a 1 (el cielo del sistema solar).
+uniform float uExposicionLejana;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -70,95 +76,22 @@ float derivadaRadio(float l) {
   return (2.0 / PI) * atan(x) * sign(l);
 }
 
-vec3 hash33(vec3 p) {
-  p = fract(p * vec3(0.1031, 0.1030, 0.0973));
-  p += dot(p, p.yxz + 33.33);
-  return fract((p.xxy + p.yxx) * p.zyx);
-}
-
 float hash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
 }
 
-float ruido(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x),
-    mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x),
-    f.y
-  );
-}
+${CIELO_NUESTRO_GLSL}
 
-float fbm(vec2 p) {
-  float amplitud = 0.5;
-  float suma = 0.0;
-  for (int i = 0; i < 4; i++) {
-    suma += amplitud * ruido(p);
-    p = p * 2.03 + 17.1;
-    amplitud *= 0.5;
-  }
-  return suma;
-}
-
-// Estrellas fijas en la esfera celeste: una por celda de una rejilla 3D sobre la dirección,
-// gaussianas angulares de al menos ~1 px; muchas tenues y un puñado vivas (ley cúbica).
-vec3 estrellas(vec3 dir, float semilla, float celdas, float umbral, float brillo) {
-  vec3 celda = floor(dir * celdas);
-  vec3 luz = vec3(0.0);
-  for (int i = -1; i <= 1; i++) {
-    for (int j = -1; j <= 1; j++) {
-      for (int k = -1; k <= 1; k++) {
-        vec3 c = celda + vec3(float(i), float(j), float(k));
-        vec3 h = hash33(c + semilla);
-        if (h.x > umbral) continue;
-        vec3 s = normalize(c + 0.5 + (hash33(c + semilla + 3.1) - 0.5) * 0.9);
-        // Distancia angular por la CUERDA, no por 1 − dot: normalize() puede dejar un error de
-        // longitud de ~1e-4 (raíz inversa rápida) y entonces 1 − dot se anula sobre un disco de
-        // 25 px (estrellas planas) o nunca llega a 0 (estrellas que desaparecen).
-        float ang = length(dir - s);
-        float m = h.y * h.y * h.y;
-        float sigma = uAnguloPixel * (0.7 + 1.3 * m);
-        float g = exp(-0.5 * ang * ang / (sigma * sigma));
-        if (g < 1e-4) continue;
-        vec3 col = mix(vec3(1.0, 0.90, 0.78), vec3(0.99, 0.97, 0.93), smoothstep(0.35, 0.75, h.z));
-        col = mix(col, vec3(0.80, 0.88, 1.0), smoothstep(0.85, 1.0, h.z));
-        luz += col * brillo * (0.02 + m * m) * g;
-      }
-    }
-  }
-  return luz;
-}
-
-// El otro lado: estrellas densas, una galaxia de canto con estructura y nebulosas tenues.
+// El otro lado: el cielo de nuestra galaxia.
 vec3 cieloLejano(vec3 n) {
-  vec3 luz = estrellas(n, 7.3, 20.0, 0.7, 1.6);
-  vec3 normalBanda = normalize(vec3(0.35, 1.0, 0.2));
-  vec3 ejeBanda = normalize(cross(normalBanda, vec3(0.0, 0.0, 1.0)));
-  vec3 ejeBanda2 = cross(normalBanda, ejeBanda);
-  float d = dot(n, normalBanda);
-  vec2 enBanda = normalize(vec2(dot(n, ejeBanda), dot(n, ejeBanda2)));
-  // Estructura a lo largo de la banda (periódica: coordenadas sobre el círculo) y vetas de polvo
-  // que la cruzan a oscuras.
-  float estructura = 0.25 + 0.75 * fbm(enBanda * 2.4 + vec2(d * 14.0, 0.0) + 3.7);
-  float polvo = 0.35 + 0.65 * smoothstep(0.35, 0.7, fbm(enBanda * 5.0 + vec2(d * 40.0, 2.0) + 9.1));
-  float banda = exp(-d * d / 0.0045) * estructura * polvo + exp(-d * d / 0.03) * 0.12 * estructura;
-  vec3 dirNucleo = normalize(ejeBanda * 0.8 + ejeBanda2 * 0.6);
-  float cercania = 1.0 - dot(n, dirNucleo);
-  float nucleo = exp(-cercania * 70.0) * 1.4 + exp(-cercania * 10.0) * 0.12;
-  luz += vec3(1.0, 0.92, 0.80) * banda * 0.30 + vec3(1.0, 0.95, 0.85) * nucleo;
-  vec2 estereo = n.xy / (1.0 - n.z + 0.05);
-  float nebulosa = fbm(estereo * 2.0 + 11.0);
-  luz += vec3(0.45, 0.6, 1.0) * nebulosa * nebulosa * 0.04;
-  return luz;
+  return cieloNuestro(n);
 }
 
 // Este lado: pocas estrellas tenues y, a nuestra espalda, el resplandor cálido del disco.
 vec3 cieloCercano(vec3 n) {
-  vec3 luz = estrellas(n, 21.7, 11.0, 0.35, 0.7);
+  vec3 luz = cnCapa(n, 11.0, 0.35, 0.5, 0.03, 0.6, 21.7);
   float atras = max(0.0, dot(n, -EJE));
   luz += vec3(1.0, 0.62, 0.36) * pow(atras, 4.0) * 0.14;
   return luz;
@@ -192,7 +125,7 @@ vec3 trazar(vec3 dirW, float lc) {
   // Desde aquí el rayo ya es casi recto: le queda girar asin(b / r) hasta el infinito.
   phi += asin(clamp(b / radioEn(l), 0.0, 1.0));
   vec3 n = EJE * cos(phi) + tang * sin(phi);
-  if (l > 0.0) return cieloLejano(n);
+  if (l > 0.0) return cieloLejano(n) * uExposicionLejana;
   // Tenue y más rojo mientras la cámara acaba de caer (ver uLuzCercana).
   vec3 tinteRojo = mix(vec3(1.0, 0.45, 0.25), vec3(1.0), uLuzCercana);
   return cieloCercano(n) * tinteRojo * uLuzCercana;

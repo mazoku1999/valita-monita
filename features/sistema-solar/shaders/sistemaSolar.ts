@@ -130,6 +130,12 @@ vec3 albedoPlaneta(vec3 p, int tipo, out vec3 atmosfera) {
     atmosfera = vec3(0.55, 0.85, 0.95) * 0.5;
     return vec3(0.60, 0.84, 0.88) * (0.94 + 0.06 * sin(lat * 7.0));
   }
+  if (tipo == 8) {
+    // La Luna: gris claro con los mares de basalto oscuros y cráteres con rayos.
+    vec3 col = vec3(0.60, 0.59, 0.57) * (0.82 + 0.3 * fbm3(p * 5.0));
+    col = mix(col, vec3(0.30, 0.30, 0.31), 0.75 * smoothstep(0.52, 0.62, fbm3(p * 1.8 + 11.0)));
+    return col * (1.0 - 0.25 * smoothstep(0.62, 0.7, fbm3(p * 14.0 + 2.0)));
+  }
   // Neptuno: azul profundo con bandas tenues y una mancha oscura.
   float bandasN = sin(lat * 9.0 + 1.5 * fbm3(p * vec3(2.0, 8.0, 2.0)));
   vec3 colN = vec3(0.22, 0.38, 0.86) * (0.9 + 0.1 * bandasN);
@@ -309,5 +315,153 @@ void main() {
   float hueco = smoothstep(uHueco, 2.0 * uHueco, min(detras, delante));
   float alfa = (0.07 + 0.75 * estela) * hueco * uAparicion;
   gl_FragColor = vec4(uColor * alfa, 1.0);
+}
+`
+
+/**
+ * La Tierra, para verla de cerca al final del viaje: el mapa de continentes (tierra firme, aridez,
+ * hielo; `utils/texturaTierra.ts`) con las costas rotas por ruido fractal, bosques, praderas,
+ * desiertos, tundra y casquetes; océano profundo con aguas someras junto a las costas y el reflejo
+ * del Sol (el destello especular que se ve en las fotos desde órbita); nubes con bandas por
+ * latitud (la zona de convergencia tropical, los desiertos despejados, las borrascas de latitudes
+ * medias) deformadas en remolinos; la neblina azul de la atmósfera sobre el lado de día y, en el de
+ * noche, las luces de las ciudades.
+ */
+export const TIERRA_FRAG = /* glsl */ `
+uniform sampler2D uMapa;
+uniform sampler2D uPoblacion;
+uniform vec3 uSol;
+uniform float uAparicion;
+uniform float uTiempo;
+
+varying vec3 vNormalMundo;
+varying vec3 vPosMundo;
+varying vec3 vLocal;
+
+${RUIDO_3D}
+
+// Muestra un mapa equirectangular sin costura en el antimeridiano: de las dos parametrizaciones
+// de la longitud se usa la de derivada continua (si no, el salto de 1 a 0 elige el mip más
+// pequeño y deja una línea vertical).
+vec3 muestraMapa(sampler2D mapa, float u, float v) {
+  float u1 = fract(u);
+  float u2 = fract(u + 0.5) - 0.5;
+  float uSinCostura = fwidth(u1) < fwidth(u2) + 1e-6 ? u1 : u2;
+  return texture2D(mapa, vec2(uSinCostura, v)).rgb;
+}
+
+void main() {
+  vec3 p = normalize(vLocal);
+  // Longitud este creciente en sentido antihorario visto desde el norte (+Y), como el giro.
+  float longitud = atan(-p.z, p.x);
+  float latitud = asin(clamp(p.y, -1.0, 1.0));
+  float coordU = longitud / 6.2831853 + 0.5;
+  float coordV = latitud / 3.14159265 + 0.5;
+  vec3 mapa = muestraMapa(uMapa, coordU, coordV);
+  float latitudGrados = abs(latitud) * 57.29578;
+
+  // Costas fractales: el umbral de la máscara difuminada se mueve con ruido fino.
+  float costa = fbm3(p * 24.0) - 0.5;
+  float tierra = smoothstep(0.46, 0.54, mapa.r + costa * 0.32);
+  float somera = smoothstep(0.08, 0.42, mapa.r + costa * 0.2) * (1.0 - tierra);
+
+  // Océano: azul muy oscuro, turquesa en las plataformas junto a la costa.
+  vec3 oceano = mix(vec3(0.010, 0.035, 0.105), vec3(0.03, 0.11, 0.18), somera);
+  oceano *= 0.85 + 0.3 * fbm3(p * 9.0 + 4.0);
+
+  // Suelos: verdor por humedad y latitud, desiertos con dunas, llanuras y roca oscura (el borde
+  // de la aridez se rompe con ruido), tundra y hielo.
+  float humedad = fbm3(p * 6.0 + 17.0);
+  float tropico = 1.0 - smoothstep(12.0, 28.0, latitudGrados);
+  vec3 bosque = mix(vec3(0.06, 0.12, 0.04), vec3(0.04, 0.09, 0.03), tropico);
+  vec3 pradera = mix(vec3(0.22, 0.24, 0.11), vec3(0.30, 0.27, 0.15), fbm3(p * 14.0));
+  vec3 suelo = mix(pradera, bosque, smoothstep(0.35, 0.65, humedad + 0.25 * tropico));
+  // Desiertos: mares de arena claros, llanuras pedregosas ocres y macizos de roca oscura rojiza,
+  // con el borde (el Sahel, las estepas) deshecho por ruido en vez de una línea.
+  float arido = smoothstep(0.18, 0.7, mapa.g + (fbm3(p * 4.0 + 8.0) - 0.5) * 0.8);
+  float relieve = fbm3(p * 3.0 + 6.0);
+  vec3 arena = mix(vec3(0.48, 0.32, 0.17), vec3(0.72, 0.55, 0.33), smoothstep(0.3, 0.7, fbm3(p * 8.0)));
+  arena = mix(arena, vec3(0.30, 0.19, 0.11), 0.75 * smoothstep(0.5, 0.66, relieve));
+  arena = mix(arena, vec3(0.62, 0.36, 0.20), 0.35 * smoothstep(0.55, 0.7, fbm3(p * 13.0 + 1.0)));
+  arena *= 0.78 + 0.4 * fbm3(p * 36.0);
+  suelo = mix(suelo, arena, arido);
+  suelo = mix(suelo, vec3(0.30, 0.29, 0.24), smoothstep(58.0, 68.0, latitudGrados));
+  float nieve = max(smoothstep(0.35, 0.7, mapa.b), smoothstep(70.0, 76.0, latitudGrados) * tierra);
+  suelo *= 0.8 + 0.35 * fbm3(p * 22.0 + 3.0);
+
+  // Hielo marino en los polos (el Ártico y el borde de la Antártida).
+  float banquisa = smoothstep(78.0, 84.0, latitudGrados + 6.0 * (fbm3(p * 7.0) - 0.5));
+  vec3 superficie = mix(oceano, suelo, tierra);
+  superficie = mix(superficie, vec3(0.84, 0.88, 0.93), max(nieve, banquisa));
+
+  // Nubes: estiradas de este a oeste (los vientos zonales), deformadas en remolinos y con bandas
+  // por latitud (la zona de convergencia tropical, los subtrópicos despejados, las borrascas de
+  // latitudes medias); un velo fino de cirros por encima.
+  vec3 q = vec3(p.x, p.y * 1.9, p.z) * 3.3 + vec3(uTiempo * 0.004, 0.0, uTiempo * 0.0015);
+  vec3 deformacion = vec3(fbm3(q + 1.3), fbm3(q + 7.1), fbm3(q + 3.7)) - 0.5;
+  float grandes = fbm3(q * 1.6 + deformacion * 2.4);
+  float finas = fbm3(q * 5.5 + deformacion * 3.2 + 11.0);
+  float latitudCon = latitud * 57.29578;
+  float bandas = 0.10 * exp(-pow((latitudCon - 6.0) / 7.0, 2.0))
+    - 0.12 * exp(-pow((latitudGrados - 24.0) / 9.0, 2.0))
+    + 0.08 * exp(-pow((latitudGrados - 55.0) / 12.0, 2.0));
+  float nubes = smoothstep(0.54, 0.76, grandes * 0.72 + finas * 0.38 + bandas);
+  nubes = max(nubes, 0.28 * smoothstep(0.6, 0.82, fbm3(q * 2.6 + vec3(5.0, 0.0, 2.0))));
+
+  vec3 n = normalize(vNormalMundo);
+  vec3 l = normalize(uSol - vPosMundo);
+  vec3 v = normalize(cameraPosition - vPosMundo);
+  float ndl = dot(n, l);
+  float lambert = max(ndl, 0.0);
+  float dia = smoothstep(-0.10, 0.12, ndl);
+  float mu = max(dot(n, v), 0.0);
+
+  vec3 color = superficie * lambert * 1.6;
+  color = mix(color, vec3(0.9, 0.91, 0.93) * lambert * 1.25, nubes);
+  // Destello del Sol en el océano (donde no hay nubes ni tierra).
+  vec3 h = normalize(l + v);
+  float destello = pow(max(dot(n, h), 0.0), 90.0) * (1.0 - tierra) * (1.0 - nubes) * dia;
+  color += vec3(1.0, 0.93, 0.80) * destello * 1.3;
+  // Neblina azul de la atmósfera sobre el día, más espesa hacia el borde.
+  float espesor = 0.05 + 0.42 * pow(1.0 - mu, 3.0);
+  color = mix(color, vec3(0.22, 0.38, 0.85) * lambert * 1.3, clamp(espesor * dia, 0.0, 0.6));
+
+  // Luces de las ciudades en la noche: la población rota en núcleos urbanos por ruido.
+  float noche = 1.0 - smoothstep(-0.16, 0.02, ndl);
+  float poblacion = muestraMapa(uPoblacion, coordU, coordV).r;
+  // Núcleos: grandes ciudades brillantes y un salpicado de pueblos más tenues, no una mancha.
+  float nucleos = smoothstep(0.6, 0.82, fbm3(p * 90.0)) + 0.5 * smoothstep(0.68, 0.86, fbm3(p * 230.0 + 5.0));
+  float ciudades = poblacion * sqrt(poblacion) * tierra * nucleos * (1.0 - nubes * 0.75);
+  color += vec3(1.0, 0.66, 0.30) * ciudades * noche * 1.6;
+
+  gl_FragColor = vec4(color * uAparicion, 1.0);
+}
+`
+
+/**
+ * Capa de atmósfera: una esfera algo mayor que la Tierra, aditiva, que se enciende en el borde
+ * (el camino por el aire es más largo ahí): azul sobre el lado de día y anaranjada en el
+ * terminador, donde la luz atraviesa la atmósfera al amanecer y al anochecer.
+ */
+export const ATMOSFERA_FRAG = /* glsl */ `
+uniform vec3 uSol;
+uniform float uAparicion;
+
+varying vec3 vNormalMundo;
+varying vec3 vPosMundo;
+varying vec3 vLocal;
+
+void main() {
+  vec3 n = normalize(vNormalMundo);
+  vec3 v = normalize(cameraPosition - vPosMundo);
+  vec3 l = normalize(uSol - vPosMundo);
+  float mu = clamp(dot(n, v), 0.0, 1.0);
+  float borde = pow(1.0 - mu, 4.0) * smoothstep(0.0, 0.12, mu);
+  float ndl = dot(n, l);
+  float dia = smoothstep(-0.3, 0.35, ndl);
+  vec3 color = vec3(0.28, 0.52, 1.0) * borde * dia * 1.5;
+  // Un toque anaranjado sólo en el borde, donde el terminador corta el limbo (amanecer y ocaso).
+  color += vec3(1.0, 0.42, 0.16) * borde * borde * exp(-pow(ndl / 0.1, 2.0)) * 0.3;
+  gl_FragColor = vec4(color * uAparicion, 1.0);
 }
 `
