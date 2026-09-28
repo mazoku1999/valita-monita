@@ -3,6 +3,7 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
+import { tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { LENTE_GRAVITACIONAL_FRAG } from '../shaders/lenteGravitacional.frag'
 import { LENTE_GRAVITACIONAL_VERT } from '../shaders/lenteGravitacional.vert'
@@ -127,6 +128,8 @@ export function LenteGravitacionalQuad() {
 
   // Prioridad 0: se ejecuta antes de que el compositor de efectos (prioridad 1) dibuje la escena.
   useFrame(({ camera, clock }) => {
+    // Dibujo animado: entre dibujo y dibujo la pantalla no cambia, así que el gas no se traza.
+    if (!tocaDibujar()) return
     const { uniformes, buffer, escenaGas, camaraGas } = recursos
     const dpr = gl.getPixelRatio()
     const ancho = Math.max(2, Math.round(size.width * dpr))

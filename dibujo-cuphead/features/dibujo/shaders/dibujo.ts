@@ -316,6 +316,9 @@ uniform vec3 uUmbralesAguada;
 uniform vec2 uResolucion;
 uniform float uEscalaPapel;
 uniform float uFuerzaEpoca;
+// Hervor de la tinta: semilla del dibujo (xy) y amplitud en píxeles (z). Cada dos dibujos la tinta
+// y el borde de los colores se desplazan un poco, como cuando cada fotograma se calcaba a mano.
+uniform vec3 uHervor;
 // Bandas de color: umbrales de claridad (OKLab) entre bandas y el valor de las tres bandas claras;
 // la más oscura no se aplana (el cielo y las sombras conservan su degradado, sin manchas).
 uniform vec3 uUmbralesBanda;
@@ -398,8 +401,15 @@ vec3 coloresPlanos(vec3 srgb) {
   return srgbDesdeOklab(lab);
 }
 
+vec2 desplazamientoHervor(vec2 px, float escala) {
+  vec2 p = px / (70.0 * escala) + uHervor.xy;
+  return vec2(ruidoPapel(p), ruidoPapel(p.yx + 13.7)) - 0.5;
+}
+
 void main() {
-  vec3 escena = texturaBicubica(uColorSuave, vUv).rgb;
+  float escala = uResolucion.y / 720.0;
+  vec2 hervor = 2.0 * uHervor.z * escala * desplazamientoHervor(vUv * uResolucion, escala) / uResolucion;
+  vec3 escena = texturaBicubica(uColorSuave, vUv + 0.5 * hervor).rgb;
   vec4 cielo = texture(uCielo, vUv);
   vec3 objeto = colorDeEpoca(coloresPlanos(escena), uFuerzaEpoca);
   vec3 c = mix(objeto, aguadasDeLuz(cielo.rgb, texturaBicubica(uAguada, vUv).rgb), cielo.a);
@@ -407,7 +417,7 @@ void main() {
   float grano = papel(vUv * uResolucion, uEscalaPapel);
   c *= 0.9 + 0.12 * grano;
   if (uSoloTinta > 0.5) c = vec3(0.96, 0.93, 0.86);
-  float respuesta = texture(uLineas, vUv).r;
+  float respuesta = texture(uLineas, vUv + hervor).r;
   float tinta = 1.0 - smoothstep(uUmbral - uSuavidad, uUmbral, respuesta);
   c = mix(c, uTinta, tinta);
   fragColor = vec4(uAPantalla > 0.5 ? c : linealDesdeSRGB(c), 1.0);
@@ -532,6 +542,124 @@ void main() {
 
   c = clamp(c, 0.0, 1.0);
   fragColor = vec4(uAPantalla > 0.5 ? c : linealDesdeSRGB(c), 1.0);
+}
+`
+
+/**
+ * Estrellas y destellos de caricatura (ver `utils/destellos.ts`): cada uno es un quad en píxeles de
+ * pantalla alrededor de su posición proyectada. Titilan (tamaño y un pequeño giro) de un dibujo a
+ * otro y de vez en cuando parpadean. Las estrellas sólo se dibujan sobre cielo abierto y oscuro;
+ * los destellos de la banda de polvo, allí donde nada de la escena queda delante (profundidad).
+ */
+export const DESTELLO_VERT = /* glsl */ `
+uniform mat4 uVistaProyeccion;
+uniform vec3 uPosCamara;
+uniform vec2 uResolucion;
+uniform float uDibujo;
+uniform float uTiempo;
+uniform sampler2D uCielo;
+uniform sampler2D uAguada;
+uniform sampler2D uProfundidad;
+uniform float uEstrellasVisibles;
+uniform float uBandaVisible;
+
+in vec4 aPosicion;
+in vec4 aForma;
+
+out vec2 vLocal;
+out float vTipo;
+out float vBanda;
+
+float hash11(float p) {
+  p = fract(p * 0.1031);
+  p *= p + 33.33;
+  p *= p + p;
+  return fract(p);
+}
+
+void main() {
+  bool esBanda = aPosicion.w > 0.5;
+  vec3 mundo;
+  if (esBanda) {
+    // Órbita lenta alrededor del agujero, más rápida cerca (kepleriana, muy ralentizada).
+    float r = length(aPosicion.xz);
+    float angulo = 0.9 * pow(max(r, 1.0), -1.5) * uTiempo;
+    float c = cos(angulo);
+    float s = sin(angulo);
+    mundo = vec3(c * aPosicion.x - s * aPosicion.z, aPosicion.y, s * aPosicion.x + c * aPosicion.z);
+  } else {
+    mundo = uPosCamara + aPosicion.xyz * 1000.0;
+  }
+  vec4 clip = uVistaProyeccion * vec4(mundo, 1.0);
+  if (clip.w <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+  vec3 ndc = clip.xyz / clip.w;
+  vec2 uv = ndc.xy * 0.5 + 0.5;
+  float visible;
+  if (esBanda) {
+    float delante = textureLod(uProfundidad, clamp(uv, 0.0, 1.0), 0.0).r;
+    visible = uBandaVisible * step(ndc.z * 0.5 + 0.5, delante + 2e-4);
+  } else {
+    vec2 uvc = clamp(uv, 0.0, 1.0);
+    float luz = dot(textureLod(uAguada, uvc, 0.0).rgb, vec3(0.299, 0.587, 0.114));
+    visible = uEstrellasVisibles * smoothstep(0.5, 0.9, textureLod(uCielo, uvc, 0.0).a) * (1.0 - smoothstep(0.05, 0.12, luz));
+  }
+  if (visible < 0.05 || any(lessThan(uv, vec2(-0.05))) || any(greaterThan(uv, vec2(1.05)))) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+  // Titileo: cambia con cada dibujo (a saltos, como dibujado a mano) y de vez en cuando un parpadeo.
+  float titileo = 0.82 + 0.3 * sin(uDibujo * 0.45 * aForma.z + aForma.y);
+  float parpadeo = step(0.94, hash11(floor(uDibujo / 3.0) * 1.37 + aForma.y * 17.0));
+  float tamano = aForma.x * (uResolucion.y / 720.0) * titileo * mix(1.0, 0.4, parpadeo) * visible;
+  float giro = aForma.w > 0.5 ? 0.14 * sin(uDibujo * 0.3 * aForma.z + aForma.y * 3.0) : 0.0;
+  vec2 esquina = position.xy;
+  vec2 rotada = vec2(cos(giro) * esquina.x - sin(giro) * esquina.y, sin(giro) * esquina.x + cos(giro) * esquina.y);
+  gl_Position = vec4(ndc.xy + rotada * tamano / uResolucion * 2.0, 0.0, 1.0);
+  vLocal = esquina;
+  vTipo = aForma.w;
+  vBanda = esBanda ? 1.0 : 0.0;
+}
+`
+
+export const DESTELLO_FRAG = /* glsl */ `
+uniform vec3 uTinta;
+
+in vec2 vLocal;
+in float vTipo;
+in float vBanda;
+out vec4 fragColor;
+
+void main() {
+  vec2 p = vLocal;
+  vec3 relleno = mix(vec3(1.0, 0.94, 0.68), vec3(1.0, 0.84, 0.48), vBanda);
+  float lleno;
+  float tinta;
+  if (vTipo > 0.5) {
+    // Destello de cuatro puntas: curva |x|^k + |y|^k = r^k (lados cóncavos), con contorno de tinta.
+    vec2 a = abs(p) + 1e-4;
+    const float K = 0.55;
+    float f = pow(a.x / 0.72, K) + pow(a.y / 0.72, K);
+    float fe = pow(a.x / 0.97, K) + pow(a.y / 0.97, K);
+    float aa = fwidth(f);
+    float aae = fwidth(fe);
+    lleno = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, f);
+    float exterior = 1.0 - smoothstep(1.0 - aae, 1.0 + aae, fe);
+    tinta = max(exterior - lleno, 0.0);
+    relleno = mix(relleno, vec3(1.0, 0.99, 0.94), 1.0 - smoothstep(0.0, 0.3, length(p)));
+  } else {
+    float d = length(p);
+    float aa = fwidth(d);
+    lleno = 1.0 - smoothstep(0.5 - aa, 0.5 + aa, d);
+    float exterior = 1.0 - smoothstep(0.78 - aa, 0.78 + aa, d);
+    tinta = 0.8 * max(exterior - lleno, 0.0);
+  }
+  float alfa = max(lleno, tinta);
+  if (alfa < 0.01) discard;
+  vec3 color = mix(uTinta, relleno, lleno / max(alfa, 1e-4));
+  fragColor = vec4(color * alfa, alfa);
 }
 `
 

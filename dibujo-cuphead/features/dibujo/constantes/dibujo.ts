@@ -92,3 +92,9 @@ export const PELICULA = {
   vineta: 0.42,
   envejecido: 1.0,
 } as const
+
+/** Hervor de la tinta: desplazamiento (px a 720 de alto) que cambia cada tantos dibujos. */
+export const HERVOR = {
+  amplitud: 0.9,
+  cadaDibujos: 2,
+} as const

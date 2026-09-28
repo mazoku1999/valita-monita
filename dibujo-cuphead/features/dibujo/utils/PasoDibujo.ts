@@ -1,11 +1,15 @@
 import { Pass } from 'postprocessing'
 import * as THREE from 'three'
-import { ACUARELA, COLORES_PLANOS, ORIENTACION, PELICULA, TINTA } from '../constantes/dibujo'
+import { ACUARELA, COLORES_PLANOS, HERVOR, ORIENTACION, PELICULA, TINTA } from '../constantes/dibujo'
+import { numeroDeDibujo } from '../store/ritmoDibujo'
+import { crearGeometriaDestellos, generarDestellos } from './destellos'
 import {
   CIELO_FRAG,
   COMPONER_FRAG,
   COPIA_FRAG,
   DESENFOQUE_FRAG,
+  DESTELLO_FRAG,
+  DESTELLO_VERT,
   DOG_FRAG,
   LIC_FRAG,
   ORIENTACION_FRAG,
@@ -108,6 +112,11 @@ export class PasoDibujo extends Pass {
   private readonly matCopia: THREE.ShaderMaterial
   private readonly matCielo: THREE.ShaderMaterial
   private readonly matPelicula: THREE.ShaderMaterial
+  private readonly geometriaDestellos = crearGeometriaDestellos(generarDestellos())
+  private readonly matDestellos: THREE.ShaderMaterial
+  private readonly escenaDestellos = new THREE.Scene()
+  /** Visibilidad de los destellos de la banda de polvo (sólo con la cámara fuera del horizonte). */
+  bandaVisible = 1
 
   private indiceHistoria = 0
   private conHistoria = false
@@ -166,6 +175,7 @@ export class PasoDibujo extends Pass {
       uResolucion: { value: new THREE.Vector2() },
       uEscalaPapel: { value: ACUARELA.escalaPapel },
       uFuerzaEpoca: { value: COLORES_PLANOS.fuerzaEpoca },
+      uHervor: { value: new THREE.Vector3(0, 0, HERVOR.amplitud) },
     })
     this.matPelicula = material(PELICULA_FRAG, {
       uImagen: { value: this.dibujo.texture },
@@ -175,6 +185,36 @@ export class PasoDibujo extends Pass {
       uPelicula: { value: new THREE.Vector4(PELICULA.grano, PELICULA.polvo, PELICULA.rayas, PELICULA.parpadeo) },
       uPelicula2: { value: new THREE.Vector3(PELICULA.vaiven, PELICULA.vineta, PELICULA.envejecido) },
     })
+    this.matDestellos = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3,
+      vertexShader: DESTELLO_VERT,
+      fragmentShader: DESTELLO_FRAG,
+      uniforms: {
+        uVistaProyeccion: { value: new THREE.Matrix4() },
+        uPosCamara: { value: new THREE.Vector3() },
+        uResolucion: { value: new THREE.Vector2() },
+        uDibujo: { value: 0 },
+        uTiempo: { value: 0 },
+        uCielo: { value: this.cielo.texture },
+        uAguada: { value: this.aguada.texture },
+        uProfundidad: { value: null },
+        uEstrellasVisibles: { value: 1 },
+        uBandaVisible: { value: 1 },
+        uTinta: { value: new THREE.Vector3(...TINTA.color) },
+      },
+      depthTest: false,
+      depthWrite: false,
+      transparent: true,
+      blending: THREE.CustomBlending,
+      blendEquation: THREE.AddEquation,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneMinusSrcAlphaFactor,
+      blendSrcAlpha: THREE.OneFactor,
+      blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+    })
+    const mallaDestellos = new THREE.Mesh(this.geometriaDestellos, this.matDestellos)
+    mallaDestellos.frustumCulled = false
+    this.escenaDestellos.add(mallaDestellos)
     this.matCielo = material(CIELO_FRAG, {
       uProfundidad: { value: null },
       uTexelEntrada: { value: new THREE.Vector2() },
@@ -205,6 +245,7 @@ export class PasoDibujo extends Pass {
     ;(this.matCielo.uniforms.uTexelEntrada.value as THREE.Vector2).set(0.5 / ancho, 0.5 / alto)
     ;(this.matComponer.uniforms.uResolucion.value as THREE.Vector2).set(ancho, alto)
     ;(this.matPelicula.uniforms.uResolucion.value as THREE.Vector2).set(ancho, alto)
+    ;(this.matDestellos.uniforms.uResolucion.value as THREE.Vector2).set(ancho, alto)
     this.dibujo.setSize(ancho, alto)
     this.matComponer.uniforms.uEscalaPapel.value = ACUARELA.escalaPapel * Math.max(1, alto / 720)
     this.conHistoria = false
@@ -216,6 +257,7 @@ export class PasoDibujo extends Pass {
   override setDepthTexture(textura: THREE.Texture): void {
     this.matDog.uniforms.uProfundidad.value = textura
     this.matCielo.uniforms.uProfundidad.value = textura
+    this.matDestellos.uniforms.uProfundidad.value = textura
   }
 
   private dibujar(renderer: THREE.WebGLRenderer, materialQuad: THREE.ShaderMaterial, destino: THREE.WebGLRenderTarget | null): void {
@@ -322,7 +364,22 @@ export class PasoDibujo extends Pass {
     u.uUmbral.value = this.ajustes.umbral
     u.uSoloTinta.value = this.ajustes.soloTinta ? 1 : 0
     u.uAPantalla.value = 1
+    const semilla = Math.floor(numeroDeDibujo() / HERVOR.cadaDibujos)
+    ;(u.uHervor.value as THREE.Vector3).set((semilla * 12.9898) % 97, (semilla * 78.233) % 89, HERVOR.amplitud)
     this.dibujar(renderer, this.matComponer, this.dibujo)
+
+    // Estrellas y destellos de caricatura encima del dibujo.
+    if (camara) {
+      const ud = this.matDestellos.uniforms
+      ;(ud.uVistaProyeccion.value as THREE.Matrix4).multiplyMatrices(camara.projectionMatrix, camara.matrixWorldInverse)
+      ;(ud.uPosCamara.value as THREE.Vector3).copy(camara.position)
+      ud.uDibujo.value = numeroDeDibujo()
+      ud.uTiempo.value = this.tiempo
+      ud.uEstrellasVisibles.value = this.matCielo.uniforms.uCieloPintado.value
+      ud.uBandaVisible.value = ud.uProfundidad.value ? this.bandaVisible : 0
+      renderer.setRenderTarget(this.dibujo)
+      renderer.render(this.escenaDestellos, this.camaraQuad)
+    }
 
     // 7. Película antigua (a 24 fotogramas por segundo, como en un proyector).
     this.matPelicula.uniforms.uFotograma.value = Math.floor(this.tiempo * PELICULA.fotogramasPorSegundo) % 100000
@@ -361,8 +418,10 @@ export class PasoDibujo extends Pass {
       this.matCopia,
       this.matCielo,
       this.matPelicula,
+      this.matDestellos,
     ])
       m.dispose()
+    this.geometriaDestellos.dispose()
     this.geometriaQuad.dispose()
   }
 }

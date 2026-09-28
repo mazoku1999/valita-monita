@@ -2,10 +2,11 @@
 
 import { Bloom, EffectComposer, ToneMapping } from '@react-three/postprocessing'
 import { useFrame } from '@react-three/fiber'
-import { ToneMappingMode } from 'postprocessing'
-import { useEffect, useMemo } from 'react'
+import { type EffectComposer as ComposerDeEfectos, ToneMappingMode } from 'postprocessing'
+import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { TINTA } from '@/features/dibujo/constantes/dibujo'
+import { avanzarRitmo, tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
 import { PasoDibujo } from '@/features/dibujo/utils/PasoDibujo'
 import { ajuste } from '../store/vistaCamaraStore'
 import { columnaPolvo } from '../utils/columnaPolvo'
@@ -79,12 +80,40 @@ export function EfectosPost() {
   useEffect(() => () => efectoPolvo.dispose(), [efectoPolvo])
   useEffect(() => () => pasoDibujo.dispose(), [pasoDibujo])
 
+  // Ritmo de dibujo animado (ver `features/dibujo/store/ritmoDibujo.ts`): el primero de cada
+  // fotograma decide si toca un dibujo nuevo; si no, el compositor no dibuja nada y la pantalla
+  // conserva el dibujo anterior. El tiempo que pasa entre dibujos se entrega entero al siguiente.
+  // El compositor de r3f se crea en su propio efecto, después de montar: se envuelve su `render` en
+  // cuanto existe (y otra vez si se recrea).
+  const compositor = useRef<ComposerDeEfectos>(null)
+  const envuelto = useRef<ComposerDeEfectos | null>(null)
+  useFrame(({ clock }) => {
+    avanzarRitmo(clock.getElapsedTime())
+    const composer = compositor.current
+    if (!composer || envuelto.current === composer) return
+    envuelto.current = composer
+    const original = composer.render.bind(composer)
+    let pendiente = 0
+    composer.render = (delta?: number) => {
+      pendiente += delta ?? 0
+      if (!tocaDibujar()) return
+      original(pendiente)
+      pendiente = 0
+      if (process.env.NODE_ENV === 'development') {
+        const ventana = window as unknown as { __dibujosHechos?: number }
+        ventana.__dibujosHechos = (ventana.__dibujosHechos ?? 0) + 1
+      }
+    }
+  }, -1)
+
   useFrame(({ camera }) => {
     pasoDibujo.camara = camera
     // El cielo abierto se pinta como cielo salvo dentro del horizonte, entre que se cruza y que
     // aparece la boca del agujero de gusano (0.6 → 0.4 del centro): ahí todo es oscuridad.
     const distanciaCentro = camera.position.length()
     pasoDibujo.cieloPintado = Math.max(suavizar(0.95, 1.4, distanciaCentro), suavizar(0.6, 0.4, distanciaCentro))
+    // Los destellos de la banda de polvo sólo existen fuera del horizonte.
+    pasoDibujo.bandaVisible = suavizar(1.3, 2.5, distanciaCentro)
     pasoDibujo.ajustes.activo = ajuste('dibujo', 1) > 0.5
     pasoDibujo.ajustes.soloTinta = ajuste('dibujoSoloTinta', 0) > 0.5
     pasoDibujo.ajustes.umbral = ajuste('dibujoUmbral', TINTA.umbral)
@@ -114,7 +143,7 @@ export function EfectosPost() {
   })
 
   return (
-    <EffectComposer multisampling={0}>
+    <EffectComposer ref={compositor} multisampling={0}>
       <Bloom
         mipmapBlur
         luminanceThreshold={BLOOM_CHISPAS.umbral}
