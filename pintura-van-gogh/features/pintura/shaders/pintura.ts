@@ -8,7 +8,7 @@
  * vuelve a lineal sólo si detrás hay otro pase.
  */
 
-import { CIELO_GLSL, CORRIENTE_GLSL, ESTRELLAS_GLSL, OKLAB_GLSL, PALETA_GLSL } from './paleta'
+import { CIELO_GLSL, CORRIENTE_GLSL, ESTRELLAS_GLSL, LUZ_CIELO_GLSL, OKLAB_GLSL, PALETA_GLSL } from './paleta'
 
 const RUIDO_GLSL = /* glsl */ `
 float hash12(vec2 p) {
@@ -68,8 +68,10 @@ void main() {
 `
 
 /**
- * Reducción a 1/4: media de cada bloque de 4×4 píxeles con cuatro lecturas bilineales, en sRGB,
- * y la luminancia en alfa. Es el color que "ve" el pintor: sin el grano de las chispas sueltas.
+ * Reducción en sRGB con cuatro lecturas bilineales y la luminancia en alfa: con el texel de
+ * entrada completo es la media de bloques de 4×4 (a 1/4, el análisis); con medio texel, la de
+ * bloques de 2×2 (a 1/2, el color de los pinceles). Es lo que "ve" el pintor, sin el grano de las
+ * chispas sueltas.
  */
 export const REDUCIR_FRAG = /* glsl */ `
 uniform sampler2D uEntrada;
@@ -159,8 +161,8 @@ void main() {
  * imagen tiene forma, y remolinos donde no la tiene (el cielo vacío), como las pinceladas del
  * cielo de Van Gogh. El tensor fino se suma al de escala gruesa: donde no hay detalle, el pincel
  * sigue la forma grande (la superficie del disco en el sentido de su giro, la curva de un
- * planeta) en vez de un remolino ajeno a ella. Salida: RG dirección unitaria, B coherencia,
- * A fuerza del borde.
+ * planeta) en vez de un remolino ajeno a ella. Salida: RG la orientación en ángulo doble
+ * (cos 2θ, sin 2θ), B coherencia, A fuerza del borde.
  */
 export const FLUJO_FRAG = /* glsl */ `
 uniform sampler2D uTensor;
@@ -273,8 +275,7 @@ out vec4 fragColor;
 
 ${OKLAB_GLSL}
 ${PALETA_GLSL}
-${CORRIENTE_GLSL}
-${CIELO_GLSL}
+${LUZ_CIELO_GLSL}
 ${ESTRELLAS_GLSL}
 
 void main() {
@@ -420,10 +421,10 @@ void main() {
 `
 
 /**
- * Pincelada: una tira de 9 secciones instanciada. position.x es la fracción a lo largo del trazo
- * (0 → 1) y position.y el lado (−1 / +1). Cada vértice recorre la línea de flujo desde el ancla
- * hasta su sitio (punto medio, 6 pasos): la pincelada se curva con el campo, como los trazos de
- * los remolinos de Van Gogh.
+ * Pincelada: una tira instanciada (sus secciones dependen de la capa). position.x es la fracción a
+ * lo largo del trazo (0 → 1) y position.y el lado (−1 / +1). Cada vértice recorre la línea de flujo
+ * desde el ancla hasta su sitio (punto medio, `uPasos` pasos por mitad de trazo): la pincelada se
+ * curva con el campo, como los trazos de los remolinos de Van Gogh.
  */
 export const PINCELADA_VERT = /* glsl */ `
 uniform sampler2D uFlujo;

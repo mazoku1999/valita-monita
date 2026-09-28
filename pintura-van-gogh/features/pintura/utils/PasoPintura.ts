@@ -40,7 +40,8 @@ const suavizar = (borde0: number, borde1: number, x: number): number => {
   return t * t * (3 - 2 * t)
 }
 
-const objetivo = (ancho: number, alto: number, filtro: THREE.MagnificationTextureFilter = THREE.LinearFilter) =>
+/** Objetivo HDR sin profundidad; con `salidas` > 1, varias texturas a la vez (MRT). */
+const objetivo = (ancho: number, alto: number, filtro: THREE.MagnificationTextureFilter = THREE.LinearFilter, salidas = 1) =>
   new THREE.WebGLRenderTarget(ancho, alto, {
     type: THREE.HalfFloatType,
     format: THREE.RGBAFormat,
@@ -48,6 +49,7 @@ const objetivo = (ancho: number, alto: number, filtro: THREE.MagnificationTextur
     magFilter: filtro,
     generateMipmaps: false,
     depthBuffer: false,
+    count: salidas,
   })
 
 const material = (fragmentShader: string, uniforms: Record<string, THREE.IUniform>): THREE.ShaderMaterial =>
@@ -150,36 +152,12 @@ export class PasoPintura extends Pass {
   private readonly flujo = objetivo(2, 2)
   private readonly flujoFino = objetivo(2, 2)
   /** Cielo pintado a 1/4: [0] color (A: corriente), [1] dirección de los remolinos. */
-  private readonly cielo = new THREE.WebGLRenderTarget(2, 2, {
-    type: THREE.HalfFloatType,
-    format: THREE.RGBAFormat,
-    minFilter: THREE.LinearFilter,
-    magFilter: THREE.LinearFilter,
-    generateMipmaps: false,
-    depthBuffer: false,
-    count: 2,
-  })
+  private readonly cielo = objetivo(2, 2, THREE.LinearFilter, 2)
   private readonly pintura = objetivo(2, 2)
   /** Preparación de los pinceles finos: [0] realces, [1] detalle (ver PINCELES_FRAG). */
-  private readonly pinceles = new THREE.WebGLRenderTarget(2, 2, {
-    type: THREE.HalfFloatType,
-    format: THREE.RGBAFormat,
-    minFilter: THREE.LinearFilter,
-    magFilter: THREE.LinearFilter,
-    generateMipmaps: false,
-    depthBuffer: false,
-    count: 2,
-  })
+  private readonly pinceles = objetivo(2, 2, THREE.LinearFilter, 2)
   /** Lienzo: [0] color, [1] grosor de la pintura (empaste). */
-  private readonly lienzo = new THREE.WebGLRenderTarget(2, 2, {
-    type: THREE.HalfFloatType,
-    format: THREE.RGBAFormat,
-    minFilter: THREE.LinearFilter,
-    magFilter: THREE.LinearFilter,
-    generateMipmaps: false,
-    depthBuffer: false,
-    count: 2,
-  })
+  private readonly lienzo = objetivo(2, 2, THREE.LinearFilter, 2)
   private readonly visibilidadEstrellas = objetivo(ESTRELLAS_PINTADAS.maximoVisibles, 1, THREE.NearestFilter)
 
   private readonly estrellas = generarEstrellasPintadas()
@@ -257,7 +235,6 @@ export class PasoPintura extends Pass {
       uCieloPintado: { value: 1 },
       uAspecto: { value: 1 },
       uCielo: { value: this.cielo.textures[0] },
-      ...this.uCamara,
       ...this.uEstrellas,
     })
     this.matPinceles = material(PINCELES_FRAG, {

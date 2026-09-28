@@ -249,6 +249,10 @@ vec3 colorCielo(vec3 dir, float psi) {
   return c;
 }
 
+`
+
+/** La luz de la escena pintada sobre el cielo (necesita OKLAB y PALETA). */
+export const LUZ_CIELO_GLSL = /* glsl */ `
 // La luz de la escena pintada sobre el cielo: halo verdoso claro que pasa a amarillo.
 vec3 cieloConLuz(vec3 cielo, vec3 escena) {
   float L = dot(escena, vec3(0.299, 0.587, 0.114));
