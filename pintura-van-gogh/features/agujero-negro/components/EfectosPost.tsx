@@ -1,10 +1,11 @@
 'use client'
 
-import { Bloom, EffectComposer, Noise, ToneMapping, Vignette } from '@react-three/postprocessing'
+import { Bloom, EffectComposer, ToneMapping, Vignette } from '@react-three/postprocessing'
 import { useFrame } from '@react-three/fiber'
-import { BlendFunction, ToneMappingMode } from 'postprocessing'
+import { ToneMappingMode } from 'postprocessing'
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
+import { PasoPintura } from '@/features/pintura/utils/PasoPintura'
 import { ajuste } from '../store/vistaCamaraStore'
 import { columnaPolvo } from '../utils/columnaPolvo'
 import { suavizar } from '../utils/aleatorio'
@@ -70,10 +71,18 @@ export function EfectosPost() {
     [],
   )
 
+  // La escena ya revelada se repinta con pinceladas (ver `features/pintura`).
+  const pasoPintura = useMemo(() => new PasoPintura(), [])
+
   useEffect(() => () => efectoCamara.dispose(), [efectoCamara])
   useEffect(() => () => efectoPolvo.dispose(), [efectoPolvo])
+  useEffect(() => () => pasoPintura.dispose(), [pasoPintura])
 
   useFrame(({ camera }) => {
+    pasoPintura.ajustes.activa = ajuste('pintura', 1) > 0.5
+    pasoPintura.ajustes.depurar = ajuste('pinturaDepurar', 0) > 0.5
+    pasoPintura.ajustes.escalaAncho = ajuste('pinturaAncho', 1)
+    pasoPintura.ajustes.escalaLargo = ajuste('pinturaLargo', 1)
     // Ajustables desde la URL sólo en desarrollo (ver `store/vistaCamaraStore.ts`).
     efectoCamara.luminanceMaterial.threshold = ajuste('bloomUmbral', RESPLANDOR_CAMARA.umbral)
     // En la zambullida (por dentro de 13 unidades, donde no llega ningún encuadre) el disco y el
@@ -111,8 +120,9 @@ export function EfectosPost() {
       <primitive object={efectoCamara} />
       <primitive object={efectoPolvo} />
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-      <Noise premultiply blendFunction={BlendFunction.ADD} opacity={0.28} />
+      {/* Sin grano de película: el pintor no lo vería, y sus puntos teñirían las pinceladas. */}
       <Vignette eskil={false} offset={0.12} darkness={0.66} />
+      <primitive object={pasoPintura} />
     </EffectComposer>
   )
 }
