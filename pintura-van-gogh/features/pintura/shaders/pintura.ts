@@ -8,6 +8,8 @@
  * vuelve a lineal sólo si detrás hay otro pase.
  */
 
+import { CIELO_GLSL, CORRIENTE_GLSL, OKLAB_GLSL, PALETA_GLSL } from './paleta'
+
 const RUIDO_GLSL = /* glsl */ `
 float hash12(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -150,29 +152,22 @@ uniform sampler2D uTensor;
 uniform sampler2D uTensorGrueso;
 uniform float uPesoGrueso;
 uniform float uAspecto;
+uniform vec2 uTexel;
 uniform float uFuerzaMinima;
 uniform float uFuerzaPlena;
 
 in vec2 vUv;
 out vec4 fragColor;
 
-${RUIDO_GLSL}
+${CORRIENTE_GLSL}
 
-// Función de corriente de los remolinos: su rotacional es un flujo sin fuentes ni sumideros que
-// gira alrededor de los máximos y mínimos, a varias escalas.
-float corriente(vec2 q) {
-  float s = 0.9 * ruido(q * 1.7 + vec2(3.1, 7.7));
-  s += 0.45 * ruido(q * 3.4 + vec2(-1.3, 2.9));
-  s += 0.2 * ruido(q * 7.1 + vec2(5.3, -4.1));
-  return s;
-}
-
-vec2 remolino(vec2 q) {
-  const float E = 0.004;
-  float dx = corriente(q + vec2(E, 0.0)) - corriente(q - vec2(E, 0.0));
-  float dy = corriente(q + vec2(0.0, E)) - corriente(q - vec2(0.0, E));
+// Dirección de los remolinos en pantalla: perpendicular al gradiente de la corriente del cielo,
+// que vive en la esfera celeste (al girar la cámara, los remolinos giran con las estrellas).
+vec2 remolino(vec2 uv, vec2 texel) {
+  float dx = corrienteCielo(direccionMundo(uv + vec2(texel.x, 0.0))) - corrienteCielo(direccionMundo(uv - vec2(texel.x, 0.0)));
+  float dy = corrienteCielo(direccionMundo(uv + vec2(0.0, texel.y))) - corrienteCielo(direccionMundo(uv - vec2(0.0, texel.y)));
   vec2 v = vec2(dy, -dx);
-  return dot(v, v) > 1e-12 ? normalize(v) : vec2(1.0, 0.0);
+  return dot(v, v) > 1e-14 ? normalize(v) : vec2(1.0, 0.0);
 }
 
 void main() {
@@ -192,8 +187,7 @@ void main() {
   float coherencia = (l1 - l2) / (l1 + l2 + 1e-9);
   float fuerza = sqrt(max(l1, 0.0));
 
-  vec2 q = (vUv - 0.5) * vec2(uAspecto, 1.0);
-  vec2 giro = remolino(q);
+  vec2 giro = remolino(vUv, uTexel);
   if (dot(tangente, giro) < 0.0) tangente = -tangente;
   float peso = smoothstep(uFuerzaMinima, uFuerzaPlena, fuerza) * smoothstep(0.02, 0.25, coherencia);
   vec2 direccion = mix(giro, tangente, peso);
@@ -203,18 +197,52 @@ void main() {
 `
 
 /**
- * Base del lienzo (la primera mano, diluida): el color reducido un poco apagado. Asoma sólo en
+ * Color de pintura a 1/4 de resolución: lo que el pintor pone en cada zona. El cielo abierto
+ * (donde la escena no escribió profundidad: ni gas opaco, ni la sombra, ni un planeta) es el azul
+ * nocturno en bandas con la luz de la escena pintada encima; lo demás, su color llevado a la
+ * paleta. A: fracción de cielo.
+ */
+export const PALETA_FRAG = /* glsl */ `
+uniform sampler2D uReducida;
+uniform sampler2D uProfundidad;
+uniform vec2 uTexelEntrada;
+uniform float uCieloPintado;
+
+in vec2 vUv;
+out vec4 fragColor;
+
+${OKLAB_GLSL}
+${PALETA_GLSL}
+${CORRIENTE_GLSL}
+${CIELO_GLSL}
+
+void main() {
+  vec3 escena = texture(uReducida, vUv).rgb;
+  float cielo = 0.0;
+  cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(-1.0, -1.0)).r);
+  cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(1.0, -1.0)).r);
+  cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(-1.0, 1.0)).r);
+  cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(1.0, 1.0)).r);
+  cielo *= 0.25 * uCieloPintado;
+  vec3 objeto = mapaVanGogh(escena);
+  vec3 nocturno = cieloConLuz(colorCielo(direccionMundo(vUv)), escena);
+  fragColor = vec4(mix(objeto, nocturno, cielo), cielo);
+}
+`
+
+/**
+ * Base del lienzo (la primera mano, diluida): el color de pintura un poco apagado. Asoma sólo en
  * las rendijas entre pinceladas.
  */
 export const BASE_FRAG = /* glsl */ `
-uniform sampler2D uReducida;
+uniform sampler2D uPintura;
 
 in vec2 vUv;
 out vec4 fragColor;
 
 void main() {
-  vec3 c = texture(uReducida, vUv).rgb;
-  fragColor = vec4(c * 0.9, 1.0);
+  vec3 c = texture(uPintura, vUv).rgb;
+  fragColor = vec4(c * 0.85, 1.0);
 }
 `
 
@@ -240,6 +268,27 @@ out vec2 vTrazo;
 out vec2 vTamano;
 out vec3 vColor;
 out vec4 vSemilla;
+
+${OKLAB_GLSL}
+${PALETA_GLSL}
+
+// Color quebrado: como en los cuadros de Van Gogh, junto a cada trazo del color de la zona van
+// otros de un pigmento vecino (en el amarillo, alguno naranja o limón; en el azul, alguno
+// verdoso o blanquecino) y ninguno sale de la paleta exactamente igual.
+vec3 colorQuebrado(vec3 pintura, vec4 semilla) {
+  vec3 lab = oklab(pintura);
+  int k1;
+  int k2;
+  float d1;
+  float d2;
+  pigmentosCercanos(lab, k1, k2, d1, d2);
+  bool vecino = semilla.w < 0.24;
+  vec3 destino = PIGMENTOS_LAB[vecino ? k2 : k1];
+  lab.yz = mix(lab.yz, destino.yz, vecino ? 0.45 : 0.2);
+  lab.x = mix(lab.x, destino.x, vecino ? 0.2 : 0.0);
+  lab.x *= 0.92 + 0.16 * fract(semilla.w * 7.31 + semilla.x);
+  return srgbDesdeOklab(lab);
+}
 
 vec2 rotar(vec2 v, float a) {
   float c = cos(a);
@@ -281,10 +330,8 @@ void main() {
   vTrazo = vec2(u, lado);
   vTamano = vec2(largo, ancho);
   vSemilla = aSemilla;
-  // Color de la imagen en el ancla (ya reducida: el color medio bajo el pincel).
-  vec3 c = textureLod(uColor, aAncla, 0.0).rgb;
-  // La pintura nunca sale igual de la paleta: cada trazo algo más claro u oscuro.
-  vColor = c * (0.94 + 0.12 * aSemilla.w);
+  // Color de pintura en el ancla (a 1/4: el color medio bajo el pincel), quebrado por trazo.
+  vColor = colorQuebrado(textureLod(uColor, aAncla, 0.0).rgb, aSemilla);
 }
 `
 
@@ -346,6 +393,8 @@ export const FINAL_FRAG = /* glsl */ `
 uniform sampler2D uLienzo;
 uniform float uAPantalla;
 uniform float uEntradaLineal;
+uniform float uAspecto;
+uniform float uVineta;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -355,6 +404,10 @@ ${SRGB_GLSL}
 void main() {
   vec3 c = texture(uLienzo, vUv).rgb;
   if (uEntradaLineal > 0.5) c = aSRGB(c);
+  // Viñeta suave, como la luz que cae en el centro de un cuadro colgado.
+  vec2 q = (vUv - 0.5) * vec2(uAspecto, 1.0);
+  float r = length(q) / length(vec2(0.5 * uAspecto, 0.5));
+  c *= 1.0 - uVineta * smoothstep(0.45, 1.05, r);
   fragColor = vec4(uAPantalla > 0.5 ? c : aLineal(c), 1.0);
 }
 `

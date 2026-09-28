@@ -1,6 +1,6 @@
 'use client'
 
-import { Bloom, EffectComposer, ToneMapping, Vignette } from '@react-three/postprocessing'
+import { Bloom, EffectComposer, ToneMapping } from '@react-three/postprocessing'
 import { useFrame } from '@react-three/fiber'
 import { ToneMappingMode } from 'postprocessing'
 import { useEffect, useMemo } from 'react'
@@ -79,6 +79,11 @@ export function EfectosPost() {
   useEffect(() => () => pasoPintura.dispose(), [pasoPintura])
 
   useFrame(({ camera }) => {
+    pasoPintura.camara = camera
+    // El cielo abierto se pinta como cielo nocturno salvo dentro del horizonte, entre que se cruza
+    // y que aparece la boca del agujero de gusano (0.6 → 0.4 del centro): ahí todo es oscuridad.
+    const distanciaCentro = camera.position.length()
+    pasoPintura.cieloPintado = Math.max(suavizar(0.95, 1.4, distanciaCentro), suavizar(0.6, 0.4, distanciaCentro))
     pasoPintura.ajustes.activa = ajuste('pintura', 1) > 0.5
     pasoPintura.ajustes.depurar = ajuste('pinturaDepurar', 0) > 0.5
     pasoPintura.ajustes.escalaAncho = ajuste('pinturaAncho', 1)
@@ -120,8 +125,7 @@ export function EfectosPost() {
       <primitive object={efectoCamara} />
       <primitive object={efectoPolvo} />
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-      {/* Sin grano de película: el pintor no lo vería, y sus puntos teñirían las pinceladas. */}
-      <Vignette eskil={false} offset={0.12} darkness={0.66} />
+      {/* Sin grano de película (sus puntos teñirían las pinceladas); la viñeta la pone el lienzo. */}
       <primitive object={pasoPintura} />
     </EffectComposer>
   )

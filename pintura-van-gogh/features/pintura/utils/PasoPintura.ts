@@ -8,6 +8,7 @@ import {
   FLUJO_FRAG,
   PANTALLA_VERT,
   PINCELADA_FRAG,
+  PALETA_FRAG,
   PINCELADA_VERT,
   PROMEDIO_FRAG,
   REDUCIR_FRAG,
@@ -95,6 +96,15 @@ export interface AjustesPintura {
  */
 export class PasoPintura extends Pass {
   readonly ajustes: AjustesPintura = { activa: true, depurar: false, escalaAncho: 1, escalaLargo: 1 }
+  /** Cámara de la escena: ancla el cielo pintado a la esfera celeste. */
+  camara: THREE.Camera | null = null
+  /**
+   * Cuánto del cielo abierto se pinta como cielo nocturno (0–1). Dentro del horizonte, antes de
+   * que aparezca el agujero de gusano, la oscuridad es oscuridad, no cielo.
+   */
+  cieloPintado = 1
+  /** Oscurecimiento máximo de las esquinas. */
+  vineta = 0.38
 
   private readonly quad: THREE.Mesh
   private readonly escenaQuad = new THREE.Scene()
@@ -109,7 +119,12 @@ export class PasoPintura extends Pass {
   private readonly gruesoA = objetivo(2, 2)
   private readonly gruesoB = objetivo(2, 2)
   private readonly flujo = objetivo(2, 2)
+  private readonly pintura = objetivo(2, 2)
   private readonly lienzo = objetivo(2, 2)
+  private readonly uCamara = {
+    uProyInversa: { value: new THREE.Matrix4() },
+    uCamaraMundo: { value: new THREE.Matrix4() },
+  }
 
   private readonly matReducir: THREE.ShaderMaterial
   private readonly matTensor: THREE.ShaderMaterial
@@ -119,6 +134,7 @@ export class PasoPintura extends Pass {
   private readonly matGruesoH: THREE.ShaderMaterial
   private readonly matGruesoV: THREE.ShaderMaterial
   private readonly matFlujo: THREE.ShaderMaterial
+  private readonly matPaleta: THREE.ShaderMaterial
   private readonly matBase: THREE.ShaderMaterial
   private readonly matFinal: THREE.ShaderMaterial
 
@@ -131,6 +147,8 @@ export class PasoPintura extends Pass {
   constructor() {
     super('PasoPintura')
     this.needsSwap = true
+    // La profundidad de la escena separa el cielo abierto de lo que tiene cuerpo.
+    this.needsDepthTexture = true
 
     this.matReducir = material(REDUCIR_FRAG, {
       uEntrada: { value: null },
@@ -173,14 +191,25 @@ export class PasoPintura extends Pass {
       uTensorGrueso: { value: this.gruesoA.texture },
       uPesoGrueso: { value: ANALISIS_FLUJO.pesoGrueso },
       uAspecto: { value: 1 },
+      uTexel: { value: new THREE.Vector2() },
+      ...this.uCamara,
       uFuerzaMinima: { value: ANALISIS_FLUJO.fuerzaMinima },
       uFuerzaPlena: { value: ANALISIS_FLUJO.fuerzaPlena },
     })
-    this.matBase = material(BASE_FRAG, { uReducida: { value: this.reducida.texture } })
+    this.matPaleta = material(PALETA_FRAG, {
+      uReducida: { value: this.reducida.texture },
+      uProfundidad: { value: null },
+      uTexelEntrada: { value: new THREE.Vector2() },
+      uCieloPintado: { value: 1 },
+      ...this.uCamara,
+    })
+    this.matBase = material(BASE_FRAG, { uPintura: { value: this.pintura.texture } })
     this.matFinal = material(FINAL_FRAG, {
       uLienzo: { value: this.lienzo.texture },
       uAPantalla: { value: 1 },
       uEntradaLineal: { value: 0 },
+      uAspecto: { value: 1 },
+      uVineta: { value: this.vineta },
     })
 
     this.quad = new THREE.Mesh(this.geometriaQuad, this.matReducir)
@@ -204,6 +233,7 @@ export class PasoPintura extends Pass {
     this.historia[0].setSize(anchoR, altoR)
     this.historia[1].setSize(anchoR, altoR)
     this.flujo.setSize(anchoR, altoR)
+    this.pintura.setSize(anchoR, altoR)
     const anchoG = Math.max(2, Math.round(anchoR / 4))
     const altoG = Math.max(2, Math.round(altoR / 4))
     this.gruesoA.setSize(anchoG, altoG)
@@ -221,6 +251,9 @@ export class PasoPintura extends Pass {
     ;(this.matDesenfoqueH.uniforms.uPaso.value as THREE.Vector2).set(paso / anchoR, 0)
     ;(this.matDesenfoqueV.uniforms.uPaso.value as THREE.Vector2).set(0, paso / altoR)
     this.matFlujo.uniforms.uAspecto.value = ancho / alto
+    ;(this.matFlujo.uniforms.uTexel.value as THREE.Vector2).set(1 / anchoR, 1 / altoR)
+    ;(this.matPaleta.uniforms.uTexelEntrada.value as THREE.Vector2).set(1 / ancho, 1 / alto)
+    this.matFinal.uniforms.uAspecto.value = ancho / alto
 
     this.reconstruirCapas()
   }
@@ -267,7 +300,7 @@ export class PasoPintura extends Pass {
         fragmentShader: PINCELADA_FRAG,
         uniforms: {
           uFlujo: { value: this.flujo.texture },
-          uColor: { value: this.reducida.texture },
+          uColor: { value: this.pintura.texture },
           uResolucion: { value: new THREE.Vector2(ancho, alto) },
           uAncho: { value: definicion.ancho * alto },
           uLargo: { value: definicion.largo * alto },
@@ -293,6 +326,10 @@ export class PasoPintura extends Pass {
       escena.add(malla)
       return { definicion, geometria, material: materialCapa, malla, escena }
     })
+  }
+
+  override setDepthTexture(textura: THREE.Texture): void {
+    this.matPaleta.uniforms.uProfundidad.value = textura
   }
 
   private dibujar(renderer: THREE.WebGLRenderer, materialQuad: THREE.ShaderMaterial, destino: THREE.WebGLRenderTarget | null): void {
@@ -323,6 +360,15 @@ export class PasoPintura extends Pass {
       return
     }
 
+    const camara = this.camara
+    if (camara) {
+      camara.updateMatrixWorld()
+      this.uCamara.uProyInversa.value.copy(camara.projectionMatrixInverse)
+      this.uCamara.uCamaraMundo.value.copy(camara.matrixWorld)
+    }
+    this.matPaleta.uniforms.uCieloPintado.value = this.matPaleta.uniforms.uProfundidad.value ? this.cieloPintado : 0
+    this.matFinal.uniforms.uVineta.value = this.vineta
+
     // 1. Reducción.
     this.matReducir.uniforms.uEntrada.value = inputBuffer.texture
     this.dibujar(renderer, this.matReducir, this.reducida)
@@ -347,7 +393,8 @@ export class PasoPintura extends Pass {
     this.matFlujo.uniforms.uTensor.value = actual.texture
     this.dibujar(renderer, this.matFlujo, this.flujo)
 
-    // 3. Base y pinceladas.
+    // 3. Color de pintura (paleta y cielo nocturno), base y pinceladas.
+    this.dibujar(renderer, this.matPaleta, this.pintura)
     this.dibujar(renderer, this.matBase, this.lienzo)
     for (const capa of this.capas) {
       const u = capa.material.uniforms
@@ -377,6 +424,7 @@ export class PasoPintura extends Pass {
       this.gruesoA,
       this.gruesoB,
       this.flujo,
+      this.pintura,
       this.lienzo,
     ])
       rt.dispose()
@@ -389,6 +437,7 @@ export class PasoPintura extends Pass {
       this.matGruesoH,
       this.matGruesoV,
       this.matFlujo,
+      this.matPaleta,
       this.matBase,
       this.matFinal,
     ])
