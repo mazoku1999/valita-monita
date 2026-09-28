@@ -1,6 +1,6 @@
 import { Pass } from 'postprocessing'
 import * as THREE from 'three'
-import { ACUARELA, COLORES_PLANOS, ORIENTACION, TINTA } from '../constantes/dibujo'
+import { ACUARELA, COLORES_PLANOS, ORIENTACION, PELICULA, TINTA } from '../constantes/dibujo'
 import {
   CIELO_FRAG,
   COMPONER_FRAG,
@@ -10,6 +10,7 @@ import {
   LIC_FRAG,
   ORIENTACION_FRAG,
   PANTALLA_VERT,
+  PELICULA_FRAG,
   REDUCIR_FRAG,
   TENSOR_FRAG,
 } from '../shaders/dibujo'
@@ -90,6 +91,8 @@ export class PasoDibujo extends Pass {
   private readonly cielo = objetivo(2, 2)
   private readonly aguadaIntermedia = objetivo(2, 2)
   private readonly aguada = objetivo(2, 2)
+  /** El dibujo compuesto (sRGB), antes de pasar por la película. */
+  private readonly dibujo = objetivo(2, 2)
   private readonly uCamara = {
     uProyInversa: { value: new THREE.Matrix4() },
     uCamaraMundo: { value: new THREE.Matrix4() },
@@ -104,11 +107,13 @@ export class PasoDibujo extends Pass {
   private readonly matComponer: THREE.ShaderMaterial
   private readonly matCopia: THREE.ShaderMaterial
   private readonly matCielo: THREE.ShaderMaterial
+  private readonly matPelicula: THREE.ShaderMaterial
 
   private indiceHistoria = 0
   private conHistoria = false
   private anchoActual = 0
   private altoActual = 0
+  private tiempo = 0
 
   constructor() {
     super('PasoDibujo')
@@ -162,6 +167,14 @@ export class PasoDibujo extends Pass {
       uEscalaPapel: { value: ACUARELA.escalaPapel },
       uFuerzaEpoca: { value: COLORES_PLANOS.fuerzaEpoca },
     })
+    this.matPelicula = material(PELICULA_FRAG, {
+      uImagen: { value: this.dibujo.texture },
+      uResolucion: { value: new THREE.Vector2() },
+      uFotograma: { value: 0 },
+      uAPantalla: { value: 1 },
+      uPelicula: { value: new THREE.Vector4(PELICULA.grano, PELICULA.polvo, PELICULA.rayas, PELICULA.parpadeo) },
+      uPelicula2: { value: new THREE.Vector3(PELICULA.vaiven, PELICULA.vineta, PELICULA.envejecido) },
+    })
     this.matCielo = material(CIELO_FRAG, {
       uProfundidad: { value: null },
       uTexelEntrada: { value: new THREE.Vector2() },
@@ -191,6 +204,8 @@ export class PasoDibujo extends Pass {
       rt.setSize(anchoM, altoM)
     ;(this.matCielo.uniforms.uTexelEntrada.value as THREE.Vector2).set(0.5 / ancho, 0.5 / alto)
     ;(this.matComponer.uniforms.uResolucion.value as THREE.Vector2).set(ancho, alto)
+    ;(this.matPelicula.uniforms.uResolucion.value as THREE.Vector2).set(ancho, alto)
+    this.dibujo.setSize(ancho, alto)
     this.matComponer.uniforms.uEscalaPapel.value = ACUARELA.escalaPapel * Math.max(1, alto / 720)
     this.conHistoria = false
     ;(this.matTensor.uniforms.uTexel.value as THREE.Vector2).set(1 / anchoC, 1 / altoC)
@@ -251,6 +266,7 @@ export class PasoDibujo extends Pass {
     }
 
     const paso = Math.min(Math.max(deltaTime, 0), 0.25)
+    this.tiempo += paso
     const anchoC = this.cuarto.width
     const altoC = this.cuarto.height
     const anchoM = this.media.width
@@ -305,8 +321,13 @@ export class PasoDibujo extends Pass {
     const u = this.matComponer.uniforms
     u.uUmbral.value = this.ajustes.umbral
     u.uSoloTinta.value = this.ajustes.soloTinta ? 1 : 0
-    u.uAPantalla.value = aPantalla
-    this.dibujar(renderer, this.matComponer, destino)
+    u.uAPantalla.value = 1
+    this.dibujar(renderer, this.matComponer, this.dibujo)
+
+    // 7. Película antigua (a 24 fotogramas por segundo, como en un proyector).
+    this.matPelicula.uniforms.uFotograma.value = Math.floor(this.tiempo * PELICULA.fotogramasPorSegundo) % 100000
+    this.matPelicula.uniforms.uAPantalla.value = aPantalla
+    this.dibujar(renderer, this.matPelicula, destino)
     renderer.autoClear = limpiezaPrevia
   }
 
@@ -326,6 +347,7 @@ export class PasoDibujo extends Pass {
       this.cielo,
       this.aguadaIntermedia,
       this.aguada,
+      this.dibujo,
     ])
       rt.dispose()
     for (const m of [
@@ -338,6 +360,7 @@ export class PasoDibujo extends Pass {
       this.matComponer,
       this.matCopia,
       this.matCielo,
+      this.matPelicula,
     ])
       m.dispose()
     this.geometriaQuad.dispose()

@@ -76,3 +76,19 @@ export const ORIENTACION = {
   pasoDesenfoque: 1.5,
   tauTemporal: 0.1,
 } as const
+
+/**
+ * Película antigua (ver PELICULA_FRAG): fotogramas por segundo del proyector, grano, probabilidad
+ * de cada mota de polvo (hasta 8 por fotograma) y de cada raya (hasta 2), parpadeo del brillo,
+ * vaivén del cuadro (px a 720 de alto), viñeta y envejecido del color.
+ */
+export const PELICULA = {
+  fotogramasPorSegundo: 24,
+  grano: 0.075,
+  polvo: 0.22,
+  rayas: 0.55,
+  parpadeo: 0.03,
+  vaiven: 1.0,
+  vineta: 0.42,
+  envejecido: 1.0,
+} as const

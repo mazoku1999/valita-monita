@@ -414,6 +414,127 @@ void main() {
 }
 `
 
+/**
+ * Película antigua, como el filtro de Cuphead y los dibujos de los años 30 que imita: todo cambia a
+ * 24 fotogramas por segundo, como en un proyector.
+ * - Vaivén del cuadro (la película no pasa perfectamente quieta por la ventanilla).
+ * - Tono envejecido: cálido y algo desvaído, negros de tinta vieja y blancos color crema.
+ * - Parpadeo del brillo, grano fino (más en los tonos medios), motas de polvo de un fotograma, algún
+ *   pelo que se queda unos fotogramas y rayas verticales que duran un rato y se desplazan.
+ * - Viñeta.
+ */
+export const PELICULA_FRAG = /* glsl */ `
+uniform sampler2D uImagen;
+uniform vec2 uResolucion;
+uniform float uFotograma;
+uniform float uAPantalla;
+// x grano, y polvo (probabilidad de cada mota), z rayas (probabilidad), w parpadeo.
+uniform vec4 uPelicula;
+// x vaivén (px a 720 de alto), y viñeta, z envejecido.
+uniform vec3 uPelicula2;
+
+in vec2 vUv;
+out vec4 fragColor;
+
+${OKLAB_GLSL}
+
+float hash11(float p) {
+  p = fract(p * 0.1031);
+  p *= p + 33.33;
+  p *= p + p;
+  return fract(p);
+}
+
+vec3 hash32(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+  p3 += dot(p3, p3.yxz + 33.33);
+  return fract((p3.xxy + p3.yzz) * p3.zyx);
+}
+
+float ruidoValor(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash32(i).x, hash32(i + vec2(1.0, 0.0)).x, u.x), mix(hash32(i + vec2(0.0, 1.0)).x, hash32(i + vec2(1.0, 1.0)).x, u.x), u.y);
+}
+
+void main() {
+  float escala = uResolucion.y / 720.0;
+  float f = uFotograma;
+  vec2 px = vUv * uResolucion;
+
+  // Vaivén del cuadro.
+  vec2 vaiven = (vec2(hash11(f * 1.37 + 0.1), hash11(f * 2.71 + 5.3)) - 0.5) * vec2(0.5, 1.0) * uPelicula2.x * escala;
+  vec3 c = texture(uImagen, vUv + vaiven / uResolucion).rgb;
+
+  // Tono envejecido: un poco de sepia, calidez y un negro de tinta vieja; los colores siguen vivos
+  // (el filtro de Cuphead es cálido, no marrón).
+  float L = dot(c, vec3(0.299, 0.587, 0.114));
+  vec3 sepia = L * vec3(1.08, 0.99, 0.80);
+  c = mix(c, sepia, 0.1 * uPelicula2.z);
+  c *= mix(vec3(1.0), vec3(1.04, 1.01, 0.92), uPelicula2.z);
+  c = mix(vec3(0.03, 0.024, 0.019), vec3(0.99, 0.965, 0.895), clamp(c, 0.0, 1.0));
+
+  // Parpadeo del proyector.
+  c *= 1.0 + uPelicula.w * (2.0 * hash11(f * 7.13 + 1.7) - 1.0);
+
+  // Grano (algo mayor que un píxel, cambia en cada fotograma).
+  float grano = ruidoValor(px / (1.3 * escala) + vec2(f * 37.1, f * 91.7)) - 0.5;
+  float medios = 0.35 + 2.6 * L * (1.0 - L);
+  c += uPelicula.x * grano * medios;
+
+  // Motas de polvo de un solo fotograma: casi todas oscuras, alguna clara.
+  for (int i = 0; i < 8; i++) {
+    vec3 h = hash32(vec2(f, float(i) * 3.7 + 1.0));
+    if (h.x > uPelicula.y) continue;
+    vec3 h2 = hash32(vec2(f * 1.9 + 11.0, float(i) * 5.3));
+    vec2 centro = h2.xy * uResolucion;
+    float radio = mix(0.7, 3.8, h.y * h.y) * escala;
+    vec2 d = px - centro;
+    float irregular = 0.75 + 0.5 * ruidoValor(d / radio * 1.3 + h2.z * 40.0);
+    float mota = 1.0 - smoothstep(0.6, 1.0, length(d) / (radio * irregular));
+    c = mix(c, h.z < 0.8 ? vec3(0.06, 0.045, 0.035) : vec3(0.96, 0.93, 0.85), 0.85 * mota);
+  }
+
+  // Un pelo en la ventanilla: aparece de vez en cuando y se queda unos fotogramas.
+  float bloque = floor(f / 5.0);
+  vec3 hp = hash32(vec2(bloque, 17.0));
+  if (hp.x < 0.1 * uPelicula.y / 0.25) {
+    vec3 hq = hash32(vec2(bloque, 29.0));
+    vec2 centro = vec2(mix(0.05, 0.95, hq.x), mix(0.05, 0.95, hq.y)) * uResolucion;
+    float radio = mix(40.0, 120.0, hq.z) * escala;
+    float angulo = atan(px.y - centro.y, px.x - centro.x);
+    float inicio = hp.y * 6.2831853;
+    float tramo = mod(angulo - inicio, 6.2831853);
+    float enArco = step(tramo, mix(0.6, 1.6, hp.z));
+    float distancia = abs(length(px - centro) - radio * (1.0 + 0.08 * sin(angulo * 5.0 + hq.x * 20.0)));
+    float pelo = enArco * (1.0 - smoothstep(0.3 * escala, 1.1 * escala, distancia));
+    c = mix(c, vec3(0.07, 0.055, 0.045), 0.8 * pelo);
+  }
+
+  // Rayas verticales que duran un segundo y medio y se desplazan despacio.
+  for (int i = 0; i < 2; i++) {
+    float periodo = floor(f / 36.0) + float(i) * 13.0;
+    vec3 hr = hash32(vec2(periodo, 3.0 + float(i)));
+    if (hr.x > uPelicula.z) continue;
+    float x = (hr.y + 0.004 * sin(f * 0.21 + float(i) * 2.0)) * uResolucion.x;
+    float ancho = mix(0.5, 1.3, hr.z) * escala;
+    float raya = 1.0 - smoothstep(0.0, ancho, abs(px.x - x));
+    float intensidad = (0.25 + 0.35 * hash11(f * 3.3 + float(i) * 11.0)) * (0.55 + 0.45 * ruidoValor(vec2(px.y / (60.0 * escala), periodo)));
+    c = mix(c, vec3(0.93, 0.9, 0.82), raya * intensidad);
+  }
+
+  // Viñeta.
+  vec2 q = vUv - 0.5;
+  q.x *= uResolucion.x / uResolucion.y;
+  float r = length(q) / length(vec2(0.5 * uResolucion.x / uResolucion.y, 0.5));
+  c *= 1.0 - uPelicula2.y * smoothstep(0.35, 1.05, r);
+
+  c = clamp(c, 0.0, 1.0);
+  fragColor = vec4(uAPantalla > 0.5 ? c : linealDesdeSRGB(c), 1.0);
+}
+`
+
 /** Sin dibujo (comparación en desarrollo): la imagen lineal de la escena a la pantalla. */
 export const COPIA_FRAG = /* glsl */ `
 uniform sampler2D uEntrada;
