@@ -19,9 +19,9 @@ const monoNarrativa = IBM_Plex_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Dust.Blue — A painted night',
+  title: 'Dust.Blue — A cartoon night',
   description:
-    'El mismo viaje por un agujero negro, el agujero de gusano y nuestro sistema solar, repintado en cada fotograma con pinceladas de óleo al estilo de Van Gogh.',
+    'El mismo viaje por un agujero negro, el agujero de gusano y nuestro sistema solar, dibujado como un dibujo animado de los años 30: tinta a pincel, acuarela y película antigua.',
   generator: 'v0.app',
   icons: {
     icon: [

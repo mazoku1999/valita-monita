@@ -1,11 +1,10 @@
 'use client'
 
-import { Bloom, EffectComposer, ToneMapping } from '@react-three/postprocessing'
+import { Bloom, EffectComposer, Noise, ToneMapping, Vignette } from '@react-three/postprocessing'
 import { useFrame } from '@react-three/fiber'
-import { ToneMappingMode } from 'postprocessing'
+import { BlendFunction, ToneMappingMode } from 'postprocessing'
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
-import { PasoPintura } from '@/features/pintura/utils/PasoPintura'
 import { ajuste } from '../store/vistaCamaraStore'
 import { columnaPolvo } from '../utils/columnaPolvo'
 import { suavizar } from '../utils/aleatorio'
@@ -34,9 +33,6 @@ const RESPLANDOR_POLVO = { umbral: 0.5, radio: 0.85, niveles: 6, intensidad: 7.5
  * estrellitas más vivas tienen una aureola pequeña y siguen siendo puntos, no manchas.
  */
 const BLOOM_CHISPAS = { umbral: 0.9, intensidad: 2.0, radio: 0.85 } as const
-
-/** Luz rasante sobre el empaste de la pintura (ver `features/pintura`). */
-const RELIEVE = { fuerza: 1.4, sombreado: 0.7, brillo: 0.09 } as const
 
 /** El mismo balance de color que el gas y el polvo (ver el shader de la lente): naranja melocotón. */
 const BALANCE_COLOR = new THREE.Vector3(1.0, 1.05, 1.2).divideScalar(1.05)
@@ -74,28 +70,10 @@ export function EfectosPost() {
     [],
   )
 
-  // La escena ya revelada se repinta con pinceladas (ver `features/pintura`).
-  const pasoPintura = useMemo(() => new PasoPintura(), [])
-
   useEffect(() => () => efectoCamara.dispose(), [efectoCamara])
   useEffect(() => () => efectoPolvo.dispose(), [efectoPolvo])
-  useEffect(() => () => pasoPintura.dispose(), [pasoPintura])
 
   useFrame(({ camera }) => {
-    pasoPintura.camara = camera
-    // El cielo abierto se pinta como cielo nocturno salvo dentro del horizonte, entre que se cruza
-    // y que aparece la boca del agujero de gusano (0.6 → 0.4 del centro): ahí todo es oscuridad.
-    const distanciaCentro = camera.position.length()
-    pasoPintura.cieloPintado = Math.max(suavizar(0.95, 1.4, distanciaCentro), suavizar(0.6, 0.4, distanciaCentro))
-    pasoPintura.ajustes.activa = ajuste('pintura', 1) > 0.5
-    pasoPintura.ajustes.depurar = ajuste('pinturaDepurar', 0) > 0.5
-    pasoPintura.ajustes.escalaAncho = ajuste('pinturaAncho', 1)
-    pasoPintura.ajustes.escalaLargo = ajuste('pinturaLargo', 1)
-    pasoPintura.ajustes.capas = ajuste('pinturaCapas', 7)
-    pasoPintura.ajustes.medir = ajuste('pinturaTiempos', 0) > 0.5
-    pasoPintura.relieve.fuerza = ajuste('pinturaRelieve', RELIEVE.fuerza)
-    pasoPintura.relieve.sombreado = ajuste('pinturaSombreado', RELIEVE.sombreado)
-    pasoPintura.relieve.brillo = ajuste('pinturaBrillo', RELIEVE.brillo)
     // Ajustables desde la URL sólo en desarrollo (ver `store/vistaCamaraStore.ts`).
     efectoCamara.luminanceMaterial.threshold = ajuste('bloomUmbral', RESPLANDOR_CAMARA.umbral)
     // En la zambullida (por dentro de 13 unidades, donde no llega ningún encuadre) el disco y el
@@ -133,8 +111,8 @@ export function EfectosPost() {
       <primitive object={efectoCamara} />
       <primitive object={efectoPolvo} />
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-      {/* Sin grano de película (sus puntos teñirían las pinceladas); la viñeta la pone el lienzo. */}
-      <primitive object={pasoPintura} />
+      <Noise premultiply blendFunction={BlendFunction.ADD} opacity={0.28} />
+      <Vignette eskil={false} offset={0.12} darkness={0.66} />
     </EffectComposer>
   )
 }
