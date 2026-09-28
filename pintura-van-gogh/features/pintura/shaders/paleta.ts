@@ -259,3 +259,79 @@ vec3 cieloConLuz(vec3 cielo, vec3 escena) {
   return mix(c, luz, smoothstep(0.22, 0.8, a));
 }
 `
+
+/**
+ * Estrellas pintadas como las de La noche estrellada: núcleo blanco amarillento y anillos
+ * concéntricos de amarillo, verde pálido y blanco azulado que se funden con el cielo. Las
+ * posiciones vienen de `utils/estrellasPintadas.ts` (fijas en la esfera celeste, proyectadas cada
+ * fotograma) y su visibilidad (cielo abierto y oscuro en el centro de la estrella) de un pase
+ * diminuto que las mide una vez por fotograma.
+ */
+export const ESTRELLAS_GLSL = /* glsl */ `
+#define MAX_ESTRELLAS 16
+// xy: posición (uv), z: radio (fracción de la altura), w: brillo 0–1.
+uniform vec4 uEstrellas[MAX_ESTRELLAS];
+uniform int uNumEstrellas;
+uniform sampler2D uVisibilidadEstrellas;
+
+float visibilidadEstrella(int k) {
+  return texelFetch(uVisibilidadEstrellas, ivec2(k, 0), 0).r;
+}
+
+// Offset desde el centro de la estrella en unidades proporcionales a píxeles (x por el aspecto).
+vec2 desdeEstrella(vec2 uv, vec4 e, float aspecto) {
+  return (uv - e.xy) * vec2(aspecto, 1.0);
+}
+
+// Anillos de una estrella del cuadro (d en radios de la estrella): núcleo blanco amarillento,
+// anillo de amarillo de cromo, un filo blanquecino y un halo celeste que se funde con el cielo.
+vec3 anillosEstrella(float d) {
+  vec3 nucleo = vec3(1.0, 0.975, 0.85);
+  vec3 amarillo = vec3(0.97, 0.80, 0.26);
+  vec3 filo = vec3(0.97, 0.95, 0.78);
+  vec3 halo = vec3(0.62, 0.78, 0.86);
+  vec3 c = mix(nucleo, amarillo, smoothstep(0.16, 0.26, d));
+  c = mix(c, filo, smoothstep(0.44, 0.52, d));
+  c = mix(c, halo, smoothstep(0.6, 0.72, d));
+  return c;
+}
+
+// Peso de la estrella: pleno hasta el filo y el halo se va apagando hasta 1.35 radios.
+float pesoAnillos(float d) {
+  return d < 0.62 ? 1.0 : 0.85 * (1.0 - smoothstep(0.62, 1.35, d));
+}
+
+// Color de la estrella más presente en este punto y su peso (0 = sin estrella).
+vec3 estrellasPintadas(vec2 uv, float aspecto, out float peso) {
+  peso = 0.0;
+  vec3 color = vec3(0.0);
+  for (int k = 0; k < MAX_ESTRELLAS; k++) {
+    if (k >= uNumEstrellas) break;
+    vec4 e = uEstrellas[k];
+    float d = length(desdeEstrella(uv, e, aspecto)) / e.z;
+    if (d > 1.4) continue;
+    float w = e.w * visibilidadEstrella(k) * pesoAnillos(d);
+    if (w > peso) {
+      peso = w;
+      color = anillosEstrella(d);
+    }
+  }
+  return color;
+}
+
+// Los trazos giran en círculo alrededor de cada estrella visible.
+vec2 flujoEstrellas(vec2 uv, float aspecto, vec2 direccion) {
+  for (int k = 0; k < MAX_ESTRELLAS; k++) {
+    if (k >= uNumEstrellas) break;
+    vec4 e = uEstrellas[k];
+    vec2 q = desdeEstrella(uv, e, aspecto);
+    float d = length(q) / e.z;
+    if (d > 1.6) continue;
+    float w = (1.0 - smoothstep(1.1, 1.6, d)) * visibilidadEstrella(k);
+    vec2 t = dot(q, q) > 1e-12 ? normalize(vec2(-q.y, q.x)) : direccion;
+    if (dot(t, direccion) < 0.0) t = -t;
+    direccion = normalize(mix(direccion, t, w) + 1e-6);
+  }
+  return direccion;
+}
+`

@@ -16,10 +16,57 @@ export interface CapaPinceladas {
   readonly variacion: number
   /** Desviación máxima del trazo respecto al flujo (radianes): la mano no sigue el campo al milímetro. */
   readonly desvio: number
+  /** Radio (texels del color a 1/2) de la media que da el color de la pincelada; 0 = el del ancla. */
+  readonly difuminado: number
+  /**
+   * Capa de detalle: cada trazo sólo se pinta donde el color fino difiere del grueso más que este
+   * umbral (diferencia en OKLab). Capa de realces: donde la luminancia a resolución completa supera
+   * a la de su entorno por este margen (sRGB).
+   */
+  readonly umbralDetalle: number
+  /** 0: cubre todo el lienzo. 1: detalle. 2: realces de luz. */
+  readonly modo: 0 | 1 | 2
+  /** El pincel grueso sigue el flujo suave; los finos, el flujo fino (menos desenfocado). */
+  readonly flujoFino: boolean
 }
 
 export const CAPAS_PINCELADAS: readonly CapaPinceladas[] = [
-  { nombre: 'fondo', ancho: 0.013, largo: 0.046, espaciado: 0.0135, variacion: 0.25, desvio: 0.12 },
+  {
+    nombre: 'fondo',
+    ancho: 0.013,
+    largo: 0.046,
+    espaciado: 0.0135,
+    variacion: 0.25,
+    desvio: 0.12,
+    difuminado: 1.5,
+    umbralDetalle: 0,
+    modo: 0,
+    flujoFino: false,
+  },
+  {
+    nombre: 'detalle',
+    ancho: 0.0062,
+    largo: 0.022,
+    espaciado: 0.006,
+    variacion: 0.25,
+    desvio: 0.1,
+    difuminado: 0,
+    umbralDetalle: 0.045,
+    modo: 1,
+    flujoFino: true,
+  },
+  {
+    nombre: 'realces',
+    ancho: 0.0045,
+    largo: 0.016,
+    espaciado: 0.0045,
+    variacion: 0.2,
+    desvio: 0.08,
+    difuminado: 0,
+    umbralDetalle: 0.06,
+    modo: 2,
+    flujoFino: true,
+  },
 ]
 
 /**

@@ -6,17 +6,23 @@ import {
   DESENFOQUE_FRAG,
   FINAL_FRAG,
   FLUJO_FRAG,
+  PALETA_FRAG,
   PANTALLA_VERT,
   PINCELADA_FRAG,
-  PALETA_FRAG,
   PINCELADA_VERT,
+  PINCELES_FRAG,
   PROMEDIO_FRAG,
   REDUCIR_FRAG,
   TENSOR_FRAG,
+  VISIBILIDAD_ESTRELLAS_FRAG,
 } from '../shaders/pintura'
+import { ESTRELLAS_PINTADAS, generarEstrellasPintadas, proyectarEstrellas } from './estrellasPintadas'
 
 /** Secciones de la tira de cada pincelada (8 tramos: curvas suaves sin disparar los vértices). */
 const SECCIONES = 9
+
+/** Radio aparente de la sombra (parámetro de impacto crítico, r_s = 1). */
+const RADIO_SOMBRA = 2.598
 
 /** Generador determinista (mulberry32): las pinceladas no cambian de sitio al recargar. */
 const generador = (semilla: number) => {
@@ -30,12 +36,17 @@ const generador = (semilla: number) => {
   }
 }
 
-const objetivo = (ancho: number, alto: number): THREE.WebGLRenderTarget =>
+const suavizar = (borde0: number, borde1: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - borde0) / (borde1 - borde0)))
+  return t * t * (3 - 2 * t)
+}
+
+const objetivo = (ancho: number, alto: number, filtro: THREE.MagnificationTextureFilter = THREE.LinearFilter) =>
   new THREE.WebGLRenderTarget(ancho, alto, {
     type: THREE.HalfFloatType,
     format: THREE.RGBAFormat,
-    minFilter: THREE.LinearFilter,
-    magFilter: THREE.LinearFilter,
+    minFilter: filtro,
+    magFilter: filtro,
     generateMipmaps: false,
     depthBuffer: false,
   })
@@ -72,7 +83,6 @@ interface Capa {
   definicion: CapaPinceladas
   geometria: THREE.InstancedBufferGeometry
   material: THREE.ShaderMaterial
-  malla: THREE.Mesh
   escena: THREE.Scene
 }
 
@@ -88,15 +98,18 @@ export interface AjustesPintura {
  * Pase de pintura: repinta la imagen de la escena con pinceladas. Va al final de la cadena de
  * posproceso (después del tono), así que recibe la imagen ya revelada y la entrega al lienzo:
  *
- * 1. Reducción a 1/4 en sRGB (el color medio que ve el pintor).
- * 2. Tensor de estructura → desenfoque gaussiano ancho → suavizado temporal → campo de flujo
- *    (dirección a lo largo de las formas y remolinos donde no las hay).
- * 3. Base del lienzo y, encima, las capas de pinceladas curvas que siguen el flujo.
- * 4. Salida a pantalla.
+ * 1. Reducciones a 1/4 (análisis) y a 1/2 (el color que ven los pinceles).
+ * 2. Tensor de estructura → desenfoque fino (con memoria en el tiempo) → desenfoque suave → escala
+ *    gruesa. Dos campos de flujo: el suave para el pincel grueso y el fino para los pinceles
+ *    pequeños; ambos con remolinos en el cielo vacío, círculos alrededor del agujero y de las
+ *    estrellas pintadas.
+ * 3. Color de pintura (paleta de Van Gogh, cielo nocturno y estrellas), base del lienzo y tres
+ *    capas de pinceladas curvas: fondo, detalle y realces de luz.
+ * 4. Salida a pantalla con viñeta.
  */
 export class PasoPintura extends Pass {
   readonly ajustes: AjustesPintura = { activa: true, depurar: false, escalaAncho: 1, escalaLargo: 1 }
-  /** Cámara de la escena: ancla el cielo pintado a la esfera celeste. */
+  /** Cámara de la escena: ancla el cielo pintado a la esfera celeste y sitúa el agujero. */
   camara: THREE.Camera | null = null
   /**
    * Cuánto del cielo abierto se pinta como cielo nocturno (0–1). Dentro del horizonte, antes de
@@ -106,35 +119,57 @@ export class PasoPintura extends Pass {
   /** Oscurecimiento máximo de las esquinas. */
   vineta = 0.38
 
-  private readonly quad: THREE.Mesh
   private readonly escenaQuad = new THREE.Scene()
   private readonly camaraQuad = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private readonly geometriaQuad = new THREE.PlaneGeometry(2, 2)
+  private readonly quad: THREE.Mesh
   private readonly tira = crearTira()
 
   private readonly reducida = objetivo(2, 2)
+  private readonly reducidaMedia = objetivo(2, 2)
   private readonly tensor = objetivo(2, 2)
   private readonly tensorIntermedio = objetivo(2, 2)
+  /** Tensor con desenfoque fino y memoria en el tiempo (ping-pong). */
   private readonly historia = [objetivo(2, 2), objetivo(2, 2)] as const
+  private readonly tensorSuave = objetivo(2, 2)
   private readonly gruesoA = objetivo(2, 2)
   private readonly gruesoB = objetivo(2, 2)
   private readonly flujo = objetivo(2, 2)
+  private readonly flujoFino = objetivo(2, 2)
   private readonly pintura = objetivo(2, 2)
+  /** Preparación de los pinceles finos: [0] realces, [1] detalle (ver PINCELES_FRAG). */
+  private readonly pinceles = new THREE.WebGLRenderTarget(2, 2, {
+    type: THREE.HalfFloatType,
+    format: THREE.RGBAFormat,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    generateMipmaps: false,
+    depthBuffer: false,
+    count: 2,
+  })
   private readonly lienzo = objetivo(2, 2)
+  private readonly visibilidadEstrellas = objetivo(ESTRELLAS_PINTADAS.maximoVisibles, 1, THREE.NearestFilter)
+
+  private readonly estrellas = generarEstrellasPintadas()
   private readonly uCamara = {
     uProyInversa: { value: new THREE.Matrix4() },
     uCamaraMundo: { value: new THREE.Matrix4() },
   }
+  private readonly uEstrellas = {
+    uEstrellas: { value: Array.from({ length: ESTRELLAS_PINTADAS.maximoVisibles }, () => new THREE.Vector4()) },
+    uNumEstrellas: { value: 0 },
+    uVisibilidadEstrellas: { value: this.visibilidadEstrellas.texture },
+  }
+  private readonly uAgujero = { value: new THREE.Vector4() }
 
   private readonly matReducir: THREE.ShaderMaterial
   private readonly matTensor: THREE.ShaderMaterial
-  private readonly matDesenfoqueH: THREE.ShaderMaterial
-  private readonly matDesenfoqueV: THREE.ShaderMaterial
-  private readonly matPromedioGrueso: THREE.ShaderMaterial
-  private readonly matGruesoH: THREE.ShaderMaterial
-  private readonly matGruesoV: THREE.ShaderMaterial
+  private readonly matDesenfoque: THREE.ShaderMaterial
+  private readonly matPromedio: THREE.ShaderMaterial
+  private readonly matVisibilidad: THREE.ShaderMaterial
   private readonly matFlujo: THREE.ShaderMaterial
   private readonly matPaleta: THREE.ShaderMaterial
+  private readonly matPinceles: THREE.ShaderMaterial
   private readonly matBase: THREE.ShaderMaterial
   private readonly matFinal: THREE.ShaderMaterial
 
@@ -143,6 +178,8 @@ export class PasoPintura extends Pass {
   private conHistoria = false
   private anchoActual = 0
   private altoActual = 0
+  private tiempo = 0
+  private readonly auxiliar = new THREE.Vector3()
 
   constructor() {
     super('PasoPintura')
@@ -150,58 +187,50 @@ export class PasoPintura extends Pass {
     // La profundidad de la escena separa el cielo abierto de lo que tiene cuerpo.
     this.needsDepthTexture = true
 
-    this.matReducir = material(REDUCIR_FRAG, {
+    this.matReducir = material(REDUCIR_FRAG, { uEntrada: { value: null }, uTexelEntrada: { value: new THREE.Vector2() } })
+    this.matTensor = material(TENSOR_FRAG, { uReducida: { value: this.reducida.texture }, uTexel: { value: new THREE.Vector2() } })
+    this.matDesenfoque = material(DESENFOQUE_FRAG, {
       uEntrada: { value: null },
-      uTexelEntrada: { value: new THREE.Vector2() },
+      uPaso: { value: new THREE.Vector2() },
+      uHistoria: { value: null },
+      uMezcla: { value: 1 },
     })
-    this.matTensor = material(TENSOR_FRAG, {
+    this.matPromedio = material(PROMEDIO_FRAG, { uEntrada: { value: null }, uTexelEntrada: { value: new THREE.Vector2() } })
+    this.matVisibilidad = material(VISIBILIDAD_ESTRELLAS_FRAG, {
+      uEstrellas: this.uEstrellas.uEstrellas,
+      uNumEstrellas: this.uEstrellas.uNumEstrellas,
+      uProfundidad: { value: null },
       uReducida: { value: this.reducida.texture },
-      uTexel: { value: new THREE.Vector2() },
-    })
-    this.matDesenfoqueH = material(DESENFOQUE_FRAG, {
-      uEntrada: { value: this.tensor.texture },
-      uPaso: { value: new THREE.Vector2() },
-      uHistoria: { value: null },
-      uMezcla: { value: 1 },
-    })
-    this.matDesenfoqueV = material(DESENFOQUE_FRAG, {
-      uEntrada: { value: this.tensorIntermedio.texture },
-      uPaso: { value: new THREE.Vector2() },
-      uHistoria: { value: null },
-      uMezcla: { value: 1 },
-    })
-    this.matPromedioGrueso = material(PROMEDIO_FRAG, {
-      uEntrada: { value: null },
-      uTexelEntrada: { value: new THREE.Vector2() },
-    })
-    this.matGruesoH = material(DESENFOQUE_FRAG, {
-      uEntrada: { value: this.gruesoA.texture },
-      uPaso: { value: new THREE.Vector2() },
-      uHistoria: { value: null },
-      uMezcla: { value: 1 },
-    })
-    this.matGruesoV = material(DESENFOQUE_FRAG, {
-      uEntrada: { value: this.gruesoB.texture },
-      uPaso: { value: new THREE.Vector2() },
-      uHistoria: { value: null },
-      uMezcla: { value: 1 },
+      uCieloPintado: { value: 1 },
     })
     this.matFlujo = material(FLUJO_FRAG, {
       uTensor: { value: null },
       uTensorGrueso: { value: this.gruesoA.texture },
+      uTensorFino: { value: null },
       uPesoGrueso: { value: ANALISIS_FLUJO.pesoGrueso },
+      uAgujero: this.uAgujero,
       uAspecto: { value: 1 },
       uTexel: { value: new THREE.Vector2() },
-      ...this.uCamara,
       uFuerzaMinima: { value: ANALISIS_FLUJO.fuerzaMinima },
       uFuerzaPlena: { value: ANALISIS_FLUJO.fuerzaPlena },
+      ...this.uCamara,
+      ...this.uEstrellas,
     })
     this.matPaleta = material(PALETA_FRAG, {
-      uReducida: { value: this.reducida.texture },
+      uReducida: { value: this.reducidaMedia.texture },
       uProfundidad: { value: null },
       uTexelEntrada: { value: new THREE.Vector2() },
       uCieloPintado: { value: 1 },
+      uAspecto: { value: 1 },
       ...this.uCamara,
+      ...this.uEstrellas,
+    })
+    this.matPinceles = material(PINCELES_FRAG, {
+      uEntrada: { value: null },
+      uReducidaMedia: { value: this.reducidaMedia.texture },
+      uPintura: { value: this.pintura.texture },
+      uTexelEntrada: { value: new THREE.Vector2() },
+      uTexelMedia: { value: new THREE.Vector2() },
     })
     this.matBase = material(BASE_FRAG, { uPintura: { value: this.pintura.texture } })
     this.matFinal = material(FINAL_FRAG, {
@@ -227,32 +256,27 @@ export class PasoPintura extends Pass {
     const r = ANALISIS_FLUJO.reduccion
     const anchoR = Math.max(2, Math.round(ancho / r))
     const altoR = Math.max(2, Math.round(alto / r))
-    this.reducida.setSize(anchoR, altoR)
-    this.tensor.setSize(anchoR, altoR)
-    this.tensorIntermedio.setSize(anchoR, altoR)
-    this.historia[0].setSize(anchoR, altoR)
-    this.historia[1].setSize(anchoR, altoR)
-    this.flujo.setSize(anchoR, altoR)
-    this.pintura.setSize(anchoR, altoR)
+    for (const rt of [this.reducida, this.tensor, this.tensorIntermedio, ...this.historia, this.tensorSuave, this.flujo, this.flujoFino])
+      rt.setSize(anchoR, altoR)
     const anchoG = Math.max(2, Math.round(anchoR / 4))
     const altoG = Math.max(2, Math.round(altoR / 4))
     this.gruesoA.setSize(anchoG, altoG)
     this.gruesoB.setSize(anchoG, altoG)
+    const anchoM = Math.max(2, Math.round(ancho / 2))
+    const altoM = Math.max(2, Math.round(alto / 2))
+    this.reducidaMedia.setSize(anchoM, altoM)
+    this.pintura.setSize(anchoM, altoM)
+    this.pinceles.setSize(anchoM, altoM)
+    ;(this.matPinceles.uniforms.uTexelEntrada.value as THREE.Vector2).set(1 / ancho, 1 / alto)
+    ;(this.matPinceles.uniforms.uTexelMedia.value as THREE.Vector2).set(1 / anchoM, 1 / altoM)
     this.lienzo.setSize(ancho, alto)
     this.conHistoria = false
-    ;(this.matPromedioGrueso.uniforms.uTexelEntrada.value as THREE.Vector2).set(1 / anchoR, 1 / altoR)
-    const pasoG = ANALISIS_FLUJO.pasoDesenfoqueGrueso
-    ;(this.matGruesoH.uniforms.uPaso.value as THREE.Vector2).set(pasoG / anchoG, 0)
-    ;(this.matGruesoV.uniforms.uPaso.value as THREE.Vector2).set(0, pasoG / altoG)
 
-    ;(this.matReducir.uniforms.uTexelEntrada.value as THREE.Vector2).set(1 / ancho, 1 / alto)
     ;(this.matTensor.uniforms.uTexel.value as THREE.Vector2).set(1 / anchoR, 1 / altoR)
-    const paso = ANALISIS_FLUJO.pasoDesenfoque
-    ;(this.matDesenfoqueH.uniforms.uPaso.value as THREE.Vector2).set(paso / anchoR, 0)
-    ;(this.matDesenfoqueV.uniforms.uPaso.value as THREE.Vector2).set(0, paso / altoR)
     this.matFlujo.uniforms.uAspecto.value = ancho / alto
     ;(this.matFlujo.uniforms.uTexel.value as THREE.Vector2).set(1 / anchoR, 1 / altoR)
-    ;(this.matPaleta.uniforms.uTexelEntrada.value as THREE.Vector2).set(1 / ancho, 1 / alto)
+    ;(this.matPaleta.uniforms.uTexelEntrada.value as THREE.Vector2).set(0.5 / ancho, 0.5 / alto)
+    this.matPaleta.uniforms.uAspecto.value = ancho / alto
     this.matFinal.uniforms.uAspecto.value = ancho / alto
 
     this.reconstruirCapas()
@@ -299,8 +323,15 @@ export class PasoPintura extends Pass {
         vertexShader: PINCELADA_VERT,
         fragmentShader: PINCELADA_FRAG,
         uniforms: {
-          uFlujo: { value: this.flujo.texture },
+          uFlujo: { value: definicion.flujoFino ? this.flujoFino.texture : this.flujo.texture },
           uColor: { value: this.pintura.texture },
+          uTexelColor: { value: new THREE.Vector2(1 / this.pintura.width, 1 / this.pintura.height) },
+          uRealces: { value: this.pinceles.textures[0] },
+          uDetalle: { value: this.pinceles.textures[1] },
+          uAgujero: this.uAgujero,
+          uModo: { value: definicion.modo },
+          uDifuminado: { value: definicion.difuminado },
+          uUmbralDetalle: { value: definicion.umbralDetalle },
           uResolucion: { value: new THREE.Vector2(ancho, alto) },
           uAncho: { value: definicion.ancho * alto },
           uLargo: { value: definicion.largo * alto },
@@ -324,18 +355,60 @@ export class PasoPintura extends Pass {
       malla.frustumCulled = false
       const escena = new THREE.Scene()
       escena.add(malla)
-      return { definicion, geometria, material: materialCapa, malla, escena }
+      return { definicion, geometria, material: materialCapa, escena }
     })
   }
 
   override setDepthTexture(textura: THREE.Texture): void {
     this.matPaleta.uniforms.uProfundidad.value = textura
+    this.matVisibilidad.uniforms.uProfundidad.value = textura
   }
 
   private dibujar(renderer: THREE.WebGLRenderer, materialQuad: THREE.ShaderMaterial, destino: THREE.WebGLRenderTarget | null): void {
     this.quad.material = materialQuad
     renderer.setRenderTarget(destino)
     renderer.render(this.escenaQuad, this.camaraQuad)
+  }
+
+  private reducir(renderer: THREE.WebGLRenderer, entrada: THREE.Texture, texel: THREE.Vector2Like, destino: THREE.WebGLRenderTarget) {
+    this.matReducir.uniforms.uEntrada.value = entrada
+    ;(this.matReducir.uniforms.uTexelEntrada.value as THREE.Vector2).set(texel.x, texel.y)
+    this.dibujar(renderer, this.matReducir, destino)
+  }
+
+  private desenfocar(
+    renderer: THREE.WebGLRenderer,
+    entrada: THREE.WebGLRenderTarget,
+    paso: THREE.Vector2Like,
+    destino: THREE.WebGLRenderTarget,
+    historia: THREE.WebGLRenderTarget | null = null,
+    mezcla = 1,
+  ) {
+    const u = this.matDesenfoque.uniforms
+    u.uEntrada.value = entrada.texture
+    ;(u.uPaso.value as THREE.Vector2).set(paso.x, paso.y)
+    u.uHistoria.value = historia ? historia.texture : null
+    u.uMezcla.value = historia ? mezcla : 1
+    this.dibujar(renderer, this.matDesenfoque, destino)
+  }
+
+  /**
+   * El agujero en pantalla (centro y radio de la sombra en fracción de la altura) para el
+   * remolino del flujo. Sólo de lejos: cuando la sombra ocupa media pantalla, la forma del disco
+   * ya orienta los trazos y un remolino de pantalla sólo la estorbaría.
+   */
+  private situarAgujero(camara: THREE.Camera): void {
+    const distancia = camara.position.length()
+    const perspectiva = camara instanceof THREE.PerspectiveCamera ? camara : null
+    if (!perspectiva || distancia < 1.3) {
+      this.uAgujero.value.set(0.5, 0.5, 0.1, 0)
+      return
+    }
+    const p = this.auxiliar.set(0, 0, 0).project(perspectiva)
+    const angulo = Math.asin(Math.min(1, (RADIO_SOMBRA * Math.sqrt(Math.max(0, 1 - 1 / distancia))) / distancia))
+    const radio = (0.5 * Math.tan(angulo)) / Math.tan(THREE.MathUtils.degToRad(perspectiva.fov) / 2)
+    const delante = p.z < 1 ? 1 : 0
+    this.uAgujero.value.set(0.5 + 0.5 * p.x, 0.5 + 0.5 * p.y, radio, delante * (1 - suavizar(0.12, 0.25, radio)))
   }
 
   override render(
@@ -360,41 +433,67 @@ export class PasoPintura extends Pass {
       return
     }
 
+    const paso = Math.min(Math.max(deltaTime, 0), 0.25)
+    this.tiempo += paso
     const camara = this.camara
     if (camara) {
       camara.updateMatrixWorld()
       this.uCamara.uProyInversa.value.copy(camara.projectionMatrixInverse)
       this.uCamara.uCamaraMundo.value.copy(camara.matrixWorld)
+      this.situarAgujero(camara)
     }
-    this.matPaleta.uniforms.uCieloPintado.value = this.matPaleta.uniforms.uProfundidad.value ? this.cieloPintado : 0
+    const cieloPintado = this.matPaleta.uniforms.uProfundidad.value ? this.cieloPintado : 0
+    this.matPaleta.uniforms.uCieloPintado.value = cieloPintado
+    this.matVisibilidad.uniforms.uCieloPintado.value = cieloPintado
     this.matFinal.uniforms.uVineta.value = this.vineta
 
-    // 1. Reducción.
-    this.matReducir.uniforms.uEntrada.value = inputBuffer.texture
-    this.dibujar(renderer, this.matReducir, this.reducida)
+    const anchoR = this.reducida.width
+    const altoR = this.reducida.height
 
-    // 2. Tensor, desenfoque y suavizado temporal, flujo.
+    // 1. Reducciones.
+    this.reducir(renderer, inputBuffer.texture, { x: 1 / this.anchoActual, y: 1 / this.altoActual }, this.reducida)
+    this.reducir(renderer, inputBuffer.texture, { x: 0.5 / this.anchoActual, y: 0.5 / this.altoActual }, this.reducidaMedia)
+
+    // 2. Tensor: desenfoque fino con memoria, suave, grueso.
     this.dibujar(renderer, this.matTensor, this.tensor)
-    this.dibujar(renderer, this.matDesenfoqueH, this.tensorIntermedio)
+    this.desenfocar(renderer, this.tensor, { x: 1 / anchoR, y: 0 }, this.tensorIntermedio)
     const previa = this.historia[this.indiceHistoria]
-    const actual = this.historia[1 - this.indiceHistoria]
-    this.matDesenfoqueV.uniforms.uHistoria.value = previa.texture
-    this.matDesenfoqueV.uniforms.uMezcla.value = this.conHistoria
-      ? 1 - Math.exp(-Math.min(Math.max(deltaTime, 0), 0.25) / ANALISIS_FLUJO.tauTemporal)
-      : 1
-    this.dibujar(renderer, this.matDesenfoqueV, actual)
+    const fino = this.historia[1 - this.indiceHistoria]
+    const mezcla = this.conHistoria ? 1 - Math.exp(-paso / ANALISIS_FLUJO.tauTemporal) : 1
+    this.desenfocar(renderer, this.tensorIntermedio, { x: 0, y: 1 / altoR }, fino, previa, mezcla)
     this.indiceHistoria = 1 - this.indiceHistoria
     this.conHistoria = true
-    // Escala gruesa: la forma grande que orienta el pincel donde no hay detalle.
-    this.matPromedioGrueso.uniforms.uEntrada.value = actual.texture
-    this.dibujar(renderer, this.matPromedioGrueso, this.gruesoA)
-    this.dibujar(renderer, this.matGruesoH, this.gruesoB)
-    this.dibujar(renderer, this.matGruesoV, this.gruesoA)
-    this.matFlujo.uniforms.uTensor.value = actual.texture
-    this.dibujar(renderer, this.matFlujo, this.flujo)
+    const pasoSuave = ANALISIS_FLUJO.pasoDesenfoque
+    this.desenfocar(renderer, fino, { x: pasoSuave / anchoR, y: 0 }, this.tensorIntermedio)
+    this.desenfocar(renderer, this.tensorIntermedio, { x: 0, y: pasoSuave / altoR }, this.tensorSuave)
+    this.matPromedio.uniforms.uEntrada.value = this.tensorSuave.texture
+    ;(this.matPromedio.uniforms.uTexelEntrada.value as THREE.Vector2).set(1 / anchoR, 1 / altoR)
+    this.dibujar(renderer, this.matPromedio, this.gruesoA)
+    const pasoGrueso = ANALISIS_FLUJO.pasoDesenfoqueGrueso
+    this.desenfocar(renderer, this.gruesoA, { x: pasoGrueso / this.gruesoA.width, y: 0 }, this.gruesoB)
+    this.desenfocar(renderer, this.gruesoB, { x: 0, y: pasoGrueso / this.gruesoA.height }, this.gruesoA)
 
-    // 3. Color de pintura (paleta y cielo nocturno), base y pinceladas.
+    // Estrellas pintadas: proyección y visibilidad (antes del flujo, que gira alrededor de ellas).
+    this.uEstrellas.uNumEstrellas.value =
+      camara && cieloPintado > 0
+        ? proyectarEstrellas(this.estrellas, camara, this.tiempo, this.anchoActual / this.altoActual, this.uEstrellas.uEstrellas.value)
+        : 0
+    this.dibujar(renderer, this.matVisibilidad, this.visibilidadEstrellas)
+
+    // Flujos: suave (pincel grueso) y fino (pinceles pequeños).
+    const uf = this.matFlujo.uniforms
+    uf.uTensorFino.value = fino.texture
+    uf.uTensor.value = this.tensorSuave.texture
+    uf.uPesoGrueso.value = ANALISIS_FLUJO.pesoGrueso
+    this.dibujar(renderer, this.matFlujo, this.flujo)
+    uf.uTensor.value = fino.texture
+    uf.uPesoGrueso.value = 0.5 * ANALISIS_FLUJO.pesoGrueso
+    this.dibujar(renderer, this.matFlujo, this.flujoFino)
+
+    // 3. Color de pintura, base y pinceladas.
     this.dibujar(renderer, this.matPaleta, this.pintura)
+    this.matPinceles.uniforms.uEntrada.value = inputBuffer.texture
+    this.dibujar(renderer, this.matPinceles, this.pinceles)
     this.dibujar(renderer, this.matBase, this.lienzo)
     for (const capa of this.capas) {
       const u = capa.material.uniforms
@@ -418,26 +517,30 @@ export class PasoPintura extends Pass {
     this.capas = []
     for (const rt of [
       this.reducida,
+      this.reducidaMedia,
       this.tensor,
       this.tensorIntermedio,
       ...this.historia,
+      this.tensorSuave,
       this.gruesoA,
       this.gruesoB,
       this.flujo,
+      this.flujoFino,
       this.pintura,
+      this.pinceles,
       this.lienzo,
+      this.visibilidadEstrellas,
     ])
       rt.dispose()
     for (const m of [
       this.matReducir,
       this.matTensor,
-      this.matDesenfoqueH,
-      this.matDesenfoqueV,
-      this.matPromedioGrueso,
-      this.matGruesoH,
-      this.matGruesoV,
+      this.matDesenfoque,
+      this.matPromedio,
+      this.matVisibilidad,
       this.matFlujo,
       this.matPaleta,
+      this.matPinceles,
       this.matBase,
       this.matFinal,
     ])
