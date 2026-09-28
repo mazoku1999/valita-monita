@@ -5,6 +5,8 @@
  * lineal sólo si detrás hay otro pase.
  */
 
+import { CIELO_ACUARELA_GLSL, PALETA_EPOCA_GLSL, PAPEL_GLSL, RUIDO3_GLSL } from './acuarela'
+
 export const OKLAB_GLSL = /* glsl */ `
 vec3 linealDesdeSRGB(vec3 c) {
   c = clamp(c, 0.0, 1.0);
@@ -269,6 +271,32 @@ void main() {
 `
 
 /**
+ * Cielo en acuarela a 1/2 de resolución (su dibujo es amplio) y máscara del cielo abierto en A: donde
+ * la escena no escribió profundidad (ni planeta, ni la sombra del agujero, ni gas denso). Dentro
+ * del horizonte, antes de que aparezca la boca del agujero de gusano, no hay cielo: es oscuridad.
+ */
+export const CIELO_FRAG = /* glsl */ `
+uniform sampler2D uProfundidad;
+uniform vec2 uTexelEntrada;
+uniform float uCieloPintado;
+
+in vec2 vUv;
+out vec4 fragColor;
+
+${RUIDO3_GLSL}
+${CIELO_ACUARELA_GLSL}
+
+void main() {
+  float cielo = 0.0;
+  cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(-1.0, -1.0)).r);
+  cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(1.0, -1.0)).r);
+  cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(-1.0, 1.0)).r);
+  cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(1.0, 1.0)).r);
+  fragColor = vec4(cieloAcuarela(direccionMundo(vUv)), 0.25 * cielo * uCieloPintado);
+}
+`
+
+/**
  * Composición a resolución completa: colores planos por bandas de luminosidad (con un poco del
  * degradado original dentro de cada banda y el borde entre bandas suavizado a un píxel) y la tinta
  * encima. La tinta es la respuesta de la FDoG bajo el umbral, con una transición que engorda el
@@ -277,6 +305,17 @@ void main() {
 export const COMPONER_FRAG = /* glsl */ `
 uniform sampler2D uColorSuave;
 uniform sampler2D uLineas;
+// Cielo en acuarela (RGB) y máscara del cielo abierto (A), ver CIELO_FRAG.
+uniform sampler2D uCielo;
+// La luz de la escena muy suavizada (a 1/4): las aguadas son manchas amplias y redondas, sin el
+// ruido de las chispas en sus orillas.
+uniform sampler2D uAguada;
+// Aguadas de luz sobre el cielo: umbrales de luminancia (sRGB) de los tres tonos.
+uniform vec3 uUmbralesAguada;
+// Papel: resolución en píxeles y tamaño del grano.
+uniform vec2 uResolucion;
+uniform float uEscalaPapel;
+uniform float uFuerzaEpoca;
 // Bandas de color: umbrales de claridad (OKLab) entre bandas y el valor de las tres bandas claras;
 // la más oscura no se aplana (el cielo y las sombras conservan su degradado, sin manchas).
 uniform vec3 uUmbralesBanda;
@@ -293,6 +332,58 @@ in vec2 vUv;
 out vec4 fragColor;
 
 ${OKLAB_GLSL}
+${PALETA_EPOCA_GLSL}
+${PAPEL_GLSL}
+
+// Lectura bicúbica (B-spline con cuatro lecturas bilineales): las curvas de nivel de una textura
+// reducida salen redondas; con la interpolación lineal se veían poligonales, a escalones.
+vec4 texturaBicubica(sampler2D t, vec2 uv) {
+  vec2 tamano = vec2(textureSize(t, 0));
+  vec2 p = uv * tamano - 0.5;
+  vec2 f = fract(p);
+  vec2 i = floor(p);
+  vec2 f2 = f * f;
+  vec2 f3 = f2 * f;
+  vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+  vec2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+  vec2 w2 = (1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3) / 6.0;
+  vec2 w3 = f3 / 6.0;
+  vec2 s0 = w0 + w1;
+  vec2 s1 = w2 + w3;
+  vec2 c0 = (i - 0.5 + w1 / s0) / tamano;
+  vec2 c1 = (i + 1.5 + w3 / s1) / tamano;
+  return s0.y * (s0.x * texture(t, vec2(c0.x, c0.y)) + s1.x * texture(t, vec2(c1.x, c0.y))) +
+    s1.y * (s0.x * texture(t, vec2(c0.x, c1.y)) + s1.x * texture(t, vec2(c1.x, c1.y)));
+}
+
+// Orilla de acuarela: se oscurece el lado claro de cada umbral (el pigmento que se acumula en el
+// borde de una aguada al secarse). Se mide en el propio valor, no con derivadas de pantalla (que
+// cambian por bloques de 2×2 píxeles y dejaban el borde dentado): donde la luz cae despacio, la
+// orilla es ancha y suave, como en una aguada de verdad.
+float orillaAguada(float valor, float umbral, float ancho) {
+  float x = (valor - umbral) / ancho;
+  return x > 0.0 ? exp(-x * x) : 0.0;
+}
+
+// La luz de la escena sobre el cielo: tres aguadas del color de la luz (llevado a la paleta),
+// cada una más clara y amarilla, con su orilla.
+vec3 aguadasDeLuz(vec3 cielo, vec3 escena) {
+  float luz = dot(escena, vec3(0.299, 0.587, 0.114)) * 1.25;
+  float w = max(fwidth(luz), 1e-4) * 0.75;
+  float t1 = smoothstep(uUmbralesAguada.x - w, uUmbralesAguada.x + w, luz);
+  float t2 = smoothstep(uUmbralesAguada.y - w, uUmbralesAguada.y + w, luz);
+  float t3 = smoothstep(uUmbralesAguada.z - w, uUmbralesAguada.z + w, luz);
+  vec3 tono = colorDeEpoca(clamp(escena * (0.75 / max(luz, 0.02)), 0.0, 1.0), 0.75);
+  // La aguada más tenue es cielo aclarado con un toque de la luz (la Vía Láctea, un halo lejano).
+  vec3 c1 = mix(cielo * 1.4, tono, 0.2);
+  vec3 c2 = tono * 0.9;
+  vec3 c3 = mix(tono, vec3(1.0, 0.95, 0.82), 0.55);
+  vec3 c = mix(mix(mix(cielo, c1, t1), c2, t2), c3, t3);
+  float orillas = max(
+    max(orillaAguada(luz, uUmbralesAguada.x, 0.012), orillaAguada(luz, uUmbralesAguada.y, 0.02)),
+    orillaAguada(luz, uUmbralesAguada.z, 0.035));
+  return c * (1.0 - 0.16 * orillas);
+}
 
 vec3 coloresPlanos(vec3 srgb) {
   vec3 lab = oklab(srgb);
@@ -308,7 +399,13 @@ vec3 coloresPlanos(vec3 srgb) {
 }
 
 void main() {
-  vec3 c = coloresPlanos(texture(uColorSuave, vUv).rgb);
+  vec3 escena = texturaBicubica(uColorSuave, vUv).rgb;
+  vec4 cielo = texture(uCielo, vUv);
+  vec3 objeto = colorDeEpoca(coloresPlanos(escena), uFuerzaEpoca);
+  vec3 c = mix(objeto, aguadasDeLuz(cielo.rgb, texturaBicubica(uAguada, vUv).rgb), cielo.a);
+  // Papel de acuarela bajo todo (más visible en lo claro).
+  float grano = papel(vUv * uResolucion, uEscalaPapel);
+  c *= 0.9 + 0.12 * grano;
   if (uSoloTinta > 0.5) c = vec3(0.96, 0.93, 0.86);
   float respuesta = texture(uLineas, vUv).r;
   float tinta = 1.0 - smoothstep(uUmbral - uSuavidad, uUmbral, respuesta);

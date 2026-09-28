@@ -1,7 +1,8 @@
 import { Pass } from 'postprocessing'
 import * as THREE from 'three'
-import { COLORES_PLANOS, ORIENTACION, TINTA } from '../constantes/dibujo'
+import { ACUARELA, COLORES_PLANOS, ORIENTACION, TINTA } from '../constantes/dibujo'
 import {
+  CIELO_FRAG,
   COMPONER_FRAG,
   COPIA_FRAG,
   DESENFOQUE_FRAG,
@@ -54,6 +55,14 @@ export interface AjustesDibujo {
  * 4. Composición: colores planos por bandas y la tinta encima.
  */
 export class PasoDibujo extends Pass {
+  /** Cámara de la escena: ancla el cielo en acuarela a la esfera celeste. */
+  camara: THREE.Camera | null = null
+  /**
+   * Cuánto del cielo abierto se pinta como cielo (0–1). Dentro del horizonte, antes de que aparezca
+   * el agujero de gusano, la oscuridad es oscuridad.
+   */
+  cieloPintado = 1
+
   readonly ajustes: AjustesDibujo = {
     activo: true,
     soloTinta: false,
@@ -78,6 +87,13 @@ export class PasoDibujo extends Pass {
   private readonly colorSuave = objetivo(2, 2)
   private readonly respuesta = objetivo(2, 2)
   private readonly lineas = objetivo(2, 2)
+  private readonly cielo = objetivo(2, 2)
+  private readonly aguadaIntermedia = objetivo(2, 2)
+  private readonly aguada = objetivo(2, 2)
+  private readonly uCamara = {
+    uProyInversa: { value: new THREE.Matrix4() },
+    uCamaraMundo: { value: new THREE.Matrix4() },
+  }
 
   private readonly matReducir: THREE.ShaderMaterial
   private readonly matDesenfoque: THREE.ShaderMaterial
@@ -87,6 +103,7 @@ export class PasoDibujo extends Pass {
   private readonly matLic: THREE.ShaderMaterial
   private readonly matComponer: THREE.ShaderMaterial
   private readonly matCopia: THREE.ShaderMaterial
+  private readonly matCielo: THREE.ShaderMaterial
 
   private indiceHistoria = 0
   private conHistoria = false
@@ -138,6 +155,18 @@ export class PasoDibujo extends Pass {
       uTinta: { value: new THREE.Vector3(...TINTA.color) },
       uAPantalla: { value: 1 },
       uSoloTinta: { value: 0 },
+      uCielo: { value: this.cielo.texture },
+      uAguada: { value: this.aguada.texture },
+      uUmbralesAguada: { value: new THREE.Vector3(...ACUARELA.umbralesAguada) },
+      uResolucion: { value: new THREE.Vector2() },
+      uEscalaPapel: { value: ACUARELA.escalaPapel },
+      uFuerzaEpoca: { value: COLORES_PLANOS.fuerzaEpoca },
+    })
+    this.matCielo = material(CIELO_FRAG, {
+      uProfundidad: { value: null },
+      uTexelEntrada: { value: new THREE.Vector2() },
+      uCieloPintado: { value: 1 },
+      ...this.uCamara,
     })
     this.matCopia = material(COPIA_FRAG, { uEntrada: { value: null }, uAPantalla: { value: 1 } })
 
@@ -154,10 +183,15 @@ export class PasoDibujo extends Pass {
     this.altoActual = alto
     const anchoC = Math.max(2, Math.round(ancho / 4))
     const altoC = Math.max(2, Math.round(alto / 4))
-    for (const rt of [this.cuarto, this.tensor, this.tensorIntermedio, ...this.historia, this.orientacion]) rt.setSize(anchoC, altoC)
+    for (const rt of [this.cuarto, this.tensor, this.tensorIntermedio, ...this.historia, this.orientacion, this.aguadaIntermedia, this.aguada])
+      rt.setSize(anchoC, altoC)
     const anchoM = Math.max(2, Math.round(ancho / 2))
     const altoM = Math.max(2, Math.round(alto / 2))
-    for (const rt of [this.media, this.mediaIntermedia, this.luz, this.colorSuave, this.respuesta, this.lineas]) rt.setSize(anchoM, altoM)
+    for (const rt of [this.media, this.mediaIntermedia, this.luz, this.colorSuave, this.respuesta, this.lineas, this.cielo])
+      rt.setSize(anchoM, altoM)
+    ;(this.matCielo.uniforms.uTexelEntrada.value as THREE.Vector2).set(0.5 / ancho, 0.5 / alto)
+    ;(this.matComponer.uniforms.uResolucion.value as THREE.Vector2).set(ancho, alto)
+    this.matComponer.uniforms.uEscalaPapel.value = ACUARELA.escalaPapel * Math.max(1, alto / 720)
     this.conHistoria = false
     ;(this.matTensor.uniforms.uTexel.value as THREE.Vector2).set(1 / anchoC, 1 / altoC)
     ;(this.matDog.uniforms.uTexel.value as THREE.Vector2).set(1 / anchoM, 1 / altoM)
@@ -166,6 +200,7 @@ export class PasoDibujo extends Pass {
 
   override setDepthTexture(textura: THREE.Texture): void {
     this.matDog.uniforms.uProfundidad.value = textura
+    this.matCielo.uniforms.uProfundidad.value = textura
   }
 
   private dibujar(renderer: THREE.WebGLRenderer, materialQuad: THREE.ShaderMaterial, destino: THREE.WebGLRenderTarget | null): void {
@@ -252,7 +287,21 @@ export class PasoDibujo extends Pass {
     this.dibujar(renderer, this.matDog, this.respuesta)
     this.dibujar(renderer, this.matLic, this.lineas)
 
-    // 5. Composición.
+    // 5. Luz de las aguadas (muy suavizada), cielo en acuarela (anclado a la esfera celeste) y máscara
+    // del cielo abierto.
+    const pasoA = ACUARELA.desenfoqueAguada
+    this.desenfocar(renderer, this.cuarto, { x: pasoA / anchoC, y: 0 }, this.aguadaIntermedia)
+    this.desenfocar(renderer, this.aguadaIntermedia, { x: 0, y: pasoA / altoC }, this.aguada)
+    const camara = this.camara
+    if (camara) {
+      camara.updateMatrixWorld()
+      this.uCamara.uProyInversa.value.copy(camara.projectionMatrixInverse)
+      this.uCamara.uCamaraMundo.value.copy(camara.matrixWorld)
+    }
+    this.matCielo.uniforms.uCieloPintado.value = this.matCielo.uniforms.uProfundidad.value ? this.cieloPintado : 0
+    this.dibujar(renderer, this.matCielo, this.cielo)
+
+    // 6. Composición.
     const u = this.matComponer.uniforms
     u.uUmbral.value = this.ajustes.umbral
     u.uSoloTinta.value = this.ajustes.soloTinta ? 1 : 0
@@ -274,6 +323,9 @@ export class PasoDibujo extends Pass {
       this.colorSuave,
       this.respuesta,
       this.lineas,
+      this.cielo,
+      this.aguadaIntermedia,
+      this.aguada,
     ])
       rt.dispose()
     for (const m of [
@@ -285,6 +337,7 @@ export class PasoDibujo extends Pass {
       this.matLic,
       this.matComponer,
       this.matCopia,
+      this.matCielo,
     ])
       m.dispose()
     this.geometriaQuad.dispose()

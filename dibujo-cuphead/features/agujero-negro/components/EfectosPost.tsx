@@ -80,6 +80,11 @@ export function EfectosPost() {
   useEffect(() => () => pasoDibujo.dispose(), [pasoDibujo])
 
   useFrame(({ camera }) => {
+    pasoDibujo.camara = camera
+    // El cielo abierto se pinta como cielo salvo dentro del horizonte, entre que se cruza y que
+    // aparece la boca del agujero de gusano (0.6 → 0.4 del centro): ahí todo es oscuridad.
+    const distanciaCentro = camera.position.length()
+    pasoDibujo.cieloPintado = Math.max(suavizar(0.95, 1.4, distanciaCentro), suavizar(0.6, 0.4, distanciaCentro))
     pasoDibujo.ajustes.activo = ajuste('dibujo', 1) > 0.5
     pasoDibujo.ajustes.soloTinta = ajuste('dibujoSoloTinta', 0) > 0.5
     pasoDibujo.ajustes.umbral = ajuste('dibujoUmbral', TINTA.umbral)

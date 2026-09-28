@@ -56,6 +56,19 @@ export const COLORES_PLANOS = {
   croma: 1.2,
   /** Paso del desenfoque de simplificación (texels de 1/2; σ ≈ 1.75·paso). */
   desenfoque: 1.4,
+  /** Cuánto se acercan tono y croma a la paleta de época (0–1). */
+  fuerzaEpoca: 0.45,
+} as const
+
+/**
+ * Acuarela: aguadas de la luz de la escena sobre el cielo (umbrales de luminancia sRGB de sus tres
+ * tonos) y el grano del papel (px a 720 de alto; crece con la resolución).
+ */
+export const ACUARELA = {
+  umbralesAguada: [0.075, 0.18, 0.38] as const,
+  escalaPapel: 2.2,
+  /** Paso del desenfoque de la luz de las aguadas (texels de 1/4; σ ≈ 1.75·paso). */
+  desenfoqueAguada: 2.0,
 } as const
 
 /** Análisis de la orientación de los bordes (a 1/4): suavizado espacial y memoria en el tiempo. */
