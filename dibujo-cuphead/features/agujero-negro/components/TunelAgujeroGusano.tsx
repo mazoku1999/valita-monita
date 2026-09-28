@@ -40,6 +40,12 @@ const GUSANO = {
   luzCercanaTramo: 0.3,
   /** Exposición del cielo del otro lado durante el paso (vuelve a 1 en el último 20 % para salir). */
   exposicionPaso: 2.4,
+  /**
+   * Cielo del sistema solar en el dibujo animado: más tenue que en el original. El dibujo pone su
+   * propio cielo en acuarela y sus estrellas; con toda su luz, la Vía Láctea se volvía una franja
+   * que dominaba el cuadro y deformaba el halo del Sol.
+   */
+  luzCieloSistema: 0.5,
 } as const
 
 const limitar = (valor: number, minimo: number, maximo: number): number =>
@@ -216,7 +222,7 @@ export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
     // fino y oscuro, sin la lente del agujero de gusano); después sólo se dibuja éste.
     const cambioCielo = suavizar(VIAJE.cieloSistemaInicio, VIAJE.cieloSistemaPleno, progreso)
     u.uOpacidad.value = opacidad * (1 - cambioCielo)
-    recursos.uniformsCielo.uOpacidad.value = opacidad * cambioCielo
+    recursos.uniformsCielo.uOpacidad.value = opacidad * cambioCielo * GUSANO.luzCieloSistema
     recursos.cielo.visible = opacidad * cambioCielo > 0.002
     u.uExposicionLejana.value = 1 + (GUSANO.exposicionPaso - 1) * (1 - suavizar(0.8, 1, fraccion))
     u.uLuzCercana.value =

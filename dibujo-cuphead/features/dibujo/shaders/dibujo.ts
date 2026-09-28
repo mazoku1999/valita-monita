@@ -377,8 +377,9 @@ vec3 aguadasDeLuz(vec3 cielo, vec3 escena) {
   float t2 = smoothstep(uUmbralesAguada.y - w, uUmbralesAguada.y + w, luz);
   float t3 = smoothstep(uUmbralesAguada.z - w, uUmbralesAguada.z + w, luz);
   vec3 tono = colorDeEpoca(clamp(escena * (0.75 / max(luz, 0.02)), 0.0, 1.0), 0.75);
-  // La aguada más tenue es cielo aclarado con un toque de la luz (la Vía Láctea, un halo lejano).
-  vec3 c1 = mix(cielo * 1.4, tono, 0.2);
+  // La aguada más tenue es un resplandor frío: el cielo aclarado hacia un azul claro (la Vía Láctea,
+  // el borde de un halo). Con el tono de la luz, dorado sobre azul noche, salía gris parduzca.
+  vec3 c1 = mix(cielo * 1.45, vec3(0.58, 0.70, 0.76), 0.14);
   vec3 c2 = tono * 0.9;
   vec3 c3 = mix(tono, vec3(1.0, 0.95, 0.82), 0.55);
   vec3 c = mix(mix(mix(cielo, c1, t1), c2, t2), c3, t3);
