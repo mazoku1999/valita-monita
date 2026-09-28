@@ -30,6 +30,21 @@ float ruido(vec2 p) {
 }
 `
 
+// Tejido de lienzo: urdimbre y trama que pasan una por encima de la otra, hilos de grosor algo
+// irregular. Devuelve la altura (0–1) en un punto dado en píxeles.
+const TELA_GLSL = /* glsl */ `
+float tela(vec2 px, float periodo) {
+  vec2 p = px / periodo;
+  vec2 celda = floor(p);
+  vec2 f = fract(p);
+  float trama = sin(3.14159265 * f.y);
+  float urdimbre = sin(3.14159265 * f.x);
+  bool tramaArriba = mod(celda.x + celda.y, 2.0) < 1.0;
+  float h = tramaArriba ? trama * (0.55 + 0.45 * urdimbre) : urdimbre * (0.55 + 0.45 * trama);
+  return h * (0.8 + 0.4 * ruido(p * 0.37));
+}
+`
+
 const SRGB_GLSL = /* glsl */ `
 vec3 aSRGB(vec3 c) {
   c = clamp(c, 0.0, 1.0);
@@ -352,13 +367,22 @@ void main() {
  */
 export const BASE_FRAG = /* glsl */ `
 uniform sampler2D uPintura;
+uniform vec2 uResolucion;
+uniform float uPeriodoTela;
 
 in vec2 vUv;
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
+layout(location = 1) out vec4 salidaAltura;
+
+${RUIDO_GLSL}
+${TELA_GLSL}
 
 void main() {
   vec3 c = texture(uPintura, vUv).rgb;
-  fragColor = vec4(c * 0.85, 1.0);
+  // Pintura diluida: un poco más apagada y con algo del color crudo de la tela preparada.
+  fragColor = vec4(mix(c * 0.85, vec3(0.72, 0.66, 0.55), 0.08), 1.0);
+  // Altura: sólo la trama del lienzo bajo una capa fina.
+  salidaAltura = vec4(0.04 + 0.1 * tela(vUv * uResolucion, uPeriodoTela), 0.0, 0.0, 1.0);
 }
 `
 
@@ -518,7 +542,9 @@ in vec2 vTamano;
 in vec3 vColor;
 in vec4 vSemilla;
 in float vOpacidad;
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
+// Grosor de la pintura (empaste): lo usa la luz rasante del pase final.
+layout(location = 1) out vec4 salidaAltura;
 
 ${RUIDO_GLSL}
 
@@ -558,6 +584,12 @@ void main() {
     color = 0.35 + 0.65 * vec3(hash12(vSemilla.xy * 311.0), hash12(vSemilla.yz * 173.0), hash12(vSemilla.zw * 229.0));
   }
   fragColor = vec4(color * alfa, alfa);
+  // Empaste: cresta a lo largo del centro, surcos de las cerdas, más carga donde el pincel se
+  // apoya y menos donde se queda seco.
+  float perfil = 1.0 - v * v;
+  float carga = mix(1.0, 0.55, smoothstep(0.15, 1.0, u));
+  float altura = (0.35 + 0.65 * perfil) * carga * (0.62 + 0.38 * fibra);
+  salidaAltura = vec4(altura * alfa, 0.0, 0.0, alfa);
 }
 `
 
@@ -567,19 +599,45 @@ void main() {
  */
 export const FINAL_FRAG = /* glsl */ `
 uniform sampler2D uLienzo;
+uniform sampler2D uAltura;
 uniform float uAPantalla;
 uniform float uEntradaLineal;
 uniform float uAspecto;
 uniform float uVineta;
+// Relieve: paso de la derivada (texels; crece con la resolución para que la luz lea igual los
+// trazos, que se miden en fracciones de la altura), fuerza, sombreado y brillo del óleo.
+uniform vec2 uTexel;
+uniform float uPasoRelieve;
+uniform float uRelieve;
+uniform float uSombreado;
+uniform float uBrillo;
 
 in vec2 vUv;
 out vec4 fragColor;
 
 ${SRGB_GLSL}
 
+float altura(vec2 uv) {
+  return texture(uAltura, uv).r;
+}
+
 void main() {
   vec3 c = texture(uLienzo, vUv).rgb;
-  if (uEntradaLineal > 0.5) c = aSRGB(c);
+  if (uEntradaLineal > 0.5) {
+    c = aSRGB(c);
+  } else {
+    // Luz de sala rasante desde arriba a la izquierda sobre el grosor de la pintura.
+    vec2 d = uTexel * uPasoRelieve;
+    float h = altura(vUv);
+    float dx = altura(vUv + vec2(d.x, 0.0)) - altura(vUv - vec2(d.x, 0.0));
+    float dy = altura(vUv + vec2(0.0, d.y)) - altura(vUv - vec2(0.0, d.y));
+    vec3 n = normalize(vec3(-dx * uRelieve, -dy * uRelieve, 1.0));
+    vec3 luz = normalize(vec3(-0.45, 0.55, 0.7));
+    float difusa = max(dot(n, luz), 0.0) / luz.z;
+    vec3 medio = normalize(luz + vec3(0.0, 0.0, 1.0));
+    float especular = pow(max(dot(n, medio), 0.0), 40.0) * smoothstep(0.25, 0.7, h);
+    c = c * mix(1.0, difusa, uSombreado) + uBrillo * especular * vec3(1.0, 0.97, 0.9);
+  }
   // Viñeta suave, como la luz que cae en el centro de un cuadro colgado.
   vec2 q = (vUv - 0.5) * vec2(uAspecto, 1.0);
   float r = length(q) / length(vec2(0.5 * uAspecto, 0.5));

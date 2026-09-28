@@ -35,6 +35,9 @@ const RESPLANDOR_POLVO = { umbral: 0.5, radio: 0.85, niveles: 6, intensidad: 7.5
  */
 const BLOOM_CHISPAS = { umbral: 0.9, intensidad: 2.0, radio: 0.85 } as const
 
+/** Luz rasante sobre el empaste de la pintura (ver `features/pintura`). */
+const RELIEVE = { fuerza: 1.4, sombreado: 0.7, brillo: 0.09 } as const
+
 /** El mismo balance de color que el gas y el polvo (ver el shader de la lente): naranja melocotón. */
 const BALANCE_COLOR = new THREE.Vector3(1.0, 1.05, 1.2).divideScalar(1.05)
 
@@ -88,6 +91,9 @@ export function EfectosPost() {
     pasoPintura.ajustes.depurar = ajuste('pinturaDepurar', 0) > 0.5
     pasoPintura.ajustes.escalaAncho = ajuste('pinturaAncho', 1)
     pasoPintura.ajustes.escalaLargo = ajuste('pinturaLargo', 1)
+    pasoPintura.relieve.fuerza = ajuste('pinturaRelieve', RELIEVE.fuerza)
+    pasoPintura.relieve.sombreado = ajuste('pinturaSombreado', RELIEVE.sombreado)
+    pasoPintura.relieve.brillo = ajuste('pinturaBrillo', RELIEVE.brillo)
     // Ajustables desde la URL sólo en desarrollo (ver `store/vistaCamaraStore.ts`).
     efectoCamara.luminanceMaterial.threshold = ajuste('bloomUmbral', RESPLANDOR_CAMARA.umbral)
     // En la zambullida (por dentro de 13 unidades, donde no llega ningún encuadre) el disco y el

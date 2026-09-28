@@ -118,6 +118,8 @@ export class PasoPintura extends Pass {
   cieloPintado = 1
   /** Oscurecimiento máximo de las esquinas. */
   vineta = 0.38
+  /** Luz rasante sobre el empaste: fuerza del relieve, cuánto sombrea y brillo del óleo. */
+  relieve = { fuerza: 1.4, sombreado: 0.7, brillo: 0.09 }
 
   private readonly escenaQuad = new THREE.Scene()
   private readonly camaraQuad = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
@@ -147,7 +149,16 @@ export class PasoPintura extends Pass {
     depthBuffer: false,
     count: 2,
   })
-  private readonly lienzo = objetivo(2, 2)
+  /** Lienzo: [0] color, [1] grosor de la pintura (empaste). */
+  private readonly lienzo = new THREE.WebGLRenderTarget(2, 2, {
+    type: THREE.HalfFloatType,
+    format: THREE.RGBAFormat,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    generateMipmaps: false,
+    depthBuffer: false,
+    count: 2,
+  })
   private readonly visibilidadEstrellas = objetivo(ESTRELLAS_PINTADAS.maximoVisibles, 1, THREE.NearestFilter)
 
   private readonly estrellas = generarEstrellasPintadas()
@@ -232,13 +243,23 @@ export class PasoPintura extends Pass {
       uTexelEntrada: { value: new THREE.Vector2() },
       uTexelMedia: { value: new THREE.Vector2() },
     })
-    this.matBase = material(BASE_FRAG, { uPintura: { value: this.pintura.texture } })
+    this.matBase = material(BASE_FRAG, {
+      uPintura: { value: this.pintura.texture },
+      uResolucion: { value: new THREE.Vector2() },
+      uPeriodoTela: { value: 4 },
+    })
     this.matFinal = material(FINAL_FRAG, {
       uLienzo: { value: this.lienzo.texture },
       uAPantalla: { value: 1 },
       uEntradaLineal: { value: 0 },
       uAspecto: { value: 1 },
       uVineta: { value: this.vineta },
+      uAltura: { value: this.lienzo.textures[1] },
+      uTexel: { value: new THREE.Vector2() },
+      uPasoRelieve: { value: 1 },
+      uRelieve: { value: this.relieve.fuerza },
+      uSombreado: { value: this.relieve.sombreado },
+      uBrillo: { value: this.relieve.brillo },
     })
 
     this.quad = new THREE.Mesh(this.geometriaQuad, this.matReducir)
@@ -278,6 +299,11 @@ export class PasoPintura extends Pass {
     ;(this.matPaleta.uniforms.uTexelEntrada.value as THREE.Vector2).set(0.5 / ancho, 0.5 / alto)
     this.matPaleta.uniforms.uAspecto.value = ancho / alto
     this.matFinal.uniforms.uAspecto.value = ancho / alto
+    ;(this.matFinal.uniforms.uTexel.value as THREE.Vector2).set(1 / ancho, 1 / alto)
+    // La luz lee el relieve a la escala de los trazos (que se miden en fracciones de la altura).
+    this.matFinal.uniforms.uPasoRelieve.value = Math.max(1, alto / 720)
+    ;(this.matBase.uniforms.uResolucion.value as THREE.Vector2).set(ancho, alto)
+    this.matBase.uniforms.uPeriodoTela.value = Math.max(3, 0.0045 * alto)
 
     this.reconstruirCapas()
   }
@@ -446,6 +472,9 @@ export class PasoPintura extends Pass {
     this.matPaleta.uniforms.uCieloPintado.value = cieloPintado
     this.matVisibilidad.uniforms.uCieloPintado.value = cieloPintado
     this.matFinal.uniforms.uVineta.value = this.vineta
+    this.matFinal.uniforms.uRelieve.value = this.relieve.fuerza
+    this.matFinal.uniforms.uSombreado.value = this.relieve.sombreado
+    this.matFinal.uniforms.uBrillo.value = this.relieve.brillo
 
     const anchoR = this.reducida.width
     const altoR = this.reducida.height
