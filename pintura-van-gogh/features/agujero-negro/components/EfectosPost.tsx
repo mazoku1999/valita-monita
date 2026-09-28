@@ -91,6 +91,8 @@ export function EfectosPost() {
     pasoPintura.ajustes.depurar = ajuste('pinturaDepurar', 0) > 0.5
     pasoPintura.ajustes.escalaAncho = ajuste('pinturaAncho', 1)
     pasoPintura.ajustes.escalaLargo = ajuste('pinturaLargo', 1)
+    pasoPintura.ajustes.capas = ajuste('pinturaCapas', 7)
+    pasoPintura.ajustes.medir = ajuste('pinturaTiempos', 0) > 0.5
     pasoPintura.relieve.fuerza = ajuste('pinturaRelieve', RELIEVE.fuerza)
     pasoPintura.relieve.sombreado = ajuste('pinturaSombreado', RELIEVE.sombreado)
     pasoPintura.relieve.brillo = ajuste('pinturaBrillo', RELIEVE.brillo)

@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { ANALISIS_FLUJO, CAPAS_PINCELADAS, type CapaPinceladas } from '../constantes/pinceladas'
 import {
   BASE_FRAG,
+  CIELO_FRAG,
   DESENFOQUE_FRAG,
   FINAL_FRAG,
   FLUJO_FRAG,
@@ -17,9 +18,7 @@ import {
   VISIBILIDAD_ESTRELLAS_FRAG,
 } from '../shaders/pintura'
 import { ESTRELLAS_PINTADAS, generarEstrellasPintadas, proyectarEstrellas } from './estrellasPintadas'
-
-/** Secciones de la tira de cada pincelada (8 tramos: curvas suaves sin disparar los vértices). */
-const SECCIONES = 9
+import { MedidorGpu } from './medidorGpu'
 
 /** Radio aparente de la sombra (parámetro de impacto crítico, r_s = 1). */
 const RADIO_SOMBRA = 2.598
@@ -61,15 +60,15 @@ const material = (fragmentShader: string, uniforms: Record<string, THREE.IUnifor
     depthWrite: false,
   })
 
-/** Tira base de una pincelada: (fracción a lo largo, lado). */
-const crearTira = (): THREE.BufferGeometry => {
+/** Tira base de una pincelada con `secciones` cortes: (fracción a lo largo, lado). */
+const crearTira = (secciones: number): THREE.BufferGeometry => {
   const posiciones: number[] = []
   const indices: number[] = []
-  for (let i = 0; i < SECCIONES; i++) {
-    const u = i / (SECCIONES - 1)
+  for (let i = 0; i < secciones; i++) {
+    const u = i / (secciones - 1)
     posiciones.push(u, -1, 0, u, 1, 0)
   }
-  for (let i = 0; i < SECCIONES - 1; i++) {
+  for (let i = 0; i < secciones - 1; i++) {
     const a = 2 * i
     indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2)
   }
@@ -81,6 +80,7 @@ const crearTira = (): THREE.BufferGeometry => {
 
 interface Capa {
   definicion: CapaPinceladas
+  tira: THREE.BufferGeometry
   geometria: THREE.InstancedBufferGeometry
   material: THREE.ShaderMaterial
   escena: THREE.Scene
@@ -92,6 +92,10 @@ export interface AjustesPintura {
   depurar: boolean
   escalaAncho: number
   escalaLargo: number
+  /** Máscara de bits de las capas que se pintan (1 fondo, 2 detalle, 4 realces). */
+  capas: number
+  /** Cronometra cada sección en la GPU (desarrollo; ver `medidorGpu.ts`). */
+  medir: boolean
 }
 
 /**
@@ -108,7 +112,15 @@ export interface AjustesPintura {
  * 4. Salida a pantalla con viñeta.
  */
 export class PasoPintura extends Pass {
-  readonly ajustes: AjustesPintura = { activa: true, depurar: false, escalaAncho: 1, escalaLargo: 1 }
+  readonly ajustes: AjustesPintura = {
+    activa: true,
+    depurar: false,
+    escalaAncho: 1,
+    escalaLargo: 1,
+    capas: 7,
+    medir: false,
+  }
+  private medidor: MedidorGpu | null = null
   /** Cámara de la escena: ancla el cielo pintado a la esfera celeste y sitúa el agujero. */
   camara: THREE.Camera | null = null
   /**
@@ -125,7 +137,6 @@ export class PasoPintura extends Pass {
   private readonly camaraQuad = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private readonly geometriaQuad = new THREE.PlaneGeometry(2, 2)
   private readonly quad: THREE.Mesh
-  private readonly tira = crearTira()
 
   private readonly reducida = objetivo(2, 2)
   private readonly reducidaMedia = objetivo(2, 2)
@@ -138,6 +149,16 @@ export class PasoPintura extends Pass {
   private readonly gruesoB = objetivo(2, 2)
   private readonly flujo = objetivo(2, 2)
   private readonly flujoFino = objetivo(2, 2)
+  /** Cielo pintado a 1/4: [0] color (A: corriente), [1] dirección de los remolinos. */
+  private readonly cielo = new THREE.WebGLRenderTarget(2, 2, {
+    type: THREE.HalfFloatType,
+    format: THREE.RGBAFormat,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    generateMipmaps: false,
+    depthBuffer: false,
+    count: 2,
+  })
   private readonly pintura = objetivo(2, 2)
   /** Preparación de los pinceles finos: [0] realces, [1] detalle (ver PINCELES_FRAG). */
   private readonly pinceles = new THREE.WebGLRenderTarget(2, 2, {
@@ -179,6 +200,7 @@ export class PasoPintura extends Pass {
   private readonly matPromedio: THREE.ShaderMaterial
   private readonly matVisibilidad: THREE.ShaderMaterial
   private readonly matFlujo: THREE.ShaderMaterial
+  private readonly matCielo: THREE.ShaderMaterial
   private readonly matPaleta: THREE.ShaderMaterial
   private readonly matPinceles: THREE.ShaderMaterial
   private readonly matBase: THREE.ShaderMaterial
@@ -213,6 +235,7 @@ export class PasoPintura extends Pass {
       uProfundidad: { value: null },
       uReducida: { value: this.reducida.texture },
       uCieloPintado: { value: 1 },
+      uAspecto: { value: 1 },
     })
     this.matFlujo = material(FLUJO_FRAG, {
       uTensor: { value: null },
@@ -221,18 +244,19 @@ export class PasoPintura extends Pass {
       uPesoGrueso: { value: ANALISIS_FLUJO.pesoGrueso },
       uAgujero: this.uAgujero,
       uAspecto: { value: 1 },
-      uTexel: { value: new THREE.Vector2() },
       uFuerzaMinima: { value: ANALISIS_FLUJO.fuerzaMinima },
       uFuerzaPlena: { value: ANALISIS_FLUJO.fuerzaPlena },
-      ...this.uCamara,
+      uRemolino: { value: this.cielo.textures[1] },
       ...this.uEstrellas,
     })
+    this.matCielo = material(CIELO_FRAG, { uTexel: { value: new THREE.Vector2() }, ...this.uCamara })
     this.matPaleta = material(PALETA_FRAG, {
       uReducida: { value: this.reducidaMedia.texture },
       uProfundidad: { value: null },
       uTexelEntrada: { value: new THREE.Vector2() },
       uCieloPintado: { value: 1 },
       uAspecto: { value: 1 },
+      uCielo: { value: this.cielo.textures[0] },
       ...this.uCamara,
       ...this.uEstrellas,
     })
@@ -277,8 +301,9 @@ export class PasoPintura extends Pass {
     const r = ANALISIS_FLUJO.reduccion
     const anchoR = Math.max(2, Math.round(ancho / r))
     const altoR = Math.max(2, Math.round(alto / r))
-    for (const rt of [this.reducida, this.tensor, this.tensorIntermedio, ...this.historia, this.tensorSuave, this.flujo, this.flujoFino])
+    for (const rt of [this.reducida, this.tensor, this.tensorIntermedio, ...this.historia, this.tensorSuave, this.flujo, this.flujoFino, this.cielo])
       rt.setSize(anchoR, altoR)
+    ;(this.matCielo.uniforms.uTexel.value as THREE.Vector2).set(1 / anchoR, 1 / altoR)
     const anchoG = Math.max(2, Math.round(anchoR / 4))
     const altoG = Math.max(2, Math.round(altoR / 4))
     this.gruesoA.setSize(anchoG, altoG)
@@ -295,9 +320,9 @@ export class PasoPintura extends Pass {
 
     ;(this.matTensor.uniforms.uTexel.value as THREE.Vector2).set(1 / anchoR, 1 / altoR)
     this.matFlujo.uniforms.uAspecto.value = ancho / alto
-    ;(this.matFlujo.uniforms.uTexel.value as THREE.Vector2).set(1 / anchoR, 1 / altoR)
     ;(this.matPaleta.uniforms.uTexelEntrada.value as THREE.Vector2).set(0.5 / ancho, 0.5 / alto)
     this.matPaleta.uniforms.uAspecto.value = ancho / alto
+    this.matVisibilidad.uniforms.uAspecto.value = ancho / alto
     this.matFinal.uniforms.uAspecto.value = ancho / alto
     ;(this.matFinal.uniforms.uTexel.value as THREE.Vector2).set(1 / ancho, 1 / alto)
     // La luz lee el relieve a la escala de los trazos (que se miden en fracciones de la altura).
@@ -313,6 +338,7 @@ export class PasoPintura extends Pass {
     for (const capa of this.capas) {
       capa.geometria.dispose()
       capa.material.dispose()
+      capa.tira.dispose()
     }
     const ancho = this.anchoActual
     const alto = this.altoActual
@@ -337,9 +363,10 @@ export class PasoPintura extends Pass {
         for (let c = 0; c < 4; c++) semillas[4 * k + c] = azar()
       })
 
+      const tira = crearTira(definicion.secciones)
       const geometria = new THREE.InstancedBufferGeometry()
-      geometria.index = this.tira.index
-      geometria.setAttribute('position', this.tira.getAttribute('position'))
+      geometria.index = tira.index
+      geometria.setAttribute('position', tira.getAttribute('position'))
       geometria.setAttribute('aAncla', new THREE.InstancedBufferAttribute(anclas, 2))
       geometria.setAttribute('aSemilla', new THREE.InstancedBufferAttribute(semillas, 4))
       geometria.instanceCount = total
@@ -363,6 +390,7 @@ export class PasoPintura extends Pass {
           uLargo: { value: definicion.largo * alto },
           uVariacion: { value: definicion.variacion },
           uDesvio: { value: definicion.desvio },
+          uPasos: { value: definicion.pasos },
           uDepurar: { value: 0 },
         },
         depthTest: false,
@@ -381,7 +409,7 @@ export class PasoPintura extends Pass {
       malla.frustumCulled = false
       const escena = new THREE.Scene()
       escena.add(malla)
-      return { definicion, geometria, material: materialCapa, escena }
+      return { definicion, tira, geometria, material: materialCapa, escena }
     })
   }
 
@@ -461,6 +489,10 @@ export class PasoPintura extends Pass {
 
     const paso = Math.min(Math.max(deltaTime, 0), 0.25)
     this.tiempo += paso
+    if (this.ajustes.medir && !this.medidor) this.medidor = new MedidorGpu(renderer.getContext() as WebGL2RenderingContext)
+    const medidor = this.ajustes.medir ? this.medidor : null
+    medidor?.recoger()
+    medidor?.inicio('analisis')
     const camara = this.camara
     if (camara) {
       camara.updateMatrixWorld()
@@ -509,6 +541,9 @@ export class PasoPintura extends Pass {
         : 0
     this.dibujar(renderer, this.matVisibilidad, this.visibilidadEstrellas)
 
+    // Cielo pintado y dirección de sus remolinos (una vez por fotograma, a 1/4).
+    this.dibujar(renderer, this.matCielo, this.cielo)
+
     // Flujos: suave (pincel grueso) y fino (pinceles pequeños).
     const uf = this.matFlujo.uniforms
     uf.uTensorFino.value = fino.texture
@@ -519,22 +554,35 @@ export class PasoPintura extends Pass {
     uf.uPesoGrueso.value = 0.5 * ANALISIS_FLUJO.pesoGrueso
     this.dibujar(renderer, this.matFlujo, this.flujoFino)
 
+    medidor?.fin()
+
     // 3. Color de pintura, base y pinceladas.
+    medidor?.inicio('paleta')
     this.dibujar(renderer, this.matPaleta, this.pintura)
+    medidor?.fin()
+    medidor?.inicio('pinceles')
     this.matPinceles.uniforms.uEntrada.value = inputBuffer.texture
     this.dibujar(renderer, this.matPinceles, this.pinceles)
+    medidor?.fin()
+    medidor?.inicio('base')
     this.dibujar(renderer, this.matBase, this.lienzo)
-    for (const capa of this.capas) {
+    medidor?.fin()
+    for (const [indice, capa] of this.capas.entries()) {
+      if ((this.ajustes.capas & (1 << indice)) === 0) continue
       const u = capa.material.uniforms
       u.uAncho.value = capa.definicion.ancho * this.altoActual * this.ajustes.escalaAncho
       u.uLargo.value = capa.definicion.largo * this.altoActual * this.ajustes.escalaLargo
       u.uDepurar.value = this.ajustes.depurar ? 1 : 0
+      medidor?.inicio(`capa ${capa.definicion.nombre}`)
       renderer.setRenderTarget(this.lienzo)
       renderer.render(capa.escena, this.camaraQuad)
+      medidor?.fin()
     }
 
     // 4. Salida.
+    medidor?.inicio('final')
     this.dibujar(renderer, this.matFinal, destino)
+    medidor?.fin()
     renderer.autoClear = limpiezaPrevia
   }
 
@@ -542,6 +590,7 @@ export class PasoPintura extends Pass {
     for (const capa of this.capas) {
       capa.geometria.dispose()
       capa.material.dispose()
+      capa.tira.dispose()
     }
     this.capas = []
     for (const rt of [
@@ -555,6 +604,7 @@ export class PasoPintura extends Pass {
       this.gruesoB,
       this.flujo,
       this.flujoFino,
+      this.cielo,
       this.pintura,
       this.pinceles,
       this.lienzo,
@@ -568,6 +618,7 @@ export class PasoPintura extends Pass {
       this.matPromedio,
       this.matVisibilidad,
       this.matFlujo,
+      this.matCielo,
       this.matPaleta,
       this.matPinceles,
       this.matBase,
@@ -575,6 +626,5 @@ export class PasoPintura extends Pass {
     ])
       m.dispose()
     this.geometriaQuad.dispose()
-    this.tira.dispose()
   }
 }

@@ -36,6 +36,8 @@ export type ClaveAjuste =
   | 'pinturaRelieve'
   | 'pinturaSombreado'
   | 'pinturaBrillo'
+  | 'pinturaCapas'
+  | 'pinturaTiempos'
 
 export type AjustesCalibracion = Partial<Record<ClaveAjuste, number>>
 
@@ -69,6 +71,8 @@ const CLAVES_AJUSTE: readonly ClaveAjuste[] = [
   'pinturaRelieve',
   'pinturaSombreado',
   'pinturaBrillo',
+  'pinturaCapas',
+  'pinturaTiempos',
 ]
 
 type Escucha = () => void

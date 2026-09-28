@@ -19,9 +19,9 @@ const monoNarrativa = IBM_Plex_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Dust.Blue — One star, one scroll',
+  title: 'Dust.Blue — A painted night',
   description:
-    'Un agujero negro procedural en tiempo real: disco de acreción con lente gravitacional, anillo de fotones, polvo estelar y sonido generado sin assets externos.',
+    'El mismo viaje por un agujero negro, el agujero de gusano y nuestro sistema solar, repintado en cada fotograma con pinceladas de óleo al estilo de Van Gogh.',
   generator: 'v0.app',
   icons: {
     icon: [

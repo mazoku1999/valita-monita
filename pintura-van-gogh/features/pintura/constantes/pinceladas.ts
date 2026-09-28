@@ -28,6 +28,9 @@ export interface CapaPinceladas {
   readonly modo: 0 | 1 | 2
   /** El pincel grueso sigue el flujo suave; los finos, el flujo fino (menos desenfocado). */
   readonly flujoFino: boolean
+  /** Secciones de la tira y pasos de integración por mitad de trazo (los cortos necesitan menos). */
+  readonly secciones: number
+  readonly pasos: number
 }
 
 export const CAPAS_PINCELADAS: readonly CapaPinceladas[] = [
@@ -42,30 +45,36 @@ export const CAPAS_PINCELADAS: readonly CapaPinceladas[] = [
     umbralDetalle: 0,
     modo: 0,
     flujoFino: false,
+    secciones: 9,
+    pasos: 6,
   },
   {
     nombre: 'detalle',
     ancho: 0.0062,
     largo: 0.022,
-    espaciado: 0.006,
+    espaciado: 0.0072,
     variacion: 0.25,
     desvio: 0.1,
     difuminado: 0,
     umbralDetalle: 0.045,
     modo: 1,
     flujoFino: true,
+    secciones: 6,
+    pasos: 4,
   },
   {
     nombre: 'realces',
-    ancho: 0.0045,
-    largo: 0.016,
-    espaciado: 0.0045,
+    ancho: 0.0048,
+    largo: 0.017,
+    espaciado: 0.0064,
     variacion: 0.2,
     desvio: 0.08,
     difuminado: 0,
     umbralDetalle: 0.06,
     modo: 2,
     flujoFino: true,
+    secciones: 4,
+    pasos: 3,
   },
 ]
 

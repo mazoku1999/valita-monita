@@ -227,23 +227,24 @@ float corrienteCielo(vec3 dir) {
 export const CIELO_GLSL = /* glsl */ `
 // Cielo nocturno: azul profundo que varía despacio, bandas suaves a lo largo de la corriente y,
 // sólo en algunas zonas, hilos claros de celeste y blanco azulado (los remolinos luminosos del
-// cuadro), más algún toque verdoso.
-vec3 colorCielo(vec3 dir) {
-  float psi = corrienteCielo(dir);
+// cuadro), más algún toque verdoso. Las fases de las bandas dependen SÓLO de la corriente: así son
+// curvas de nivel exactas, paralelas a los trazos (si se mezclaba otro ruido en la fase, las
+// bandas cruzaban los trazos y se veían escalonadas); el ruido lento sólo cambia su intensidad.
+vec3 colorCielo(vec3 dir, float psi) {
   float lento = ruido3(dir * 1.6 + vec3(11.0, 3.0, 7.0));
-  float zonas = smoothstep(0.42, 0.72, ruido3(dir * 1.15 + vec3(-4.0, 8.0, 2.5)));
+  float zonas = smoothstep(0.5, 0.78, ruido3(dir * 1.15 + vec3(-4.0, 8.0, 2.5)));
   vec3 noche = vec3(0.045, 0.075, 0.190);
   vec3 ultramar = vec3(0.100, 0.180, 0.430);
   vec3 cobalto = vec3(0.180, 0.330, 0.620);
   vec3 celeste = vec3(0.500, 0.660, 0.830);
   vec3 blancoAzul = vec3(0.800, 0.860, 0.900);
   vec3 turquesa = vec3(0.130, 0.360, 0.420);
-  float banda = 0.5 + 0.5 * sin(6.2831853 * (psi * 3.2 + 0.4 * lento));
+  float banda = 0.5 + 0.5 * sin(6.2831853 * psi * 3.2);
   vec3 c = mix(noche, ultramar, clamp(0.3 + 0.45 * lento + 0.3 * (banda - 0.5), 0.0, 1.0));
-  c = mix(c, cobalto, smoothstep(0.7, 1.0, banda) * (0.2 + 0.5 * zonas));
-  float hilo = pow(0.5 + 0.5 * sin(6.2831853 * (psi * 9.0 + 1.3 * lento)), 7.0);
-  c = mix(c, celeste, hilo * zonas * 0.8);
-  c = mix(c, blancoAzul, hilo * hilo * zonas * 0.5);
+  c = mix(c, cobalto, smoothstep(0.7, 1.0, banda) * (0.2 + 0.45 * zonas));
+  float hilo = pow(0.5 + 0.5 * sin(6.2831853 * (psi * 9.0 + 0.25)), 10.0);
+  c = mix(c, celeste, hilo * zonas * 0.7);
+  c = mix(c, blancoAzul, hilo * hilo * zonas * 0.4);
   c = mix(c, turquesa, smoothstep(0.66, 0.86, lento) * (1.0 - zonas) * 0.4);
   return c;
 }

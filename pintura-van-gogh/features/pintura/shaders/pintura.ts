@@ -170,24 +170,15 @@ uniform float uPesoGrueso;
 // Agujero negro en pantalla: xy posición (uv), z radio de la sombra (fracción de la altura), w peso.
 uniform vec4 uAgujero;
 uniform float uAspecto;
-uniform vec2 uTexel;
 uniform float uFuerzaMinima;
 uniform float uFuerzaPlena;
+// Dirección de los remolinos del cielo (ver CIELO_FRAG), a la misma resolución que este pase.
+uniform sampler2D uRemolino;
 
 in vec2 vUv;
 out vec4 fragColor;
 
-${CORRIENTE_GLSL}
 ${ESTRELLAS_GLSL}
-
-// Dirección de los remolinos en pantalla: perpendicular al gradiente de la corriente del cielo,
-// que vive en la esfera celeste (al girar la cámara, los remolinos giran con las estrellas).
-vec2 remolino(vec2 uv, vec2 texel) {
-  float dx = corrienteCielo(direccionMundo(uv + vec2(texel.x, 0.0))) - corrienteCielo(direccionMundo(uv - vec2(texel.x, 0.0)));
-  float dy = corrienteCielo(direccionMundo(uv + vec2(0.0, texel.y))) - corrienteCielo(direccionMundo(uv - vec2(0.0, texel.y)));
-  vec2 v = vec2(dy, -dx);
-  return dot(v, v) > 1e-14 ? normalize(v) : vec2(1.0, 0.0);
-}
 
 void main() {
   vec3 t = texture(uTensor, vUv).xyz + uPesoGrueso * texture(uTensorGrueso, vUv).xyz;
@@ -206,7 +197,8 @@ void main() {
   float coherencia = (l1 - l2) / (l1 + l2 + 1e-9);
   float fuerza = sqrt(max(l1, 0.0));
 
-  vec2 giro = remolino(vUv, uTexel);
+  vec2 giro = texture(uRemolino, vUv).xy;
+  giro = dot(giro, giro) > 1e-10 ? normalize(giro) : vec2(1.0, 0.0);
   if (dot(tangente, giro) < 0.0) tangente = -tangente;
   float peso = smoothstep(uFuerzaMinima, uFuerzaPlena, fuerza) * smoothstep(0.02, 0.25, coherencia);
   vec2 direccion = mix(giro, tangente, peso);
@@ -226,7 +218,39 @@ void main() {
     direccion = normalize(mix(direccion, circular, w) + 1e-6);
   }
   direccion = flujoEstrellas(vUv, uAspecto, direccion);
-  fragColor = vec4(direccion, coherencia, fuerza);
+  // Se guarda la ORIENTACIÓN en ángulo doble (cos 2θ, sin 2θ): un trazo no tiene sentido, y con
+  // el vector con signo la interpolación bilineal entre dos texels de signos opuestos daba casi
+  // cero; los trazos se encogían ahí y dejaban una grieta a lo largo del cambio de signo.
+  fragColor = vec4(direccion.x * direccion.x - direccion.y * direccion.y, 2.0 * direccion.x * direccion.y, coherencia, fuerza);
+}
+`
+
+/**
+ * Cielo pintado a 1/4 de resolución (su dibujo es amplio): la función de corriente sobre la esfera
+ * celeste se evalúa una sola vez por fotograma. Salida 0: color del cielo nocturno (A: corriente).
+ * Salida 1: dirección de los remolinos en pantalla, perpendicular al gradiente de la corriente (al
+ * girar la cámara, los remolinos giran con las estrellas).
+ */
+export const CIELO_FRAG = /* glsl */ `
+uniform vec2 uTexel;
+
+in vec2 vUv;
+layout(location = 0) out vec4 salidaCielo;
+layout(location = 1) out vec4 salidaRemolino;
+
+${OKLAB_GLSL}
+${PALETA_GLSL}
+${CORRIENTE_GLSL}
+${CIELO_GLSL}
+
+void main() {
+  vec3 dir = direccionMundo(vUv);
+  float psi = corrienteCielo(dir);
+  salidaCielo = vec4(colorCielo(dir, psi), psi);
+  float dx = corrienteCielo(direccionMundo(vUv + vec2(uTexel.x, 0.0))) - corrienteCielo(direccionMundo(vUv - vec2(uTexel.x, 0.0)));
+  float dy = corrienteCielo(direccionMundo(vUv + vec2(0.0, uTexel.y))) - corrienteCielo(direccionMundo(vUv - vec2(0.0, uTexel.y)));
+  vec2 v = vec2(dy, -dx);
+  salidaRemolino = vec4(dot(v, v) > 1e-14 ? normalize(v) : vec2(1.0, 0.0), 0.0, 1.0);
 }
 `
 
@@ -242,6 +266,7 @@ uniform sampler2D uProfundidad;
 uniform vec2 uTexelEntrada;
 uniform float uCieloPintado;
 uniform float uAspecto;
+uniform sampler2D uCielo;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -261,7 +286,7 @@ void main() {
   cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(1.0, 1.0)).r);
   cielo *= 0.25 * uCieloPintado;
   vec3 objeto = mapaVanGogh(escena);
-  vec3 nocturno = cieloConLuz(colorCielo(direccionMundo(vUv)), escena);
+  vec3 nocturno = cieloConLuz(texture(uCielo, vUv).rgb, escena);
   float pesoEstrella;
   vec3 estrella = estrellasPintadas(vUv, uAspecto, pesoEstrella);
   nocturno = mix(nocturno, estrella, pesoEstrella);
@@ -313,7 +338,7 @@ void main() {
     for (int i = -1; i <= 1; i++) {
       vec3 c = texture(uEntrada, vUv + vec2(float(i), float(j)) * 1.6 * uTexelEntrada).rgb;
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-      media += luminancia(srgbDesdeLineal(c)) / 9.0;
+      media += pow(max(l, 0.0), 0.4545) / 9.0;
       if (l > mejor) {
         mejor = l;
         lineal = c;
@@ -344,6 +369,7 @@ uniform int uNumEstrellas;
 uniform sampler2D uProfundidad;
 uniform sampler2D uReducida;
 uniform float uCieloPintado;
+uniform float uAspecto;
 
 out vec4 fragColor;
 
@@ -355,8 +381,15 @@ void main() {
   }
   vec2 uv = clamp(uEstrellas[k].xy, 0.0, 1.0);
   float cielo = step(0.99999, texture(uProfundidad, uv).r);
-  vec3 escena = texture(uReducida, uv).rgb;
-  float luz = dot(escena, vec3(0.299, 0.587, 0.114));
+  // Lo más brillante de la escena en el centro y en un anillo a 1.6 radios: una estrella pintada
+  // junto al Sol o a un planeta se confundiría con ellos.
+  float aspecto = uAspecto;
+  float luz = dot(texture(uReducida, uv).rgb, vec3(0.299, 0.587, 0.114));
+  for (int i = 0; i < 8; i++) {
+    float a = 0.7853982 * float(i);
+    vec2 p = uv + vec2(cos(a) / aspecto, sin(a)) * 1.6 * uEstrellas[k].z;
+    luz = max(luz, dot(texture(uReducida, clamp(p, 0.0, 1.0)).rgb, vec3(0.299, 0.587, 0.114)));
+  }
   fragColor = vec4(cielo * (1.0 - smoothstep(0.08, 0.3, luz)) * uCieloPintado, 0.0, 0.0, 1.0);
 }
 `
@@ -401,6 +434,8 @@ uniform float uAncho;
 uniform float uLargo;
 uniform float uVariacion;
 uniform float uDesvio;
+// Pasos de integración de la línea de flujo por mitad de trazo (los trazos cortos necesitan menos).
+uniform int uPasos;
 // Modo 0 (fondo): el color es la media alrededor del ancla (uDifuminado texels de uColor).
 // Modo 1 (detalle): el color fino del ancla, y la pincelada sólo se pinta si difiere del grueso
 // más que el umbral (diferencia OKLab): el pincel fino va donde el grueso perdería la forma.
@@ -461,8 +496,12 @@ vec2 rotar(vec2 v, float a) {
   return vec2(c * v.x - s * v.y, s * v.x + c * v.y);
 }
 
+// El flujo guarda la orientación en ángulo doble (ver FLUJO_FRAG): se recupera el ángulo y el
+// sentido lo decide quien la usa (cada paso sigue al anterior).
 vec2 direccion(vec2 p, float giro) {
-  return rotar(textureLod(uFlujo, p / uResolucion, 0.0).xy, giro);
+  vec2 doble = textureLod(uFlujo, p / uResolucion, 0.0).xy;
+  float angulo = 0.5 * atan(doble.y, doble.x) + giro;
+  return vec2(cos(angulo), sin(angulo));
 }
 
 float luminancia(vec3 c) {
@@ -509,11 +548,11 @@ void main() {
 
   float s = (u - 0.5) * largo;
   float sentido = s < 0.0 ? -1.0 : 1.0;
-  const int PASOS = 6;
-  float h = abs(s) / float(PASOS);
+  float h = abs(s) / float(uPasos);
   vec2 p = centro;
   vec2 previa = direccion(centro, giro) * sentido;
-  for (int i = 0; i < PASOS; i++) {
+  for (int i = 0; i < 8; i++) {
+    if (i >= uPasos) break;
     vec2 d = direccion(p, giro);
     if (dot(d, previa) < 0.0) d = -d;
     vec2 dm = direccion(p + d * (0.5 * h), giro);
