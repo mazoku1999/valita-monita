@@ -1,10 +1,12 @@
 'use client'
 
-import { Bloom, EffectComposer, Noise, ToneMapping, Vignette } from '@react-three/postprocessing'
+import { Bloom, EffectComposer, ToneMapping } from '@react-three/postprocessing'
 import { useFrame } from '@react-three/fiber'
-import { BlendFunction, ToneMappingMode } from 'postprocessing'
+import { ToneMappingMode } from 'postprocessing'
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
+import { TINTA } from '@/features/dibujo/constantes/dibujo'
+import { PasoDibujo } from '@/features/dibujo/utils/PasoDibujo'
 import { ajuste } from '../store/vistaCamaraStore'
 import { columnaPolvo } from '../utils/columnaPolvo'
 import { suavizar } from '../utils/aleatorio'
@@ -70,10 +72,18 @@ export function EfectosPost() {
     [],
   )
 
+  // La escena ya revelada se redibuja como un dibujo animado de los años 30 (ver `features/dibujo`).
+  const pasoDibujo = useMemo(() => new PasoDibujo(), [])
+
   useEffect(() => () => efectoCamara.dispose(), [efectoCamara])
   useEffect(() => () => efectoPolvo.dispose(), [efectoPolvo])
+  useEffect(() => () => pasoDibujo.dispose(), [pasoDibujo])
 
   useFrame(({ camera }) => {
+    pasoDibujo.ajustes.activo = ajuste('dibujo', 1) > 0.5
+    pasoDibujo.ajustes.soloTinta = ajuste('dibujoSoloTinta', 0) > 0.5
+    pasoDibujo.ajustes.umbral = ajuste('dibujoUmbral', TINTA.umbral)
+    pasoDibujo.ajustes.grosor = ajuste('dibujoGrosor', TINTA.sigmaBorde)
     // Ajustables desde la URL sólo en desarrollo (ver `store/vistaCamaraStore.ts`).
     efectoCamara.luminanceMaterial.threshold = ajuste('bloomUmbral', RESPLANDOR_CAMARA.umbral)
     // En la zambullida (por dentro de 13 unidades, donde no llega ningún encuadre) el disco y el
@@ -111,8 +121,9 @@ export function EfectosPost() {
       <primitive object={efectoCamara} />
       <primitive object={efectoPolvo} />
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-      <Noise premultiply blendFunction={BlendFunction.ADD} opacity={0.28} />
-      <Vignette eskil={false} offset={0.12} darkness={0.66} />
+      {/* Sin grano ni viñeta aquí: el grano inventaría bordes para la tinta; la película antigua la
+          pone el propio dibujo. */}
+      <primitive object={pasoDibujo} />
     </EffectComposer>
   )
 }
