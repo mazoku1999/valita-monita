@@ -7,8 +7,10 @@ import { CAMARA_AGUJERO } from '@/features/agujero-negro/constantes/parametrosAg
 import { CARRIL_VH, VIAJE } from '@/features/agujero-negro/constantes/viajeScroll'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { CAMARA_VALLE, CAMPO, CIUDAD, CORAZON, LAGUNA, RECORTE_VALLE, SOL_MANANA, direccionRumbo, direccionSol } from '../constantes/valle'
+import { CABEZA_FRAG, CABEZA_VERT, HOJA_FRAG, HOJA_VERT, TALLO_FRAG, TALLO_VERT } from '../shaders/flores'
 import { TERRENO_FRAG, TERRENO_VERT } from '../shaders/valle'
 import { VALLE_EN_ESCENA } from '../store/valle'
+import { crearQuadInstanciado, generarFlores } from '../utils/flores'
 import { crearTerreno } from '../utils/terreno'
 
 /**
@@ -80,9 +82,26 @@ const ARRIBA = new THREE.Vector3(0, 1, 0)
  * cámara lo vea desde la pose del recorrido. Aparece bajo las nubes (`NubesDeEntrada`), cuando la
  * Tierra se va, y mientras se ve la cámara usa planos de recorte de valle (de 30 cm a 60 km).
  */
+/** Las tres mallas de las flores: cabezas, tallos y hojas (ver `utils/flores.ts`). */
+interface MallasFlores {
+  cabezas: THREE.InstancedBufferGeometry
+  tallos: THREE.InstancedBufferGeometry
+  hojas: THREE.InstancedBufferGeometry
+}
+
+const crearMallasFlores = (): MallasFlores => {
+  const datos = generarFlores()
+  return {
+    cabezas: crearQuadInstanciado({ aBase: [datos.cabezaBase, 4], aForma: [datos.cabezaForma, 4], aCara: [datos.cabezaCara, 2] }, datos.cabezas),
+    tallos: crearQuadInstanciado({ aBase: [datos.talloBase, 4], aForma: [datos.talloForma, 2] }, datos.cabezas),
+    hojas: crearQuadInstanciado({ aBase: [datos.hojaBase, 4], aForma: [datos.hojaForma, 4] }, datos.hojas),
+  }
+}
+
 export function EscenaCochabamba() {
   const grupo = useRef<THREE.Group>(null)
   const [terreno, setTerreno] = useState<THREE.BufferGeometry | null>(null)
+  const [flores, setFlores] = useState<MallasFlores | null>(null)
   const auxiliares = useRef({
     posicion: new THREE.Vector3(),
     mira: new THREE.Vector3(),
@@ -110,22 +129,57 @@ export function EscenaCochabamba() {
     })
   }, [])
 
-  // El relieve (unas decenas de miles de vértices) se calcula después de cargar la página.
+  // Uniformes de las flores (compartidos por las tres mallas).
+  const uniformesFlores = useMemo(
+    () => ({
+      uCamara: { value: new THREE.Vector3() },
+      uSol: { value: new THREE.Vector3(...direccionSol(SOL_MANANA.rumbo, SOL_MANANA.elevacion)) },
+      uTiempo: { value: 0 },
+      uPixelesPorRadian: { value: 800 },
+    }),
+    [],
+  )
+  const materialesFlores = useMemo(
+    () => ({
+      cabezas: new THREE.ShaderMaterial({ vertexShader: CABEZA_VERT, fragmentShader: CABEZA_FRAG, uniforms: uniformesFlores, side: THREE.DoubleSide }),
+      tallos: new THREE.ShaderMaterial({ vertexShader: TALLO_VERT, fragmentShader: TALLO_FRAG, uniforms: uniformesFlores, side: THREE.DoubleSide }),
+      hojas: new THREE.ShaderMaterial({ vertexShader: HOJA_VERT, fragmentShader: HOJA_FRAG, uniforms: uniformesFlores, side: THREE.DoubleSide }),
+    }),
+    [uniformesFlores],
+  )
+
+  // El relieve (unas decenas de miles de vértices) y las flores (decenas de miles de plantas) se
+  // calculan después de cargar la página.
   useEffect(() => {
     const espera = window.setTimeout(() => setTerreno(crearTerreno()), 2500)
-    return () => window.clearTimeout(espera)
+    const esperaFlores = window.setTimeout(() => setFlores(crearMallasFlores()), 3500)
+    return () => {
+      window.clearTimeout(espera)
+      window.clearTimeout(esperaFlores)
+    }
   }, [])
 
   useEffect(
     () => () => {
       material.dispose()
+      materialesFlores.cabezas.dispose()
+      materialesFlores.tallos.dispose()
+      materialesFlores.hojas.dispose()
       VALLE_EN_ESCENA.dia = 0
     },
-    [material],
+    [material, materialesFlores],
   )
   useEffect(() => () => terreno?.dispose(), [terreno])
+  useEffect(
+    () => () => {
+      flores?.cabezas.dispose()
+      flores?.tallos.dispose()
+      flores?.hojas.dispose()
+    },
+    [flores],
+  )
 
-  useFrame(({ camera }) => {
+  useFrame(({ camera, clock, gl }) => {
     const nodo = grupo.current
     if (!nodo) return
     const progreso = obtenerProgreso()
@@ -153,6 +207,10 @@ export function EscenaCochabamba() {
     nodo.quaternion.copy(inversa)
     nodo.position.copy(posicion).applyQuaternion(inversa).multiplyScalar(-1)
     ;(material.uniforms.uCamara.value as THREE.Vector3).copy(posicion)
+    uniformesFlores.uCamara.value.copy(posicion)
+    uniformesFlores.uTiempo.value = clock.getElapsedTime()
+    const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 45
+    uniformesFlores.uPixelesPorRadian.value = gl.domElement.height / 2 / Math.tan(THREE.MathUtils.degToRad(fov) / 2)
 
     // Para el cielo del pase: de las direcciones del mundo a las del valle, y el Sol en el valle.
     nodo.updateWorldMatrix(true, false)
@@ -164,6 +222,13 @@ export function EscenaCochabamba() {
   return (
     <group ref={grupo} visible={false}>
       {terreno && <mesh geometry={terreno} material={material} frustumCulled={false} />}
+      {flores && (
+        <>
+          <mesh geometry={flores.tallos} material={materialesFlores.tallos} frustumCulled={false} />
+          <mesh geometry={flores.hojas} material={materialesFlores.hojas} frustumCulled={false} />
+          <mesh geometry={flores.cabezas} material={materialesFlores.cabezas} frustumCulled={false} />
+        </>
+      )}
     </group>
   )
 }

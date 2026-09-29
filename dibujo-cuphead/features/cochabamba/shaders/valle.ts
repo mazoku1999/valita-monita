@@ -199,7 +199,7 @@ void main() {
   float dCampo = max(enCampo.x, enCampo.y) + 6.0 * (ruido2(xz / 20.0) - 0.5);
   if (dCampo < 0.0) {
     float hilera = 0.5 + 0.5 * cos(xz.x * 6.2831853 / 0.9);
-    vec3 entrePlantas = mix(vec3(0.44, 0.35, 0.22), vec3(0.3, 0.46, 0.19), smoothstep(0.35, 0.75, hilera));
+    vec3 entrePlantas = mix(vec3(0.58, 0.52, 0.28), vec3(0.46, 0.62, 0.26), smoothstep(0.35, 0.75, hilera));
     vec3 desdeLejos = mix(vec3(0.97, 0.79, 0.2), vec3(0.62, 0.66, 0.2), 0.3 * (1.0 - hilera));
     vec3 girasoles = mix(entrePlantas, desdeLejos, smoothstep(15.0, 90.0, dCamara));
     color = mix(color, girasoles, 1.0 - zona(dCampo, -1.5));
@@ -213,6 +213,12 @@ void main() {
     float tono = salpicado.z;
     vec3 flor = tono < 0.3 ? vec3(0.86, 0.22, 0.52) : tono < 0.5 ? vec3(1.0, 0.97, 0.98) : tono < 0.7 ? vec3(0.74, 0.5, 0.84) : vec3(0.98, 0.45, 0.62);
     flores = mix(flores, flor, (1.0 - smoothstep(0.28, 0.36, salpicado.x)) * (1.0 - smoothstep(30.0, 120.0, dCamara)));
+    // De cerca, entre las flores (que se dibujan una a una) se ve su follaje, con algún pétalo caído.
+    vec3 follaje = mix(vec3(0.3, 0.48, 0.23), vec3(0.42, 0.6, 0.3), ruido2(xz / 0.4));
+    vec3 hojita = celdas2(xz / 0.07);
+    follaje = mix(follaje, follaje * 0.78, 1.0 - smoothstep(0.02, 0.08, hojita.y - hojita.x));
+    follaje = mix(follaje, flor, step(0.93, hojita.z) * (1.0 - smoothstep(0.2, 0.3, hojita.x)));
+    flores = mix(follaje, flores, smoothstep(6.0, 22.0, dCamara));
     vec3 ribete = mix(vec3(0.99, 0.94, 0.97), vec3(0.97, 0.7, 0.84), step(0.8, salpicado.z) * (1.0 - smoothstep(0.3, 0.4, salpicado.x)));
     vec3 corazon = mix(flores, ribete, zona(dCorazon, -uCorazon.w));
     color = mix(color, corazon, 1.0 - zona(dCorazon, 0.0));

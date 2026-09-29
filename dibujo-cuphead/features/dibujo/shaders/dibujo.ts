@@ -252,6 +252,9 @@ uniform vec2 uCercaLejos;
 uniform float uGrosor;
 uniform vec3 uHervor;
 uniform float uGasVisible;
+// En el valle (de día) la tinta de profundidad sólo marca las siluetas contra el cielo (la cresta
+// del Tunari, los girasoles más altos): el campo es un fondo pintado y cada flor lleva su tinta fina.
+uniform float uSoloCielo;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -303,7 +306,7 @@ void main() {
     // Entre dos superficies lejanas (un cerro delante de otro) la tinta se apaga: al ras del suelo,
     // lo que está a más de ~200 m cabe en unos pocos píxeles bajo el horizonte y los contornos de cada
     // loma se apilaban en una franja negra. Las siluetas contra el cielo se quedan.
-    float lejania = z0 > 1e5 ? 0.0 : smoothstep(150.0, 900.0, z0);
+    float lejania = z0 > 1e5 ? 0.0 : max(smoothstep(150.0, 900.0, z0), uSoloCielo);
     for (int k = 0; k < 6; k++) {
       float a = 3.14159265 * float(k) / 6.0;
       ivec2 o = ivec2(round(vec2(cos(a), sin(a)) * grosor * 1.5));

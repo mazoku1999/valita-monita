@@ -47,15 +47,15 @@ export const CERRO_SAN_PEDRO = { centro: [9800, 3600], altura: 290, radio: 520 }
 /**
  * Recorrido de la cámara por el valle, en vh del carril (ver `constantes/viajeScroll.ts`): sale de
  * debajo de las nubes, alto al sureste del corazón (que se ve derecho, con los lóbulos arriba), baja
- * hacia él y se posa a la altura de las flores en su punta, mirando a lo largo del corazón, que se
- * abre hacia el Tunari.
+ * hacia él y se posa a la altura de las flores, 8 m dentro desde su punta (donde ya mide unos 16 m
+ * de ancho), mirando a lo largo del corazón, que se abre hacia el Tunari.
  */
 export const CAMARA_VALLE: readonly { readonly vh: number; readonly posicion: readonly [number, number, number]; readonly mira: readonly [number, number, number] }[] = [
   { vh: 1445, posicion: [1300, 2400, 1300], mira: [0, 0, 0] },
   { vh: 1560, posicion: [380, 800, 380], mira: [0, 0, 0] },
   { vh: 1650, posicion: [62, 115, 62], mira: [0, 0, 0] },
-  { vh: 1722, posicion: [24, 12, 24], mira: [-24, 0, -24] },
-  { vh: 1780, posicion: [11.5, 1.1, 11.5], mira: [-60, 6, -60] },
+  { vh: 1722, posicion: [20, 8, 20], mira: [-24, 0, -24] },
+  { vh: 1780, posicion: [7.9, 1.1, 7.9], mira: [-60, -5, -60] },
 ]
 
 /** Planos de recorte de la cámara en el valle (m): cerca para las flores, lejos para las montañas. */

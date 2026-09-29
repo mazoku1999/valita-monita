@@ -163,6 +163,7 @@ export class PasoDibujo extends Pass {
       uGrosor: { value: TINTA.grosor },
       uHervor: { value: new THREE.Vector3(0, 0, HERVOR.amplitud) },
       uGasVisible: { value: 1 },
+      uSoloCielo: { value: 0 },
     })
     this.matComponer = material(COMPONER_FRAG, {
       uEscena: { value: null },
@@ -373,6 +374,7 @@ export class PasoDibujo extends Pass {
     const ul = this.matContorno.uniforms
     ul.uIdGas.value = gas ? gas.textures[1] : null
     ul.uGasVisible.value = gasVisible
+    ul.uSoloCielo.value = VALLE_EN_ESCENA.dia
     ul.uGrosor.value = this.ajustes.grosor
     ;(ul.uHervor.value as THREE.Vector3).set(hervorX, hervorY, HERVOR.amplitud)
     this.dibujar(renderer, this.matContorno, this.contornos)
@@ -408,6 +410,9 @@ export class PasoDibujo extends Pass {
     this.matPelicula.uniforms.uFotograma.value = Math.floor(this.tiempo * PELICULA.fotogramasPorSegundo) % 100000
     this.matPelicula.uniforms.uAPantalla.value = aPantalla
     this.matPelicula.uniforms.uIris.value = this.iris
+    // En el valle, con tantos bordes pequeños (flores), la separación de colores de la lente vieja
+    // ensuciaba: se reduce.
+    this.matPelicula.uniforms.uAberracion.value = PELICULA.aberracion * (1 - 0.65 * VALLE_EN_ESCENA.dia)
     this.dibujar(renderer, this.matPelicula, destino)
     renderer.autoClear = limpiezaPrevia
   }
