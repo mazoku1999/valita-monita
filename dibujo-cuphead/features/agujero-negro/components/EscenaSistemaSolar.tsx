@@ -175,7 +175,6 @@ export function EscenaSistemaSolar() {
       <SistemaSolar
         aparicion={aparicion}
         escalaPlanetas={escalaPlanetas}
-        distanciaReferencia={ENCUADRE.distanciaMinima}
         quieto={movimientoReducido}
         ritmo={ritmo}
         guias={guias}

@@ -1,6 +1,7 @@
 import { Pass } from 'postprocessing'
 import * as THREE from 'three'
 import { refBufferGas } from '@/features/agujero-negro/store/mallaGas'
+import { SOL_EN_ESCENA } from '@/features/sistema-solar/store/solEnEscena'
 import { ACUARELA, COLORES_PLANOS, HERVOR, PELICULA, TINTA } from '../constantes/dibujo'
 import {
   CIELO_FRAG,
@@ -57,8 +58,9 @@ export interface AjustesDibujo {
 
 /**
  * Pase del dibujo animado. El agujero negro ya llega dibujado en caricatura desde su propio buffer
- * (color y qué objeto hay en cada píxel, ver `shaders/lenteCaricatura.frag.ts`); este pase lo compone
- * sobre el cielo y le pone la tinta y la película:
+ * (color y qué objeto hay en cada píxel, ver `shaders/lenteCaricatura.frag.ts`) y el sistema solar
+ * en la propia escena (con alfa 0.5, ver `TONO_GLSL`); este pase los compone sobre el cielo, tonea
+ * y aplana lo que todavía es realista y le pone la tinta y la película:
  *
  * 1. Cielo en acuarela anclado a la esfera celeste, con rayos de sol detrás del agujero.
  * 2. Contornos a partir de los objetos (y de los saltos de profundidad dentro del horizonte), con
@@ -104,6 +106,7 @@ export class PasoDibujo extends Pass {
     uCamaraMundo: { value: new THREE.Matrix4() },
   }
   private readonly uAgujero = { value: new THREE.Vector4() }
+  private readonly uSol = { value: new THREE.Vector4() }
 
   private readonly matReducir: THREE.ShaderMaterial
   private readonly matDesenfoque: THREE.ShaderMaterial
@@ -127,7 +130,7 @@ export class PasoDibujo extends Pass {
     // La profundidad de la escena separa el cielo abierto de lo que tiene cuerpo.
     this.needsDepthTexture = true
 
-    this.matReducir = material(REDUCIR_FRAG, { uEntrada: { value: null }, uTexelEntrada: { value: new THREE.Vector2() } })
+    this.matReducir = material(REDUCIR_FRAG, { uEntrada: { value: null }, uBloque: { value: 2 } })
     this.matDesenfoque = material(DESENFOQUE_FRAG, {
       uEntrada: { value: null },
       uPaso: { value: new THREE.Vector2() },
@@ -136,6 +139,8 @@ export class PasoDibujo extends Pass {
     })
     this.matCielo = material(CIELO_FRAG, {
       uProfundidad: { value: null },
+      uEscena: { value: null },
+      uSol: this.uSol,
       uTexelEntrada: { value: new THREE.Vector2() },
       uCieloPintado: { value: 1 },
       uAgujero: this.uAgujero,
@@ -154,6 +159,7 @@ export class PasoDibujo extends Pass {
       uGasVisible: { value: 1 },
     })
     this.matComponer = material(COMPONER_FRAG, {
+      uEscena: { value: null },
       uColorSuave: { value: this.colorSuave.texture },
       uContornos: { value: this.contornos.texture },
       uGasColor: { value: null },
@@ -256,9 +262,9 @@ export class PasoDibujo extends Pass {
     renderer.render(this.escenaQuad, this.camaraQuad)
   }
 
-  private reducir(renderer: THREE.WebGLRenderer, entrada: THREE.Texture, texel: THREE.Vector2Like, destino: THREE.WebGLRenderTarget) {
+  private reducir(renderer: THREE.WebGLRenderer, entrada: THREE.Texture, bloque: 2 | 4, destino: THREE.WebGLRenderTarget) {
     this.matReducir.uniforms.uEntrada.value = entrada
-    ;(this.matReducir.uniforms.uTexelEntrada.value as THREE.Vector2).set(texel.x, texel.y)
+    this.matReducir.uniforms.uBloque.value = bloque
     this.dibujar(renderer, this.matReducir, destino)
   }
 
@@ -288,6 +294,19 @@ export class PasoDibujo extends Pass {
     this.uAgujero.value.set(0.5 + 0.5 * p.x, 0.5 + 0.5 * p.y, radio, delante * this.gasVisible)
   }
 
+  /** El Sol de caricatura en pantalla (centro y radio de su disco en fracción de la altura). */
+  private situarSol(camara: THREE.Camera): void {
+    const perspectiva = camara instanceof THREE.PerspectiveCamera ? camara : null
+    if (!perspectiva || SOL_EN_ESCENA.visible <= 0.001) {
+      this.uSol.value.set(0.5, 0.5, 0.1, 0)
+      return
+    }
+    const distancia = Math.max(camara.position.distanceTo(SOL_EN_ESCENA.posicion), 1e-3)
+    const p = this.auxiliar.copy(SOL_EN_ESCENA.posicion).project(perspectiva)
+    const radio = (0.5 * SOL_EN_ESCENA.radio) / distancia / Math.tan(THREE.MathUtils.degToRad(perspectiva.fov) / 2)
+    this.uSol.value.set(0.5 + 0.5 * p.x, 0.5 + 0.5 * p.y, radio, p.z < 1 ? SOL_EN_ESCENA.visible : 0)
+  }
+
   override render(
     renderer: THREE.WebGLRenderer,
     inputBuffer: THREE.WebGLRenderTarget,
@@ -314,6 +333,7 @@ export class PasoDibujo extends Pass {
       this.uCamara.uProyInversa.value.copy(camara.projectionMatrixInverse)
       this.uCamara.uCamaraMundo.value.copy(camara.matrixWorld)
       this.situarAgujero(camara)
+      this.situarSol(camara)
       if (camara instanceof THREE.PerspectiveCamera) (this.matContorno.uniforms.uCercaLejos.value as THREE.Vector2).set(camara.near, camara.far)
     }
     const gas = refBufferGas.current
@@ -323,17 +343,19 @@ export class PasoDibujo extends Pass {
     const hervorY = (semilla * 78.233) % 89
 
     // 1. Reducciones y versiones suavizadas de la escena (para lo que aún es realista).
-    this.reducir(renderer, inputBuffer.texture, { x: 0.5 / this.anchoActual, y: 0.5 / this.altoActual }, this.media)
-    this.reducir(renderer, inputBuffer.texture, { x: 1 / this.anchoActual, y: 1 / this.altoActual }, this.cuarto)
-    const pasoC = COLORES_PLANOS.desenfoque
+    this.reducir(renderer, inputBuffer.texture, 2, this.media)
+    this.reducir(renderer, inputBuffer.texture, 4, this.cuarto)
+    // El desenfoque tiene σ = 3.5 pasos: el paso se escala para el σ pedido.
+    const pasoC = COLORES_PLANOS.desenfoque / 3.5
     this.desenfocar(renderer, this.media, { x: pasoC / this.media.width, y: 0 }, this.mediaIntermedia)
     this.desenfocar(renderer, this.mediaIntermedia, { x: 0, y: pasoC / this.media.height }, this.colorSuave)
-    const pasoA = ACUARELA.desenfoqueAguada
+    const pasoA = ACUARELA.desenfoqueAguada / 3.5
     this.desenfocar(renderer, this.cuarto, { x: pasoA / this.cuarto.width, y: 0 }, this.aguadaIntermedia)
     this.desenfocar(renderer, this.aguadaIntermedia, { x: 0, y: pasoA / this.cuarto.height }, this.aguada)
 
     // 2. Cielo en acuarela con los rayos de sol del agujero.
     const uc = this.matCielo.uniforms
+    uc.uEscena.value = inputBuffer.texture
     uc.uCieloPintado.value = uc.uProfundidad.value ? this.cieloPintado : 0
     uc.uTiempo.value = this.tiempo
     uc.uLatido.value = this.latido
@@ -349,6 +371,7 @@ export class PasoDibujo extends Pass {
 
     // 4. Composición.
     const u = this.matComponer.uniforms
+    u.uEscena.value = inputBuffer.texture
     u.uGasColor.value = gas ? gas.textures[0] : null
     u.uGasVisible.value = gasVisible
     u.uSoloTinta.value = this.ajustes.soloTinta ? 1 : 0

@@ -1,9 +1,41 @@
 /**
- * Shaders del sistema solar. Nada es una textura de imagen: el aspecto de cada planeta sale de
- * ruido 3D sobre su esfera (bandas de Júpiter y Saturno, continentes, nubes y casquetes de la
- * Tierra, mares oscuros de Marte...) y la luz es la del Sol de la escena, con su terminador
- * día/noche real (el lado de noche es negro, como en las fotos de las sondas).
+ * Shaders del sistema solar dibujado como un dibujo animado de los años 30. Nada es una imagen: el
+ * aspecto de cada cuerpo sale de ruido 3D sobre su esfera, pero recortado en zonas de color plano
+ * con el borde nítido (a un píxel), y la luz es de caricatura: tono iluminado con un poco de
+ * aerógrafo, sombra de un tono propio (morado azulado, no negro), un brillo blanco de barniz y una
+ * línea de tinta fina en el borde de la esfera. El contorno grueso contra el cielo lo pone el pase
+ * de dibujo (saltos de profundidad).
+ *
+ * Todos los colores se escriben en sRGB y salen en lineal con alfa 0.5: esa marca le dice al pase
+ * de dibujo (`features/dibujo`) que el píxel ya está dibujado y no hay que tonearlo ni aplanarlo.
  */
+
+/** Alfa con el que sale todo lo que ya está dibujado en caricatura (ver COMPONER_FRAG). */
+const SALIDA_CARICATURA = /* glsl */ `
+const vec3 TINTA = vec3(0.075, 0.058, 0.047);
+
+vec4 salidaCaricatura(vec3 srgb) {
+  return vec4(pow(clamp(srgb, 0.0, 1.0), vec3(2.2)), 0.5);
+}
+
+// Zona de color plano: 0 → 1 al cruzar el umbral, con el borde a un píxel.
+float zona(float x, float umbral) {
+  float w = max(fwidth(x), 1e-5);
+  return smoothstep(umbral - w, umbral + w, x);
+}
+
+// Trazo de tinta a lo largo de la línea x = 0, de ancho (en píxeles) dado; w es lo que cambia x en
+// un píxel (si x salta en algún sitio, fwidth(x) se dispara allí y pintaría una raya falsa: se da w
+// de una magnitud continua).
+float trazoConPaso(float x, float anchoPx, float w) {
+  w = max(w, 1e-5);
+  return 1.0 - smoothstep(anchoPx * 0.5 * w, (anchoPx * 0.5 + 1.0) * w, abs(x));
+}
+
+float trazo(float x, float anchoPx) {
+  return trazoConPaso(x, anchoPx, fwidth(x));
+}
+`
 
 const RUIDO_3D = /* glsl */ `
 float hash13(vec3 p) {
@@ -34,12 +66,58 @@ float ruido3(vec3 p) {
 float fbm3(vec3 p) {
   float suma = 0.0;
   float amplitud = 0.5;
-  for (int k = 0; k < 5; k++) {
+  for (int k = 0; k < 4; k++) {
     suma += amplitud * ruido3(p);
     p = p * 2.02 + vec3(11.3, 7.1, 3.7);
     amplitud *= 0.5;
   }
-  return suma / 0.96875;
+  return suma / 0.9375;
+}
+
+// Celdas de Worley: distancia al punto más cercano (x) y un azar propio de ese punto (y).
+vec2 celdas(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = fract(p);
+  float mejor = 8.0;
+  float azar = 0.0;
+  for (int z = -1; z <= 1; z++) {
+    for (int y = -1; y <= 1; y++) {
+      for (int x = -1; x <= 1; x++) {
+        vec3 o = vec3(float(x), float(y), float(z));
+        vec3 c = i + o;
+        vec3 punto = o + vec3(hash13(c), hash13(c + 17.1), hash13(c + 31.7));
+        float d = length(punto - f);
+        if (d < mejor) {
+          mejor = d;
+          azar = hash13(c + 5.3);
+        }
+      }
+    }
+  }
+  return vec2(mejor, azar);
+}
+`
+
+/**
+ * Luz de caricatura de una esfera: tono iluminado (con aerógrafo hacia el terminador), sombra de
+ * color, terminador nítido, brillo de barniz y tinta fina en el borde.
+ */
+const LUZ_CARICATURA = /* glsl */ `
+vec3 luzCaricatura(vec3 albedo, vec3 n, vec3 l, vec3 v, float brillo, out float lado) {
+  float ndl = dot(n, l);
+  lado = zona(ndl, 0.02);
+  vec3 iluminado = albedo * mix(0.84, 1.06, smoothstep(0.0, 0.65, ndl));
+  // La sombra no es negra: el mismo color, hundido hacia un morado azulado, con algo de luz
+  // rebotada en el borde.
+  float mu = max(dot(n, v), 0.0);
+  vec3 sombra = albedo * vec3(0.34, 0.33, 0.56) * (1.0 + 0.35 * pow(1.0 - mu, 2.0));
+  vec3 color = mix(sombra, iluminado, lado);
+  vec3 h = normalize(l + v);
+  color = mix(color, vec3(1.0, 0.99, 0.95), brillo * zona(dot(n, h), 0.982) * lado);
+  // Línea de tinta en el borde de la esfera (la silueta gruesa contra el cielo la pone el pase).
+  float fw = max(fwidth(mu), 1e-5);
+  color = mix(color, TINTA, 1.0 - smoothstep(1.2 * fw, 2.2 * fw, mu));
+  return color;
 }
 `
 
@@ -57,6 +135,10 @@ void main() {
 }
 `
 
+/**
+ * Planetas y Luna de caricatura: cada uno con su dibujo de zonas planas. La Luna (aspecto 8) lleva
+ * además una cara dormilona que siempre mira a la cámara.
+ */
 export const PLANETA_FRAG = /* glsl */ `
 uniform float uAspecto;
 uniform vec3 uSol;
@@ -67,126 +149,273 @@ varying vec3 vNormalMundo;
 varying vec3 vPosMundo;
 varying vec3 vLocal;
 
+${SALIDA_CARICATURA}
 ${RUIDO_3D}
+${LUZ_CARICATURA}
 
-// Albedo por planeta sobre la esfera unidad (p = punto en su marco propio, y = eje de giro).
-vec3 albedoPlaneta(vec3 p, int tipo, out vec3 atmosfera) {
-  atmosfera = vec3(0.0);
+// Cráteres de dibujo: círculos algo más oscuros con un borde claro por arriba y otro oscuro abajo.
+vec3 crateres(vec3 p, vec3 color, float escala, float cantidad) {
+  vec2 c = celdas(p * escala);
+  float radio = mix(0.18, 0.34, c.y);
+  float dentro = (1.0 - zona(c.x, radio)) * step(1.0 - cantidad, c.y);
+  float borde = trazoConPaso(c.x - radio, 1.2, fwidth(c.x)) * step(1.0 - cantidad, c.y);
+  color = mix(color, color * 0.8, dentro);
+  return mix(color, color * 0.62, borde);
+}
+
+// Línea de color fina entre franjas (en los enteros de x), de un píxel y pico.
+float lineaDeFranja(float x) {
+  float w = max(fwidth(x), 1e-5);
+  float d = abs(fract(x + 0.5) - 0.5);
+  return 1.0 - smoothstep(0.6 * w, 1.6 * w, d);
+}
+
+vec3 albedoPlaneta(vec3 p, int tipo) {
   float lat = p.y;
   if (tipo == 0) {
-    // Mercurio: roca gris con cráteres y rayos claros.
-    vec3 col = vec3(0.50, 0.47, 0.44) * (0.72 + 0.5 * fbm3(p * 4.0));
-    float crateres = smoothstep(0.60, 0.70, fbm3(p * 9.0 + 3.1));
-    return col * (1.0 - 0.35 * crateres);
+    // Mercurio: gris lila con manchas y cráteres.
+    vec3 col = mix(vec3(0.70, 0.66, 0.70), vec3(0.56, 0.52, 0.58), zona(fbm3(p * 2.5), 0.55));
+    return crateres(p, col, 4.0, 0.55);
   }
   if (tipo == 1) {
-    // Venus: nubes de ácido sulfúrico, crema amarillenta con bandas en V muy suaves.
-    float bandas = fbm3(vec3(p.x * 2.0, p.y * 7.0, p.z * 2.0) + 2.3);
-    atmosfera = vec3(1.0, 0.85, 0.55) * 0.35;
-    return mix(vec3(0.93, 0.84, 0.62), vec3(0.80, 0.66, 0.44), 0.45 * bandas);
-  }
-  if (tipo == 2) {
-    // Tierra: océanos, continentes, casquetes polares y nubes que se mueven.
-    float continente = fbm3(p * 2.3 + vec3(1.7, 0.3, 4.1));
-    float tierra = smoothstep(0.53, 0.57, continente);
-    vec3 oceano = vec3(0.02, 0.08, 0.26) * (0.8 + 0.4 * fbm3(p * 6.0));
-    vec3 suelo = mix(vec3(0.16, 0.26, 0.09), vec3(0.52, 0.43, 0.28), smoothstep(0.5, 0.72, fbm3(p * 5.0 + 7.0)));
-    vec3 col = mix(oceano, suelo, tierra);
-    float polo = smoothstep(0.80, 0.88, abs(lat) + 0.06 * fbm3(p * 8.0));
-    col = mix(col, vec3(0.90, 0.94, 1.0), polo);
-    float nubes = smoothstep(0.52, 0.74, fbm3(p * 3.4 + vec3(uTiempo * 0.012, 0.0, 0.0)));
-    col = mix(col, vec3(0.96), nubes * 0.8);
-    atmosfera = vec3(0.30, 0.52, 1.0);
-    return col;
+    // Venus: crema dorada con remolinos de nubes más claras.
+    float remolino = fbm3(vec3(p.x * 1.6, p.y * 4.5, p.z * 1.6) + 2.3);
+    return mix(vec3(0.97, 0.82, 0.52), vec3(1.0, 0.93, 0.74), zona(remolino, 0.52));
   }
   if (tipo == 3) {
-    // Marte: óxido de hierro con los mares oscuros y los casquetes de hielo.
-    vec3 col = vec3(0.66, 0.31, 0.15) * (0.78 + 0.4 * fbm3(p * 3.0));
-    col = mix(col, vec3(0.33, 0.17, 0.10), 0.7 * smoothstep(0.55, 0.66, fbm3(p * 2.2 + 5.0)));
-    col = mix(col, vec3(0.92, 0.88, 0.84), smoothstep(0.90, 0.95, abs(lat)));
-    atmosfera = vec3(0.9, 0.55, 0.35) * 0.25;
-    return col;
+    // Marte: rojo anaranjado con mares más oscuros y el casquete blanco.
+    vec3 col = mix(vec3(0.92, 0.45, 0.26), vec3(0.72, 0.30, 0.22), zona(fbm3(p * 2.0 + 5.0), 0.56));
+    return mix(col, vec3(0.98, 0.96, 0.92), zona(abs(lat) + 0.04 * fbm3(p * 6.0), 0.88));
   }
   if (tipo == 4) {
-    // Júpiter: zonas claras y cinturones pardos, turbulentos, y la Gran Mancha Roja a 22° S.
-    float turbulencia = fbm3(vec3(p.x * 2.5, p.y * 14.0, p.z * 2.5) + vec3(uTiempo * 0.004, 0.0, 0.0));
-    float bandas = sin(lat * 23.0 + 2.2 * turbulencia);
-    vec3 col = mix(vec3(0.62, 0.45, 0.31), vec3(0.93, 0.87, 0.75), 0.5 + 0.5 * bandas);
-    col = mix(col, vec3(0.55, 0.52, 0.49), smoothstep(0.72, 0.96, abs(lat)));
+    // Júpiter: franjas de colores planos con el borde ondulado y la Gran Mancha Roja entintada.
+    float onda = fbm3(vec3(p.x * 2.0, p.y * 8.0, p.z * 2.0) + vec3(uTiempo * 0.01, 0.0, 0.0));
+    float franja = lat * 5.5 + 0.8 * onda;
+    float k = floor(franja);
+    float t = fract(k * 0.618);
+    vec3 col = t < 0.33 ? vec3(0.99, 0.91, 0.76) : t < 0.66 ? vec3(0.90, 0.70, 0.48) : vec3(0.80, 0.50, 0.34);
+    col = mix(col, col * 0.78, lineaDeFranja(franja));
     float lon = atan(p.z, p.x);
-    vec2 mancha = vec2((lon - 1.1) * 0.9, (lat + 0.37) * 3.4);
-    col = mix(col, vec3(0.78, 0.40, 0.27), 0.85 * (1.0 - smoothstep(0.10, 0.18, length(mancha))));
-    return col;
+    vec2 m = vec2((lon - 1.1) * 0.9, (lat + 0.37) * 3.2);
+    float mancha = length(m);
+    col = mix(col, vec3(1.0, 0.86, 0.72), 1.0 - zona(mancha, 0.24));
+    col = mix(col, vec3(0.86, 0.34, 0.24), 1.0 - zona(mancha, 0.17));
+    return mix(col, TINTA, trazo(mancha - 0.17, 1.3));
   }
   if (tipo == 5) {
-    // Saturno: bandas oro pálido muy suaves y el polo algo más frío.
-    float turbulencia = fbm3(vec3(p.x * 2.0, p.y * 10.0, p.z * 2.0) + 4.0);
-    float bandas = sin(lat * 17.0 + 1.2 * turbulencia);
-    vec3 col = mix(vec3(0.80, 0.68, 0.47), vec3(0.94, 0.85, 0.63), 0.5 + 0.5 * bandas);
-    return mix(col, vec3(0.62, 0.64, 0.60), smoothstep(0.78, 0.98, abs(lat)));
+    // Saturno: franjas oro pálido, suaves.
+    float onda = fbm3(vec3(p.x * 1.6, p.y * 6.0, p.z * 1.6) + 4.0);
+    float franja = lat * 4.0 + 0.5 * onda;
+    float t = fract(floor(franja) * 0.618);
+    vec3 col = t < 0.5 ? vec3(0.97, 0.88, 0.64) : vec3(0.90, 0.76, 0.50);
+    return mix(col, col * 0.84, lineaDeFranja(franja));
   }
   if (tipo == 6) {
-    // Urano: aguamarina casi lisa (metano), girando de lado.
-    atmosfera = vec3(0.55, 0.85, 0.95) * 0.5;
-    return vec3(0.60, 0.84, 0.88) * (0.94 + 0.06 * sin(lat * 7.0));
+    // Urano: verde agua liso con una franja algo más clara.
+    return mix(vec3(0.56, 0.87, 0.88), vec3(0.72, 0.94, 0.93), 1.0 - zona(abs(lat - 0.2), 0.12));
   }
   if (tipo == 8) {
-    // La Luna: gris claro con los mares de basalto oscuros y cráteres con rayos.
-    vec3 col = vec3(0.60, 0.59, 0.57) * (0.82 + 0.3 * fbm3(p * 5.0));
-    col = mix(col, vec3(0.30, 0.30, 0.31), 0.75 * smoothstep(0.52, 0.62, fbm3(p * 1.8 + 11.0)));
-    return col * (1.0 - 0.25 * smoothstep(0.62, 0.7, fbm3(p * 14.0 + 2.0)));
+    // La Luna: crema grisácea con mares y unos pocos cráteres.
+    vec3 col = mix(vec3(0.92, 0.90, 0.82), vec3(0.78, 0.77, 0.73), zona(fbm3(p * 1.8 + 11.0), 0.58));
+    return crateres(p, col, 3.0, 0.3);
   }
-  // Neptuno: azul profundo con bandas tenues y una mancha oscura.
-  float bandasN = sin(lat * 9.0 + 1.5 * fbm3(p * vec3(2.0, 8.0, 2.0)));
-  vec3 colN = vec3(0.22, 0.38, 0.86) * (0.9 + 0.1 * bandasN);
+  // Neptuno: azul con una franja más oscura y la mancha oscura entintada.
+  vec3 colN = mix(vec3(0.30, 0.47, 0.95), vec3(0.22, 0.36, 0.82), 1.0 - zona(abs(lat + 0.1), 0.1));
   float lonN = atan(p.z, p.x);
-  colN *= 1.0 - 0.45 * (1.0 - smoothstep(0.08, 0.16, length(vec2((lonN + 0.8) * 0.8, (lat + 0.35) * 3.0))));
-  atmosfera = vec3(0.35, 0.55, 1.0) * 0.5;
-  return colN;
+  float manchaN = length(vec2((lonN + 0.8) * 0.8, (lat + 0.35) * 3.0));
+  colN = mix(colN, vec3(0.16, 0.24, 0.58), 1.0 - zona(manchaN, 0.15));
+  return mix(colN, TINTA, trazo(manchaN - 0.15, 1.2));
+}
+
+// Arco de tinta (ojo cerrado, ceja, sonrisa): parábola y = y0 + curva·(x − x0)² de media anchura w.
+float arco(vec2 q, vec2 centro, float curva, float w, float grosorPx) {
+  vec2 d = q - centro;
+  float dentro = 1.0 - step(w, abs(d.x));
+  return trazo(d.y - curva * d.x * d.x, grosorPx) * dentro;
+}
+
+// Cara dormilona de la Luna, en coordenadas de la cara (disco unidad visto de frente).
+vec3 caraLuna(vec2 q, vec3 color, float detalle) {
+  // Mejillas sonrosadas.
+  float mejillas = 1.0 - smoothstep(0.1, 0.2, min(length((q - vec2(-0.42, -0.12)) * vec2(1.0, 1.4)), length((q - vec2(0.42, -0.12)) * vec2(1.0, 1.4))));
+  color = mix(color, vec3(1.0, 0.62, 0.58), 0.55 * mejillas * detalle);
+  // Ojos cerrados (arcos hacia abajo, como dormida) y cejas.
+  float tinta = arco(q, vec2(-0.26, 0.14), 2.6, 0.13, 2.0) + arco(q, vec2(0.26, 0.14), 2.6, 0.13, 2.0);
+  tinta += arco(q, vec2(-0.27, 0.38), -1.8, 0.1, 1.6) + arco(q, vec2(0.27, 0.38), -1.8, 0.1, 1.6);
+  // Sonrisa pequeña.
+  tinta += arco(q, vec2(0.0, -0.3), 2.2, 0.17, 2.0);
+  return mix(color, TINTA, clamp(tinta, 0.0, 1.0) * detalle);
 }
 
 void main() {
   int tipo = int(uAspecto + 0.5);
-  vec3 atmosfera;
-  vec3 albedo = albedoPlaneta(normalize(vLocal), tipo, atmosfera);
+  vec3 p = normalize(vLocal);
+  vec3 albedo = albedoPlaneta(p, tipo);
   vec3 n = normalize(vNormalMundo);
   vec3 l = normalize(uSol - vPosMundo);
   vec3 v = normalize(cameraPosition - vPosMundo);
-  float lambert = dot(n, l);
-  // Terminador suave (la atmósfera y el tamaño angular del Sol lo difuminan un poco) y noche
-  // negra: sin luz ambiente, como en las fotos reales.
-  float luz = max(lambert, 0.0) * smoothstep(-0.06, 0.18, lambert);
-  // Oscurecimiento hacia el limbo en los gigantes gaseosos (y un poco en los demás).
-  float mu = max(dot(n, v), 0.0);
-  float limbo = mix(1.0, 0.55 + 0.45 * mu, tipo >= 4 ? 0.8 : 0.3);
-  vec3 color = albedo * luz * limbo * 1.3;
-  // Halo de atmósfera iluminada en el borde.
-  float borde = pow(1.0 - mu, 3.0) * smoothstep(-0.25, 0.35, lambert);
-  color += atmosfera * borde * 0.9;
-  gl_FragColor = vec4(color * uAparicion, 1.0);
+  if (tipo == 8) {
+    // La cara siempre mira a la cámara: sus coordenadas son la normal proyectada en la pantalla.
+    vec3 derecha = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+    vec3 arriba = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+    vec2 q = vec2(dot(n, derecha), dot(n, arriba));
+    // Sólo con la Luna grande en pantalla (a pocos píxeles la cara sería una mancha); los cráteres
+    // y mares se apartan del centro de la cara.
+    float detalle = 1.0 - smoothstep(0.03, 0.06, fwidth(q.x));
+    vec3 liso = vec3(0.92, 0.90, 0.82);
+    albedo = mix(albedo, liso, detalle * (1.0 - smoothstep(0.45, 0.8, length(q))));
+    albedo = caraLuna(q, albedo, detalle);
+  }
+  float lado;
+  vec3 color = luzCaricatura(albedo, n, l, v, tipo >= 4 && tipo <= 7 ? 0.7 : 0.85, lado);
+  gl_FragColor = salidaCaricatura(color * uAparicion);
+}
+`
+
+/**
+ * El Sol de caricatura, como el de los dibujos de los años 30: una cara redonda y sonriente (ojos
+ * con el corte de "pastel", mejillas, nariz y una boca abierta que canta al compás) rodeada de
+ * rayos puntiagudos de dos tonos que giran despacio y laten con cada pulso. Es un cartel siempre de
+ * cara a la cámara, en el plano del centro del Sol.
+ */
+export const SOL_VERT = /* glsl */ `
+uniform float uTamano;
+
+varying vec2 vLocal;
+
+void main() {
+  vLocal = position.xy;
+  vec4 centro = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+  centro.xy += position.xy * uTamano;
+  gl_Position = projectionMatrix * centro;
 }
 `
 
 export const SOL_FRAG = /* glsl */ `
 uniform float uAparicion;
 uniform float uTiempo;
+uniform float uPulsaciones;
+// Medio lado del cartel en radios del Sol.
+uniform float uMedioLado;
 
-varying vec3 vNormalMundo;
-varying vec3 vPosMundo;
-varying vec3 vLocal;
+varying vec2 vLocal;
 
-${RUIDO_3D}
+${SALIDA_CARICATURA}
+
+const float PI = 3.14159265359;
+const float RAYOS = 24.0;
+
+float pulso(float n) {
+  float onda = 0.5 + 0.5 * cos(2.0 * PI * n);
+  return onda * onda * onda;
+}
+
+float elipse(vec2 q, vec2 centro, vec2 radios) {
+  return length((q - centro) / radios) - 1.0;
+}
+
+float arco(vec2 q, vec2 centro, float curva, float w, float grosorPx) {
+  vec2 d = q - centro;
+  float dentro = 1.0 - step(w, abs(d.x));
+  return trazo(d.y - curva * d.x * d.x, grosorPx) * dentro;
+}
+
+// Relleno (1 dentro) y contorno de tinta de una forma dada por su función de distancia aproximada
+// (en unidades de la cara), con el trazo en píxeles; w es lo que mide un píxel en esas unidades.
+vec2 formaConPaso(float d, float grosorPx, float w) {
+  w = max(w, 1e-5);
+  float relleno = 1.0 - smoothstep(-w, w, d);
+  float borde = 1.0 - smoothstep(grosorPx * w, (grosorPx + 1.0) * w, abs(d));
+  return vec2(relleno, borde);
+}
+
+vec2 forma(float d, float grosorPx) {
+  return formaConPaso(d, grosorPx, fwidth(d));
+}
 
 void main() {
-  vec3 n = normalize(vNormalMundo);
-  vec3 v = normalize(cameraPosition - vPosMundo);
-  float mu = clamp(dot(n, v), 0.0, 1.0);
-  // Oscurecimiento del limbo (ley de potencias de la fotosfera): el borde más tenue y más rojo.
-  float oscurecimiento = 0.30 + 0.70 * pow(mu, 0.55);
-  vec3 color = mix(vec3(1.0, 0.66, 0.38), vec3(1.0, 0.90, 0.72), pow(mu, 0.4));
-  // Granulación: celdas de convección muy finas que hierven despacio.
-  float granulos = 0.9 + 0.1 * ruido3(vLocal * 55.0 + vec3(0.0, uTiempo * 0.08, 0.0));
-  gl_FragColor = vec4(color * 5.0 * oscurecimiento * granulos * uAparicion, 1.0);
+  vec2 q = vLocal * uMedioLado;
+  float r = length(q);
+  float p = pulso(uPulsaciones);
+  // Con el Sol pequeño en pantalla no se dibuja la cara (a pocos píxeles sería una mancha).
+  float detalle = 1.0 - smoothstep(0.055, 0.09, fwidth(q.x));
+
+  // Rayos: 24 picos alternos, largos y cortos, que giran despacio y se estiran en cada pulso.
+  float angulo = atan(q.y, q.x) - uTiempo * 0.18;
+  float a = angulo * RAYOS / (2.0 * PI);
+  float k = floor(a + 0.5);
+  float f = a - k;
+  float largo = mod(k, 2.0) < 0.5 ? 0.74 : 0.44;
+  largo *= 1.0 + 0.12 * p;
+  float pico = 1.0 - 2.0 * abs(f);
+  float perfil = 1.03 + largo * pow(pico, 1.3);
+  // Distancia aproximada al borde del rayo (con la pendiente del perfil).
+  float pendiente = largo * 1.3 * pow(max(pico, 1e-3), 0.3) * 2.0 * RAYOS / (2.0 * PI);
+  float dRayo = (r - perfil) / sqrt(1.0 + pow(pendiente / max(r, 0.2), 2.0));
+  // El largo de los rayos salta de uno a otro (en los valles): el paso del píxel se toma del radio.
+  vec2 rayo = formaConPaso(dRayo, 1.4, fwidth(r));
+  vec3 colorRayo = mod(k, 2.0) < 0.5 ? vec3(1.0, 0.80, 0.26) : vec3(1.0, 0.60, 0.20);
+  colorRayo = mix(colorRayo * vec3(1.0, 1.02, 1.1), colorRayo, smoothstep(1.0, 1.5, r));
+
+  // Disco de la cara: amarillo con aerógrafo naranja hacia el borde y un brillo arriba a la izquierda.
+  float respira = 1.0 + 0.025 * p;
+  float dDisco = r / respira - 1.0;
+  vec2 disco = forma(dDisco, 1.6);
+  vec3 cara = mix(vec3(1.0, 0.90, 0.40), vec3(1.0, 0.68, 0.22), smoothstep(0.35, 1.0, r));
+  cara = mix(cara, vec3(1.0, 0.97, 0.78), 0.8 * (1.0 - smoothstep(0.12, 0.3, length((q - vec2(-0.5, 0.55)) * vec2(1.0, 1.6)))));
+
+  // La cara se balancea un poco con el compás, una pulsación hacia cada lado.
+  vec2 c = q / respira - vec2(0.04 * sin(PI * uPulsaciones), 0.0);
+  float tinta = 0.0;
+  // Mejillas.
+  float mejillas = 1.0 - smoothstep(0.1, 0.2, min(length((c - vec2(-0.55, -0.1)) * vec2(1.0, 1.5)), length((c - vec2(0.55, -0.1)) * vec2(1.0, 1.5))));
+  cara = mix(cara, vec3(1.0, 0.5, 0.36), 0.6 * mejillas * detalle);
+  // Ojos: blancos con la pupila negra "de pastel" (con su muesca); de vez en cuando parpadean.
+  float parpadeo = step(0.93, fract(sin(floor(uTiempo * 1.4) * 12.9898) * 43758.5453)) * step(fract(uTiempo * 1.4), 0.3);
+  for (int i = 0; i < 2; i++) {
+    float lado = i == 0 ? -1.0 : 1.0;
+    vec2 centroOjo = vec2(0.28 * lado, 0.2);
+    if (parpadeo > 0.5) {
+      tinta += arco(c, centroOjo + vec2(0.0, -0.02), -3.0, 0.15, 2.2);
+    } else {
+      vec2 blanco = forma(elipse(c, centroOjo, vec2(0.16, 0.23)), 1.3);
+      cara = mix(cara, vec3(1.0, 0.99, 0.95), blanco.x * detalle);
+      tinta += blanco.y;
+      vec2 centroPupila = centroOjo + vec2(0.03, -0.04);
+      vec2 pupila = forma(elipse(c, centroPupila, vec2(0.085, 0.14)), 0.0);
+      vec2 dp = c - centroPupila;
+      float anguloPupila = atan(dp.y, dp.x);
+      float muesca = step(0.35, anguloPupila) * step(anguloPupila, 1.15);
+      cara = mix(cara, TINTA, pupila.x * (1.0 - muesca) * detalle);
+    }
+    // Cejas.
+    tinta += arco(c, vec2(0.28 * lado, 0.5), -2.2, 0.12, 1.8);
+  }
+  // Nariz redonda.
+  vec2 nariz = forma(elipse(c, vec2(0.0, 0.0), vec2(0.075, 0.065)), 1.2);
+  cara = mix(cara, vec3(1.0, 0.62, 0.26), nariz.x * detalle);
+  tinta += nariz.y;
+  // Boca abierta de oreja a oreja, con dientes arriba y la lengua; se abre más en cada pulso.
+  float apertura = 0.36 + 0.07 * p;
+  float dBoca = max(length((c - vec2(0.0, -0.14)) / vec2(0.46, apertura)) - 1.0, c.y + 0.14);
+  vec2 boca = forma(dBoca, 1.4);
+  vec3 interior = vec3(0.50, 0.10, 0.12);
+  interior = mix(interior, vec3(1.0, 0.99, 0.95), 1.0 - zona(-c.y, 0.22));
+  float lengua = 1.0 - zona(length((c - vec2(0.02, -0.14 - apertura * 0.95)) / vec2(0.24, 0.14)), 1.0);
+  interior = mix(interior, vec3(0.96, 0.42, 0.45), lengua);
+  cara = mix(cara, interior, boca.x * detalle);
+  tinta += boca.y;
+  cara = mix(cara, TINTA, clamp(tinta, 0.0, 1.0) * detalle);
+
+  // Composición: rayos detrás, el disco delante, cada uno con su tinta.
+  vec3 color = colorRayo;
+  float alfa = max(rayo.x, rayo.y);
+  color = mix(color, TINTA, rayo.y * (1.0 - rayo.x));
+  color = mix(color, cara, disco.x);
+  color = mix(color, TINTA, disco.y);
+  alfa = max(alfa, max(disco.x, disco.y));
+  if (alfa < 0.5) discard;
+  gl_FragColor = salidaCaricatura(color * uAparicion);
 }
 `
 
@@ -205,6 +434,11 @@ void main() {
 }
 `
 
+/**
+ * Anillos de Saturno de caricatura: bandas planas (C tenue, B crema, la división de Cassini vacía,
+ * A dorado con la de Encke como una raya), bordes entintados, la sombra del planeta como una zona
+ * de color y la cara no iluminada más apagada.
+ */
 export const ANILLOS_FRAG = /* glsl */ `
 uniform vec3 uSol;
 uniform vec3 uCentroPlaneta;
@@ -215,117 +449,80 @@ varying vec3 vPosMundo;
 varying float vRadio;
 varying vec3 vNormalMundo;
 
-float bordeFijo;
-
-float banda(float r, float desde, float hasta, float borde) {
-  // El borde nunca es más fino que un píxel: sin él los bordes del anillo salían dentados.
-  float b = max(borde, bordeFijo);
-  return smoothstep(desde - b, desde + b, r) * (1.0 - smoothstep(hasta - b, hasta + b, r));
-}
+${SALIDA_CARICATURA}
 
 void main() {
   float r = vRadio;
-  bordeFijo = fwidth(r) * 0.75;
-  // Perfil real de los anillos principales (radios de Saturno): C tenue, B denso, división de
-  // Cassini casi vacía, A con la división de Encke, y estructura fina de ondas de densidad.
-  float c = banda(r, 1.24, 1.525, 0.01) * 0.16;
-  float b = banda(r, 1.525, 1.95, 0.008) * (0.78 + 0.18 * sin(r * 83.0) * sin(r * 31.0));
-  float a = banda(r, 2.03, 2.27, 0.008) * 0.55 * (1.0 - 0.85 * banda(r, 2.205, 2.215, 0.002));
-  float fina = 0.85 + 0.15 * sin(r * 410.0) * sin(r * 157.0);
-  float densidad = (c + b * 0.85 + a * 0.9) * fina;
-  vec3 color = mix(vec3(0.70, 0.62, 0.50), vec3(0.93, 0.86, 0.72), smoothstep(1.4, 2.0, r));
+  float fw = max(fwidth(r), 1e-5);
+  if (r < 1.24 - fw || r > 2.27 + 2.0 * fw || (r > 1.95 + 2.0 * fw && r < 2.03 - 2.0 * fw)) discard;
+  vec3 color = r < 1.525 ? vec3(0.78, 0.70, 0.58) : r < 1.95 ? vec3(0.97, 0.90, 0.72) : vec3(0.90, 0.78, 0.56);
+  // Aerógrafo: la banda B más clara hacia fuera.
+  color *= r > 1.525 && r < 1.95 ? mix(0.94, 1.04, smoothstep(1.55, 1.9, r)) : 1.0;
   vec3 aSol = normalize(uSol - vPosMundo);
-  // Los anillos se ven iluminados aunque el Sol los roce (dispersan hacia delante).
-  float iluminacion = 0.35 + 0.65 * sqrt(abs(dot(normalize(vNormalMundo), aSol)));
-  // Sombra del planeta sobre los anillos: el rayo hacia el Sol choca con la esfera.
+  vec3 aCamara = normalize(cameraPosition - vPosMundo);
+  vec3 normal = normalize(vNormalMundo);
+  // Vista por la cara que no da el Sol: más apagada.
+  if (dot(normal, aSol) * dot(normal, aCamara) < 0.0) color *= vec3(0.62, 0.6, 0.72);
+  // Sombra del planeta: el rayo hacia el Sol choca con la esfera.
   vec3 oc = vPosMundo - uCentroPlaneta;
   float bq = dot(oc, aSol);
   float cq = dot(oc, oc) - uRadioPlaneta * uRadioPlaneta;
-  float sombra = (bq < 0.0 && bq * bq - cq > 0.0) ? 0.06 : 1.0;
-  float alfa = clamp(densidad, 0.0, 1.0) * uAparicion;
-  gl_FragColor = vec4(color * iluminacion * sombra * 0.95, alfa);
+  if (bq < 0.0 && bq * bq - cq > 0.0) color *= vec3(0.42, 0.40, 0.6);
+  // Tinta: bordes de fuera y de dentro, la división de Cassini y la de Encke; una línea fina entre C y B.
+  float tinta = trazo(r - 1.24, 1.4) + trazo(r - 2.27, 1.6) + trazo(r - 1.95, 1.4) + trazo(r - 2.03, 1.4);
+  tinta += 0.8 * trazo(r - 2.21, 0.8) + 0.5 * trazo(r - 1.525, 0.8);
+  color = mix(color, TINTA, clamp(tinta, 0.0, 1.0));
+  gl_FragColor = salidaCaricatura(color * uAparicion);
 }
 `
 
-export const CINTURON_VERT = /* glsl */ `
-attribute float aRadio;
-attribute float aFase;
-attribute float aAltura;
-attribute float aBrillo;
-
-uniform float uAnios;
-uniform float uTamano;
-uniform float uAparicion;
-uniform float uEscalaOrbita;
-uniform float uExponenteOrbita;
-
-varying float vAlfa;
-
-void main() {
-  // Tercera ley de Kepler: periodo en años = a^1.5 (a en UA); la distancia visible se comprime
-  // igual que las órbitas de los planetas.
-  float angulo = aFase + 6.2831853 * uAnios / pow(aRadio, 1.5);
-  float r = uEscalaOrbita * pow(aRadio, uExponenteOrbita);
-  vec3 posicion = vec3(cos(angulo) * r, aAltura, -sin(angulo) * r);
-  vec4 mv = modelViewMatrix * vec4(posicion, 1.0);
-  gl_Position = projectionMatrix * mv;
-  gl_PointSize = uTamano;
-  vAlfa = aBrillo * uAparicion;
-}
-`
-
-export const CINTURON_FRAG = /* glsl */ `
-uniform vec3 uColor;
-
-varying float vAlfa;
-
-void main() {
-  vec2 c = gl_PointCoord - 0.5;
-  float d2 = dot(c, c) * 4.0;
-  if (d2 > 1.0) discard;
-  gl_FragColor = vec4(uColor * exp(-d2 * 3.5) * vAlfa, 1.0);
-}
-`
-
+/**
+ * Órbitas como un camino de puntitos, como en las cartas celestes antiguas: más gruesos justo
+ * detrás del planeta (por donde acaba de pasar) y con un hueco a su alrededor.
+ */
 export const ORBITA_VERT = /* glsl */ `
 attribute float aAnomalia;
+uniform float uAnomaliaPlaneta;
+uniform float uHueco;
+uniform float uTamano;
+// Separación entre puntitos (unidades) y alto del lienzo (px): de lejos, los puntitos no se juntan
+// en una raya: se achican y, si ya no caben, no se dibujan.
+uniform float uSeparacion;
+uniform float uAltoPx;
+
 varying float vAnomalia;
 
 void main() {
   vAnomalia = aAnomalia;
+  float detras = mod(uAnomaliaPlaneta - aAnomalia, 6.2831853);
+  float delante = mod(aAnomalia - uAnomaliaPlaneta, 6.2831853);
+  float estela = exp(-detras / 1.1);
+  float hueco = smoothstep(uHueco, 2.0 * uHueco, min(detras, delante));
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  float separacionPx = uSeparacion * projectionMatrix[1][1] * 0.5 * uAltoPx / max(gl_Position.w, 1e-3);
+  gl_PointSize = min(uTamano * (0.8 + 0.9 * estela), 0.42 * separacionPx) * hueco;
+  if (separacionPx < 3.0 || gl_PointSize < 1.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }
 `
 
 export const ORBITA_FRAG = /* glsl */ `
 uniform vec3 uColor;
-uniform float uAnomaliaPlaneta;
-uniform float uAparicion;
-// Medio hueco (en anomalía) alrededor del planeta: la línea no le pasa por encima.
-uniform float uHueco;
 
-varying float vAnomalia;
+${SALIDA_CARICATURA}
 
 void main() {
-  // Estela: la órbita es un hilo tenue que se aviva justo detrás del planeta (por donde acaba de
-  // pasar) y se desvanece en algo más de un cuarto de vuelta.
-  float detras = mod(uAnomaliaPlaneta - vAnomalia, 6.2831853);
-  float estela = exp(-detras / 1.3);
-  float delante = mod(vAnomalia - uAnomaliaPlaneta, 6.2831853);
-  float hueco = smoothstep(uHueco, 2.0 * uHueco, min(detras, delante));
-  float alfa = (0.07 + 0.75 * estela) * hueco * uAparicion;
-  gl_FragColor = vec4(uColor * alfa, 1.0);
+  vec2 c = gl_PointCoord - 0.5;
+  if (dot(c, c) > 0.25) discard;
+  gl_FragColor = salidaCaricatura(uColor);
 }
 `
 
 /**
- * La Tierra, para verla de cerca al final del viaje: el mapa de continentes (tierra firme, aridez,
- * hielo; `utils/texturaTierra.ts`) con las costas rotas por ruido fractal, bosques, praderas,
- * desiertos, tundra y casquetes; océano profundo con aguas someras junto a las costas y el reflejo
- * del Sol (el destello especular que se ve en las fotos desde órbita); nubes con bandas por
- * latitud (la zona de convergencia tropical, los desiertos despejados, las borrascas de latitudes
- * medias) deformadas en remolinos; la neblina azul de la atmósfera sobre el lado de día y, en el de
- * noche, las luces de las ciudades.
+ * La Tierra de caricatura, para verla de cerca al final: océano azul con una franja más clara junto
+ * a las costas, continentes verdes con desiertos ocres, casquetes blancos y la costa entintada (del
+ * mapa de `utils/texturaTierra.ts`, con el borde algo ondulado); nubes blancas en borreguitos que se
+ * mueven; sombra azul de noche con las luces de las ciudades como puntitos amarillos, una raya dorada
+ * de atardecer en el terminador y un brillo de barniz en el mar.
  */
 export const TIERRA_FRAG = /* glsl */ `
 uniform sampler2D uMapa;
@@ -338,6 +535,7 @@ varying vec3 vNormalMundo;
 varying vec3 vPosMundo;
 varying vec3 vLocal;
 
+${SALIDA_CARICATURA}
 ${RUIDO_3D}
 
 // Muestra un mapa equirectangular sin costura en el antimeridiano: de las dos parametrizaciones
@@ -352,7 +550,6 @@ vec3 muestraMapa(sampler2D mapa, float u, float v) {
 
 void main() {
   vec3 p = normalize(vLocal);
-  // Longitud este creciente en sentido antihorario visto desde el norte (+Y), como el giro.
   float longitud = atan(-p.z, p.x);
   float latitud = asin(clamp(p.y, -1.0, 1.0));
   float coordU = longitud / 6.2831853 + 0.5;
@@ -360,108 +557,85 @@ void main() {
   vec3 mapa = muestraMapa(uMapa, coordU, coordV);
   float latitudGrados = abs(latitud) * 57.29578;
 
-  // Costas fractales: el umbral de la máscara difuminada se mueve con ruido fino.
-  float costa = fbm3(p * 24.0) - 0.5;
-  float tierra = smoothstep(0.46, 0.54, mapa.r + costa * 0.32);
-  float somera = smoothstep(0.08, 0.42, mapa.r + costa * 0.2) * (1.0 - tierra);
+  // Costa: el umbral de la máscara con una ondulación suave (de dibujo, no fractal).
+  float costa = mapa.r + 0.18 * (fbm3(p * 7.0) - 0.5);
+  float tierra = zona(costa, 0.5);
+  float somera = zona(costa, 0.3) * (1.0 - tierra);
 
-  // Océano: azul muy oscuro, turquesa en las plataformas junto a la costa.
-  vec3 oceano = mix(vec3(0.010, 0.035, 0.105), vec3(0.03, 0.11, 0.18), somera);
-  oceano *= 0.85 + 0.3 * fbm3(p * 9.0 + 4.0);
+  vec3 oceano = mix(vec3(0.20, 0.47, 0.82), vec3(0.38, 0.68, 0.90), somera);
+  vec3 suelo = mix(vec3(0.47, 0.74, 0.31), vec3(0.32, 0.58, 0.25), zona(fbm3(p * 5.0 + 17.0), 0.56));
+  float arido = zona(mapa.g + 0.3 * (fbm3(p * 4.0 + 8.0) - 0.5), 0.45);
+  suelo = mix(suelo, vec3(0.94, 0.79, 0.46), arido);
+  suelo = mix(suelo, vec3(0.64, 0.68, 0.48), zona(latitudGrados, 60.0));
+  float hielo = max(zona(mapa.b, 0.5), zona(latitudGrados + 5.0 * (fbm3(p * 6.0) - 0.5), 75.0) * tierra);
+  float banquisa = zona(latitudGrados + 6.0 * (fbm3(p * 5.0) - 0.5), 80.0);
+  vec3 color = mix(oceano, suelo, tierra);
+  color = mix(color, vec3(0.97, 0.98, 1.0), max(hielo, banquisa));
+  // La costa entintada (del lado de tierra).
+  color = mix(color, vec3(0.12, 0.16, 0.26), trazo(costa - 0.5, 1.4) * (1.0 - banquisa));
 
-  // Suelos: verdor por humedad y latitud, desiertos con dunas, llanuras y roca oscura (el borde
-  // de la aridez se rompe con ruido), tundra y hielo.
-  float humedad = fbm3(p * 6.0 + 17.0);
-  float tropico = 1.0 - smoothstep(12.0, 28.0, latitudGrados);
-  vec3 bosque = mix(vec3(0.06, 0.12, 0.04), vec3(0.04, 0.09, 0.03), tropico);
-  vec3 pradera = mix(vec3(0.22, 0.24, 0.11), vec3(0.30, 0.27, 0.15), fbm3(p * 14.0));
-  vec3 suelo = mix(pradera, bosque, smoothstep(0.35, 0.65, humedad + 0.25 * tropico));
-  // Desiertos: mares de arena claros, llanuras pedregosas ocres y macizos de roca oscura rojiza,
-  // con el borde (el Sahel, las estepas) deshecho por ruido en vez de una línea.
-  float arido = smoothstep(0.18, 0.7, mapa.g + (fbm3(p * 4.0 + 8.0) - 0.5) * 0.8);
-  float relieve = fbm3(p * 3.0 + 6.0);
-  vec3 arena = mix(vec3(0.48, 0.32, 0.17), vec3(0.72, 0.55, 0.33), smoothstep(0.3, 0.7, fbm3(p * 8.0)));
-  arena = mix(arena, vec3(0.30, 0.19, 0.11), 0.75 * smoothstep(0.5, 0.66, relieve));
-  arena = mix(arena, vec3(0.62, 0.36, 0.20), 0.35 * smoothstep(0.55, 0.7, fbm3(p * 13.0 + 1.0)));
-  arena *= 0.78 + 0.4 * fbm3(p * 36.0);
-  suelo = mix(suelo, arena, arido);
-  suelo = mix(suelo, vec3(0.30, 0.29, 0.24), smoothstep(58.0, 68.0, latitudGrados));
-  float nieve = max(smoothstep(0.35, 0.7, mapa.b), smoothstep(70.0, 76.0, latitudGrados) * tierra);
-  suelo *= 0.8 + 0.35 * fbm3(p * 22.0 + 3.0);
-
-  // Hielo marino en los polos (el Ártico y el borde de la Antártida).
-  float banquisa = smoothstep(78.0, 84.0, latitudGrados + 6.0 * (fbm3(p * 7.0) - 0.5));
-  vec3 superficie = mix(oceano, suelo, tierra);
-  superficie = mix(superficie, vec3(0.84, 0.88, 0.93), max(nieve, banquisa));
-
-  // Nubes: estiradas de este a oeste (los vientos zonales), deformadas en remolinos y con bandas
-  // por latitud (la zona de convergencia tropical, los subtrópicos despejados, las borrascas de
-  // latitudes medias); un velo fino de cirros por encima.
-  vec3 q = vec3(p.x, p.y * 1.9, p.z) * 3.3 + vec3(uTiempo * 0.004, 0.0, uTiempo * 0.0015);
-  vec3 deformacion = vec3(fbm3(q + 1.3), fbm3(q + 7.1), fbm3(q + 3.7)) - 0.5;
-  float grandes = fbm3(q * 1.6 + deformacion * 2.4);
-  float finas = fbm3(q * 5.5 + deformacion * 3.2 + 11.0);
-  float latitudCon = latitud * 57.29578;
-  float bandas = 0.10 * exp(-pow((latitudCon - 6.0) / 7.0, 2.0))
-    - 0.12 * exp(-pow((latitudGrados - 24.0) / 9.0, 2.0))
-    + 0.08 * exp(-pow((latitudGrados - 55.0) / 12.0, 2.0));
-  float nubes = smoothstep(0.54, 0.76, grandes * 0.72 + finas * 0.38 + bandas);
-  nubes = max(nubes, 0.28 * smoothstep(0.6, 0.82, fbm3(q * 2.6 + vec3(5.0, 0.0, 2.0))));
+  // Nubes en borreguitos que se desplazan con los vientos.
+  vec3 qn = vec3(p.x, p.y * 1.6, p.z) * 3.0 + vec3(uTiempo * 0.006, 0.0, uTiempo * 0.002);
+  float nubes = fbm3(qn + 0.35 * vec3(fbm3(qn * 1.7 + 3.1), 0.0, fbm3(qn * 1.7 + 7.3)));
+  float nube = zona(nubes, 0.6);
+  color = mix(color, vec3(0.74, 0.82, 0.94), zona(nubes, 0.58) * (1.0 - nube));
+  color = mix(color, vec3(1.0, 0.995, 0.98), nube);
 
   vec3 n = normalize(vNormalMundo);
   vec3 l = normalize(uSol - vPosMundo);
   vec3 v = normalize(cameraPosition - vPosMundo);
   float ndl = dot(n, l);
-  float lambert = max(ndl, 0.0);
-  float dia = smoothstep(-0.10, 0.12, ndl);
+  float dia = zona(ndl, 0.0);
   float mu = max(dot(n, v), 0.0);
-
-  vec3 color = superficie * lambert * 1.6;
-  color = mix(color, vec3(0.9, 0.91, 0.93) * lambert * 1.25, nubes);
-  // Destello del Sol en el océano (donde no hay nubes ni tierra).
-  vec3 h = normalize(l + v);
-  float destello = pow(max(dot(n, h), 0.0), 90.0) * (1.0 - tierra) * (1.0 - nubes) * dia;
-  color += vec3(1.0, 0.93, 0.80) * destello * 1.3;
-  // Neblina azul de la atmósfera sobre el día, más espesa hacia el borde.
-  float espesor = 0.05 + 0.42 * pow(1.0 - mu, 3.0);
-  color = mix(color, vec3(0.22, 0.38, 0.85) * lambert * 1.3, clamp(espesor * dia, 0.0, 0.6));
-
-  // Luces de las ciudades en la noche: la población rota en núcleos urbanos por ruido.
-  float noche = 1.0 - smoothstep(-0.16, 0.02, ndl);
+  vec3 iluminado = color * mix(0.86, 1.05, smoothstep(0.0, 0.6, ndl));
+  // Noche: azul de noche con el mapa apenas marcado (con sólo oscurecer, los desiertos salían grises).
+  vec3 noche = mix(color * vec3(0.3, 0.33, 0.5), vec3(0.09, 0.12, 0.3), 0.45) * (1.0 + 0.3 * pow(1.0 - mu, 2.0));
+  // Luces de las ciudades: puntitos amarillos en tierra poblada, sólo de noche y bajo cielo despejado.
   float poblacion = muestraMapa(uPoblacion, coordU, coordV).r;
-  // Núcleos: grandes ciudades brillantes y un salpicado de pueblos más tenues, no una mancha.
-  float nucleos = smoothstep(0.6, 0.82, fbm3(p * 90.0)) + 0.5 * smoothstep(0.68, 0.86, fbm3(p * 230.0 + 5.0));
-  float ciudades = poblacion * sqrt(poblacion) * tierra * nucleos * (1.0 - nubes * 0.75);
-  color += vec3(1.0, 0.66, 0.30) * ciudades * noche * 1.6;
-
-  gl_FragColor = vec4(color * uAparicion, 1.0);
+  vec2 celda = celdas(p * 45.0);
+  float luces = (1.0 - zona(celda.x, 0.22 + 0.1 * celda.y)) * step(0.35, poblacion + 0.4 * celda.y) * step(0.12, poblacion) * tierra * (1.0 - nube);
+  noche = mix(noche, vec3(1.0, 0.86, 0.42), luces);
+  color = mix(noche, iluminado, dia);
+  // Raya dorada de atardecer a lo largo del terminador.
+  color = mix(color, vec3(1.0, 0.66, 0.36), trazo(ndl - 0.03, 2.2) * 0.85);
+  // Brillo de barniz sobre el mar.
+  vec3 h = normalize(l + v);
+  color = mix(color, vec3(1.0, 0.99, 0.95), zona(dot(n, h), 0.985) * dia * (1.0 - tierra) * (1.0 - nube));
+  color = mix(color, TINTA, 1.0 - smoothstep(1.2 * fwidth(mu), 2.2 * fwidth(mu), mu));
+  gl_FragColor = salidaCaricatura(color * uAparicion);
 }
 `
 
 /**
- * Capa de atmósfera: una esfera algo mayor que la Tierra, aditiva, que se enciende en el borde
- * (el camino por el aire es más largo ahí): azul sobre el lado de día y anaranjada en el
- * terminador, donde la luz atraviesa la atmósfera al amanecer y al anochecer.
+ * Atmósfera de caricatura: un aro plano azul claro alrededor de la Tierra (el pase lo entinta por
+ * fuera), sólo por el lado de día. Es una cáscara algo mayor que la Tierra: donde la vista la
+ * atraviesa y da con la Tierra, no se dibuja.
  */
 export const ATMOSFERA_FRAG = /* glsl */ `
 uniform vec3 uSol;
+uniform vec3 uCentro;
+uniform float uRadio;
 uniform float uAparicion;
 
 varying vec3 vNormalMundo;
 varying vec3 vPosMundo;
 varying vec3 vLocal;
 
+${SALIDA_CARICATURA}
+
 void main() {
+  vec3 d = normalize(vPosMundo - cameraPosition);
+  vec3 oc = cameraPosition - uCentro;
+  float b = dot(oc, d);
+  float c = dot(oc, oc) - uRadio * uRadio;
+  if (b * b - c > 0.0 && b < 0.0) discard;
   vec3 n = normalize(vNormalMundo);
-  vec3 v = normalize(cameraPosition - vPosMundo);
   vec3 l = normalize(uSol - vPosMundo);
-  float mu = clamp(dot(n, v), 0.0, 1.0);
-  float borde = pow(1.0 - mu, 4.0) * smoothstep(0.0, 0.12, mu);
-  float ndl = dot(n, l);
-  float dia = smoothstep(-0.3, 0.35, ndl);
-  vec3 color = vec3(0.28, 0.52, 1.0) * borde * dia * 1.5;
-  // Un toque anaranjado sólo en el borde, donde el terminador corta el limbo (amanecer y ocaso).
-  color += vec3(1.0, 0.42, 0.16) * borde * borde * exp(-pow(ndl / 0.1, 2.0)) * 0.3;
-  gl_FragColor = vec4(color * uAparicion, 1.0);
+  float dia = dot(n, l);
+  // El aro se afina hacia el lado de noche hasta desaparecer (no se corta de golpe).
+  float cercania = sqrt(max(dot(oc, oc) - b * b, 0.0)) / uRadio;
+  if (cercania > 1.0 + 0.055 * smoothstep(-0.35, 0.3, dia)) discard;
+  vec3 color = mix(vec3(0.46, 0.70, 0.92), vec3(0.66, 0.88, 1.0), smoothstep(-0.25, 0.4, dia));
+  gl_FragColor = salidaCaricatura(color * uAparicion);
 }
 `

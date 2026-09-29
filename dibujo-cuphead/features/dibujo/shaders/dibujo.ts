@@ -47,6 +47,37 @@ vec3 srgbDesdeOklab(vec3 lab) {
 }
 `
 
+/**
+ * Lo que la escena ya dibuja en caricatura (el sistema solar) sale con alfa 0.5; lo realista (el
+ * túnel del agujero de gusano, los cielos) con alfa 1 o más. Lo realista pasa por el tono ACES
+ * (el mismo de three.js) antes de dibujarse; lo de caricatura se queda con su color.
+ */
+export const TONO_GLSL = /* glsl */ `
+bool esCaricatura(float alfa) {
+  return alfa > 0.25 && alfa < 0.75;
+}
+
+vec3 ajusteRRTyODT(vec3 v) {
+  vec3 a = v * (v + 0.0245786) - 0.000090537;
+  vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
+  return a / b;
+}
+
+vec3 tonoACES(vec3 color) {
+  const mat3 ENTRADA = mat3(vec3(0.59719, 0.07600, 0.02840), vec3(0.35458, 0.90834, 0.13383), vec3(0.04823, 0.01566, 0.83777));
+  const mat3 SALIDA = mat3(vec3(1.60475, -0.10208, -0.00327), vec3(-0.53108, 1.10813, -0.07276), vec3(-0.07367, -0.00605, 1.07602));
+  color = ENTRADA * (color / 0.6);
+  color = ajusteRRTyODT(color);
+  return clamp(SALIDA * color, 0.0, 1.0);
+}
+
+// Luz de lo realista, toneada; lo de caricatura no cuenta (ni para las aguadas del cielo ni para
+// los colores planos: ya viene dibujado).
+vec3 luzRealista(vec4 muestra) {
+  return esCaricatura(muestra.a) ? vec3(0.0) : tonoACES(muestra.rgb);
+}
+`
+
 /** Quad de pantalla completa (PlaneGeometry 2×2). */
 export const PANTALLA_VERT = /* glsl */ `
 out vec2 vUv;
@@ -58,30 +89,43 @@ void main() {
 `
 
 /**
- * Reducción en sRGB con cuatro lecturas bilineales y la luminancia en alfa: con el texel de
- * entrada completo es la media de bloques de 4×4 (a 1/4); con medio texel, la de bloques de 2×2
- * (a 1/2).
+ * Reducción en sRGB por bloques (de 2×2 para 1/2, de 4×4 para 1/4) con la luminancia en alfa. Cada
+ * texel se lee suelto: lo de caricatura (marcado en alfa) no cuenta y lo realista se tonea (ACES)
+ * antes de promediar, como si el tono fuera un pase previo. Con lecturas bilineales el alfa de los
+ * bordes se mezclaba y los puntitos de las órbitas dejaban un halo en las aguadas.
  */
 export const REDUCIR_FRAG = /* glsl */ `
 uniform sampler2D uEntrada;
-uniform vec2 uTexelEntrada;
+uniform int uBloque;
 
 in vec2 vUv;
 out vec4 fragColor;
 
 ${OKLAB_GLSL}
+${TONO_GLSL}
 
 void main() {
-  vec3 c = texture(uEntrada, vUv + uTexelEntrada * vec2(-1.0, -1.0)).rgb;
-  c += texture(uEntrada, vUv + uTexelEntrada * vec2(1.0, -1.0)).rgb;
-  c += texture(uEntrada, vUv + uTexelEntrada * vec2(-1.0, 1.0)).rgb;
-  c += texture(uEntrada, vUv + uTexelEntrada * vec2(1.0, 1.0)).rgb;
-  vec3 s = srgbDesdeLineal(0.25 * c);
+  ivec2 tamano = textureSize(uEntrada, 0);
+  ivec2 origen = ivec2(floor(gl_FragCoord.xy)) * uBloque;
+  vec3 c = vec3(0.0);
+  for (int y = 0; y < 4; y++) {
+    for (int x = 0; x < 4; x++) {
+      if (x >= uBloque || y >= uBloque) continue;
+      ivec2 p = min(origen + ivec2(x, y), tamano - 1);
+      c += luzRealista(texelFetch(uEntrada, p, 0));
+    }
+  }
+  vec3 s = srgbDesdeLineal(c / float(uBloque * uBloque));
   fragColor = vec4(s, dot(s, vec3(0.299, 0.587, 0.114)));
 }
 `
 
-/** Gaussiana separable de 9 lecturas (σ ≈ 1.75 pasos); `uPaso` es el paso en UV. */
+/**
+ * Gaussiana separable de σ = 3.5 texels con 9 lecturas bilineales (cada una entre dos texels, con su
+ * peso: equivale a 17 texels); `uPaso` es un texel en UV en la dirección del pase, escalado por
+ * σ/3.5. Con lecturas cada dos texels exactos, un punto brillante salía en peine (las aguadas se
+ * rayaban en rejilla alrededor de puntitos como los de las órbitas).
+ */
 export const DESENFOQUE_FRAG = /* glsl */ `
 uniform sampler2D uEntrada;
 uniform vec2 uPaso;
@@ -93,10 +137,11 @@ in vec2 vUv;
 out vec4 fragColor;
 
 void main() {
-  const float PESOS[5] = float[](0.2270270270, 0.1945945946, 0.1216216216, 0.0540540541, 0.0162162162);
+  const float DESPLAZAMIENTOS[5] = float[](0.0, 1.4694, 3.4291, 5.3897, 7.3517);
+  const float PESOS[5] = float[](0.1157, 0.20933, 0.14035, 0.06832, 0.02414);
   vec4 s = texture(uEntrada, vUv) * PESOS[0];
   for (int i = 1; i < 5; i++) {
-    vec2 d = uPaso * float(i);
+    vec2 d = uPaso * DESPLAZAMIENTOS[i];
     s += (texture(uEntrada, vUv + d) + texture(uEntrada, vUv - d)) * PESOS[i];
   }
   fragColor = uMezcla < 1.0 ? mix(texture(uHistoria, vUv), s, uMezcla) : s;
@@ -110,16 +155,20 @@ void main() {
 
 /**
  * Cielo en acuarela a 1/2 de resolución (su dibujo es amplio) y máscara del cielo abierto en A: donde
- * la escena no escribió profundidad (ni planeta, ni la sombra del agujero, ni gas denso). Dentro
- * del horizonte, antes de que aparezca la boca del agujero de gusano, no hay cielo: es oscuridad.
+ * la escena no escribió profundidad (ni planeta, ni la sombra del agujero, ni gas denso) ni dibujó
+ * nada de caricatura. Dentro del horizonte, antes de que aparezca la boca del agujero de gusano, no
+ * hay cielo: es oscuridad.
  */
 export const CIELO_FRAG = /* glsl */ `
 uniform sampler2D uProfundidad;
+uniform sampler2D uEscena;
 uniform vec2 uTexelEntrada;
 uniform float uCieloPintado;
 // Rayos de sol detrás del agujero (como el fondo de los títulos de Cuphead): posición del agujero en
 // pantalla (xy, uv), radio de su sombra (z, fracción de la altura) y peso (w).
 uniform vec4 uAgujero;
+// Lo mismo para el Sol de caricatura: su resplandor dorado en el cielo, con rayos.
+uniform vec4 uSol;
 uniform float uAspecto;
 uniform float uTiempo;
 uniform float uLatido;
@@ -129,6 +178,23 @@ out vec4 fragColor;
 
 ${RUIDO3_GLSL}
 ${CIELO_ACUARELA_GLSL}
+${TONO_GLSL}
+
+vec3 resplandorDelSol(vec2 uv, vec3 cielo) {
+  vec2 q = (uv - uSol.xy) * vec2(uAspecto, 1.0);
+  // Distancia en radios del disco del Sol, desde su borde.
+  float d = max(length(q) / max(uSol.z, 1e-4) - 1.0, 0.0);
+  float angulo = atan(q.y, q.x);
+  float rayo = smoothstep(-0.3, 0.3, cos(angulo * 12.0 - uTiempo * 0.1));
+  vec3 c = mix(cielo, vec3(0.96, 0.56, 0.42), 0.6);
+  c = mix(c, vec3(1.0, 0.84, 0.5), exp(-d * 0.8));
+  float mezcla = uSol.w * exp(-d * 0.3) * (0.5 + 0.5 * rayo) * (0.9 + 0.1 * uLatido);
+  return mix(cielo, c, clamp(mezcla, 0.0, 1.0));
+}
+
+float cieloAbierto(vec2 uv) {
+  return step(0.99999, texture(uProfundidad, uv).r) * (esCaricatura(texture(uEscena, uv).a) ? 0.0 : 1.0);
+}
 
 vec3 rayosDeSol(vec2 uv, vec3 cielo) {
   vec2 q = (uv - uAgujero.xy) * vec2(uAspecto, 1.0);
@@ -148,13 +214,13 @@ vec3 rayosDeSol(vec2 uv, vec3 cielo) {
 }
 
 void main() {
-  float cielo = 0.0;
-  cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(-1.0, -1.0)).r);
-  cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(1.0, -1.0)).r);
-  cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(-1.0, 1.0)).r);
-  cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(1.0, 1.0)).r);
+  float cielo = cieloAbierto(vUv + uTexelEntrada * vec2(-1.0, -1.0));
+  cielo += cieloAbierto(vUv + uTexelEntrada * vec2(1.0, -1.0));
+  cielo += cieloAbierto(vUv + uTexelEntrada * vec2(-1.0, 1.0));
+  cielo += cieloAbierto(vUv + uTexelEntrada * vec2(1.0, 1.0));
   vec3 c = cieloAcuarela(direccionMundo(vUv));
   if (uAgujero.w > 0.0) c = rayosDeSol(vUv, c);
+  if (uSol.w > 0.0) c = resplandorDelSol(vUv, c);
   fragColor = vec4(c, 0.25 * cielo * uCieloPintado);
 }
 `
@@ -162,7 +228,8 @@ void main() {
 /**
  * Contornos de tinta a partir de QUÉ HAY en cada píxel, no de la imagen: con el agujero a la vista,
  * los objetos del buffer del agujero (cielo, caras del disco, cantos, anillo, sombra); dentro del
- * horizonte, los saltos de profundidad de la escena (planetas frente al cielo). Para cada píxel se
+ * horizonte, los saltos de profundidad de la escena (planetas frente al cielo), sólo por el lado de
+ * fuera de la silueta (así un planeta pequeño no se queda en una mancha de tinta). Para cada píxel se
  * miran doce puntos en un círculo del grosor del trazo: la fracción que cae en otro objeto da una
  * línea de ese grosor con el borde suave. El grosor varía a lo largo de la línea, como la presión de
  * un pincel, y todo "hierve" un poco de un dibujo a otro. Entre las bandas del disco van líneas
@@ -218,7 +285,7 @@ void main() {
   for (int k = 0; k < 12; k++) {
     float a = 6.2831853 * float(k) / 12.0;
     vec2 direccion = vec2(cos(a), sin(a));
-    vec2 q = uv + direccion * grosor / uResolucion;
+    vec2 q = uv + direccion * grosor * (conGas ? 1.0 : 1.5) / uResolucion;
     if (conGas) {
       float banda;
       float objeto = objetoEn(q, banda);
@@ -231,8 +298,9 @@ void main() {
         if (objetoCerca == 1.0 && bandaCerca != banda0) bandas += 1.0;
       }
     } else {
+      // El píxel lejano junto a algo más cercano: la tinta queda fuera de la silueta.
       float z = zEn(q);
-      if (abs(z - z0) > 0.06 * min(z, z0)) tinta += 1.0;
+      if (z0 - z > 0.06 * z) tinta += 1.0;
     }
   }
   fragColor = vec4(tinta / 12.0, bandas / 6.0, 0.0, 1.0);
@@ -246,6 +314,8 @@ void main() {
  * trazo donde el borde es más fuerte, como la presión de un pincel.
  */
 export const COMPONER_FRAG = /* glsl */ `
+// La escena a resolución completa: lo que ya viene dibujado en caricatura se toma tal cual.
+uniform sampler2D uEscena;
 uniform sampler2D uColorSuave;
 // Contornos (R: tinta, G: líneas de color entre bandas), ver CONTORNO_FRAG.
 uniform sampler2D uContornos;
@@ -277,6 +347,7 @@ in vec2 vUv;
 out vec4 fragColor;
 
 ${OKLAB_GLSL}
+${TONO_GLSL}
 ${PALETA_EPOCA_GLSL}
 ${PAPEL_GLSL}
 
@@ -345,6 +416,9 @@ void main() {
   vec4 cielo = texture(uCielo, vUv);
   vec3 objeto = colorDeEpoca(coloresPlanos(escena), uFuerzaEpoca);
   vec3 c = mix(objeto, aguadasDeLuz(cielo.rgb, texturaBicubica(uAguada, vUv).rgb), cielo.a);
+  // Lo que la escena ya dibuja en caricatura (el sistema solar) va con su color, sin aplanar.
+  vec4 dibujado = texelFetch(uEscena, ivec2(vUv * vec2(textureSize(uEscena, 0))), 0);
+  if (esCaricatura(dibujado.a)) c = srgbDesdeLineal(dibujado.rgb);
 
   // El agujero de caricatura por encima.
   vec4 gas = texture(uGasColor, vUv);

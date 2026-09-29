@@ -3,11 +3,10 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
+import { pulsaciones } from '@/features/dibujo/store/ritmoDibujo'
 import {
   ANILLOS_SATURNO,
-  CINTURONES,
   PLANETAS,
-  RADIO_SOL,
   ROTACION,
   aEscalaVisible,
   anomaliaEnFecha,
@@ -22,25 +21,27 @@ import {
   ANILLOS_FRAG,
   ANILLOS_VERT,
   ATMOSFERA_FRAG,
-  CINTURON_FRAG,
-  CINTURON_VERT,
   ORBITA_FRAG,
   ORBITA_VERT,
   PLANETA_FRAG,
   PLANETA_VERT,
   SOL_FRAG,
+  SOL_VERT,
   TIERRA_FRAG,
 } from '../shaders/sistemaSolar'
+import { SOL_EN_ESCENA } from '../store/solEnEscena'
 import { crearTexturasTierra, type TexturasTierra } from '../utils/texturaTierra'
 
 /**
- * Nuestro sistema solar, todo generado por código (sin imágenes): el Sol con su corona, los ocho
+ * Nuestro sistema solar dibujado como un dibujo animado de los años 30, todo generado por código
+ * (sin imágenes): el Sol con cara, sonriente y cantando al compás, rodeado de rayos; los ocho
  * planetas en sus órbitas reales (elementos de JPL, posiciones del día de hoy) girando con sus
- * periodos de Kepler acelerados, sus ejes y días reales, los anillos de Saturno con la sombra del
- * planeta, el cinturón de asteroides con sus huecos de Kirkwood y el de Kuiper, y la estela de
- * cada órbita. La Tierra lleva su mapa real (continentes, desiertos, hielo), nubes, océano con el
- * reflejo del Sol, atmósfera y luces de ciudades, para verla de cerca, y la Luna la acompaña.
- * Distancias y tamaños comprimidos para que se vea (ver `datos/planetas.ts`).
+ * periodos de Kepler acelerados, sus ejes y días reales, con colores planos, sombra de color y
+ * brillo de barniz; los anillos de Saturno entintados con la sombra del planeta, y cada órbita como
+ * un camino de puntitos. La Tierra lleva su mapa real (continentes, desiertos, hielo) con las
+ * costas entintadas, nubes en borreguitos, atmósfera en un aro y las luces de las ciudades, para
+ * verla de cerca; la Luna, dormilona, la acompaña. Distancias y tamaños comprimidos para que se vea
+ * (ver `datos/planetas.ts`). Todo sale ya dibujado (ver `shaders/sistemaSolar.ts`).
  *
  * Marco local: el Sol en el origen, la eclíptica en el plano XZ y el norte eclíptico en +Y.
  * Uso: `<SistemaSolar />` dentro de un `<Canvas>`; no necesita luces de la escena (cada material
@@ -60,15 +61,9 @@ export interface SistemaSolarProps {
    * muy lejos conviene reducirlo: a escala real los planetas no serían más que puntos.
    */
   escalaPlanetas?: { readonly current: number }
-  /**
-   * Distancia de la cámara al Sol a la que los cinturones lucen con su brillo pleno; más lejos se
-   * atenúan (sus granos se dibujan con un tamaño fijo en píxeles y si no, desde lejos, el
-   * cinturón de asteroides se vería como un anillo macizo).
-   */
-  distanciaReferencia?: number
   /** Multiplicador del reloj de las órbitas (1 = `segundosPorAnio`); los giros bajan menos. */
   ritmo?: { readonly current: number }
-  /** Visibilidad de las guías (órbitas y cinturones), 0..1. */
+  /** Visibilidad de las guías (las órbitas), 0..1. */
   guias?: { readonly current: number }
   /** Visibilidad de la Luna, 0..1 (su órbita real dura tres segundos a ritmo 1: sólo se muestra despacio). */
   luna?: { readonly current: number }
@@ -87,125 +82,57 @@ interface EstadoFotograma {
   anios: number
   segundos: number
   segundosGiro: number
+  pulsaciones: number
   aparicion: number
-  pixeles: number
+  /** Alto del lienzo en píxeles de dispositivo (los puntos de las órbitas crecen con él). */
+  altoPixeles: number
+  /** Posición y orientación de la cámara en el mundo y tangente de la mitad de su campo vertical. */
+  camara: THREE.Vector3
+  orientacionCamara: THREE.Quaternion
+  tanMitadFov: number
   escala: number
-  brilloCinturones: number
   guias: number
   luna: number
   lejanos: number
-  exposicionSol: number
 }
 
-/** La Luna: radio real relativo a la Tierra y órbita comprimida (a escala serían 60 radios). */
-const LUNA = { radio: 0.273, distancia: 4.5, periodoAnios: 27.32 / 365.25, inclinacion: (5.1 * Math.PI) / 180 } as const
+/**
+ * El Sol de caricatura: su radio (mayor que el del original), el medio lado del cartel con sus
+ * rayos (en radios) y el radio mínimo en pantalla (px a 720 de alto): de lejos se dibuja algo más
+ * grande de lo que tocaría para que su cara se siga leyendo, como el protagonista que es. Al
+ * acercarse a la Tierra se encoge como los demás planetas (si no, sus rayos llenaban la pantalla).
+ */
+const SOL = { radio: 3.4, medioLado: 1.9, minimoPx: 24, cerca: 0.35 } as const
 
-/** Tinte de la estela de cada órbita: el color del planeta, apagado. */
+/**
+ * La Luna: radio real relativo a la Tierra y órbita comprimida (a escala serían 60 radios). Al
+ * final, cuando aparece junto a la Tierra, deja su órbita y "posa": se queda arriba a la derecha de
+ * la Tierra vista desde la cámara, algo detrás de ella (`pose`: derecha, arriba y hacia el fondo),
+ * para que se vea su cara. Con su órbita real quedaba detrás de la Tierra o fuera de cuadro.
+ */
+const LUNA = {
+  radio: 0.273,
+  distancia: 4.5,
+  periodoAnios: 27.32 / 365.25,
+  inclinacion: (5.1 * Math.PI) / 180,
+  pose: [0.62, 0.3, 0.72] as const,
+  aumentoPose: 1.2,
+} as const
+
+/** Color de los puntitos de cada órbita (sRGB): crema teñido del color del planeta. */
 const TINTE_ORBITA: Readonly<Record<IdPlaneta, readonly [number, number, number]>> = {
-  mercurio: [0.62, 0.58, 0.54],
-  venus: [0.8, 0.7, 0.5],
-  tierra: [0.42, 0.6, 0.95],
-  marte: [0.9, 0.48, 0.32],
-  jupiter: [0.85, 0.72, 0.55],
-  saturno: [0.88, 0.8, 0.6],
-  urano: [0.55, 0.82, 0.88],
-  neptuno: [0.4, 0.55, 0.95],
+  mercurio: [0.9, 0.86, 0.84],
+  venus: [1.0, 0.9, 0.7],
+  tierra: [0.72, 0.86, 1.0],
+  marte: [1.0, 0.76, 0.64],
+  jupiter: [1.0, 0.88, 0.72],
+  saturno: [1.0, 0.92, 0.72],
+  urano: [0.74, 0.96, 0.96],
+  neptuno: [0.7, 0.8, 1.0],
 }
 
-const PUNTOS_ORBITA = 256
-
-/** Mulberry32: el mismo cinturón en cada carga. */
-const crearAleatorio = (semilla: number): (() => number) => {
-  let estado = semilla >>> 0
-  return () => {
-    estado = (estado + 0x6d2b79f5) >>> 0
-    let t = estado
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-const gaussiano = (aleatorio: () => number): number =>
-  Math.sqrt(-2 * Math.log(Math.max(aleatorio(), 1e-9))) * Math.cos(2 * Math.PI * aleatorio())
-
-/** Corona del Sol: textura radial con un núcleo intenso y dos faldas cada vez más anchas. */
-const crearTexturaCorona = (): THREE.CanvasTexture => {
-  const lado = 256
-  const lienzo = document.createElement('canvas')
-  lienzo.width = lado
-  lienzo.height = lado
-  const contexto = lienzo.getContext('2d')
-  if (contexto) {
-    const imagen = contexto.createImageData(lado, lado)
-    for (let y = 0; y < lado; y += 1) {
-      for (let x = 0; x < lado; x += 1) {
-        const rho = Math.hypot(x + 0.5 - lado / 2, y + 0.5 - lado / 2) / (lado / 2)
-        const valor = Math.min(1, 0.85 * Math.exp(-(rho * rho) / 0.01) + 0.3 * Math.exp(-(rho * rho) / 0.05) + 0.08 * Math.exp(-(rho * rho) / 0.25)) * (1 - Math.min(1, rho) ** 4)
-        const indice = (y * lado + x) * 4
-        imagen.data[indice] = 255
-        imagen.data[indice + 1] = 255
-        imagen.data[indice + 2] = 255
-        imagen.data[indice + 3] = Math.round(255 * valor)
-      }
-    }
-    contexto.putImageData(imagen, 0, 0)
-  }
-  const textura = new THREE.CanvasTexture(lienzo)
-  textura.colorSpace = THREE.NoColorSpace
-  return textura
-}
-
-/** Puntos de un cinturón: radio real (UA), fase, altura visible y brillo por grano. */
-const crearCinturon = (
-  desde: number,
-  hasta: number,
-  cantidad: number,
-  aceptar: (ua: number, aleatorio: () => number) => boolean,
-  inclinacion: number,
-  semilla: number,
-): THREE.BufferGeometry => {
-  const aleatorio = crearAleatorio(semilla)
-  const radios = new Float32Array(cantidad)
-  const fases = new Float32Array(cantidad)
-  const alturas = new Float32Array(cantidad)
-  const brillos = new Float32Array(cantidad)
-  let n = 0
-  while (n < cantidad) {
-    const ua = desde + (hasta - desde) * aleatorio()
-    if (!aceptar(ua, aleatorio)) continue
-    radios[n] = ua
-    fases[n] = aleatorio() * Math.PI * 2
-    // Inclinaciones con reparto gaussiano: la altura es la del radio visible por el seno.
-    alturas[n] = 9 * Math.pow(ua, 0.45) * Math.sin(gaussiano(aleatorio) * inclinacion)
-    brillos[n] = 0.25 + 0.75 * Math.pow(aleatorio(), 2.2)
-    n += 1
-  }
-  const geometria = new THREE.BufferGeometry()
-  geometria.setAttribute('position', new THREE.BufferAttribute(new Float32Array(cantidad * 3), 3))
-  geometria.setAttribute('aRadio', new THREE.BufferAttribute(radios, 1))
-  geometria.setAttribute('aFase', new THREE.BufferAttribute(fases, 1))
-  geometria.setAttribute('aAltura', new THREE.BufferAttribute(alturas, 1))
-  geometria.setAttribute('aBrillo', new THREE.BufferAttribute(brillos, 1))
-  return geometria
-}
-
-const materialCinturon = (color: THREE.Vector3): THREE.ShaderMaterial =>
-  new THREE.ShaderMaterial({
-    vertexShader: CINTURON_VERT,
-    fragmentShader: CINTURON_FRAG,
-    uniforms: {
-      uAnios: { value: 0 },
-      uTamano: { value: 2 },
-      uAparicion: { value: 0 },
-      uEscalaOrbita: { value: 9 },
-      uExponenteOrbita: { value: 0.45 },
-      uColor: { value: color },
-    },
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  })
+/** Separación entre los puntitos de una órbita (unidades del sistema) y tamaño del punto (px a 720 de alto). */
+const PUNTITOS_ORBITA = { separacion: 0.9, minimo: 40, maximo: 400, tamano: 2.4 } as const
 
 interface PlanetaEnEscena {
   readonly id: IdPlaneta
@@ -214,7 +141,7 @@ interface PlanetaEnEscena {
   readonly material: THREE.ShaderMaterial
   readonly inclinacion: THREE.Quaternion
   readonly materialOrbita: THREE.ShaderMaterial
-  readonly orbita: THREE.LineLoop
+  readonly orbita: THREE.Points
 }
 
 function crearSistema(fecha: Date) {
@@ -222,27 +149,38 @@ function crearSistema(fecha: Date) {
   const liberables: { dispose: () => void }[] = []
   const siglosIniciales = siglosDesdeJ2000(fecha)
 
-  // Sol: fotosfera HDR (florece con el bloom de la escena) y corona aditiva detrás.
+  // Sol: un cartel de cara a la cámara con la cara y los rayos dibujados.
   const materialSol = new THREE.ShaderMaterial({
-    vertexShader: PLANETA_VERT,
+    vertexShader: SOL_VERT,
     fragmentShader: SOL_FRAG,
-    uniforms: { uAparicion: { value: 0 }, uTiempo: { value: 0 } },
+    uniforms: {
+      uAparicion: { value: 0 },
+      uTiempo: { value: 0 },
+      uPulsaciones: { value: 0 },
+      uTamano: { value: SOL.radio * SOL.medioLado },
+      uMedioLado: { value: SOL.medioLado },
+    },
   })
-  const geometriaSol = new THREE.SphereGeometry(RADIO_SOL, 64, 32)
-  const sol = new THREE.Mesh(geometriaSol, materialSol)
-  raiz.add(sol)
-  const texturaCorona = crearTexturaCorona()
-  const materialCorona = new THREE.SpriteMaterial({
-    map: texturaCorona,
-    color: new THREE.Color(0, 0, 0),
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
+  // Sin profundidad propia: el pase no le pone el contorno grueso (a unos píxeles, sus rayos
+  // quedaban en una mancha de tinta). Se dibuja después del cielo (que se suma y le borraría la
+  // marca de caricatura) y de los puntitos de las órbitas, sustituyendo lo que haya; los planetas
+  // que tiene delante lo tapan por profundidad.
+  Object.assign(materialSol, {
     transparent: true,
+    depthWrite: false,
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.AddEquation,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.ZeroFactor,
+    blendSrcAlpha: THREE.OneFactor,
+    blendDstAlpha: THREE.ZeroFactor,
   })
-  const corona = new THREE.Sprite(materialCorona)
-  corona.scale.setScalar(RADIO_SOL * 6)
-  raiz.add(corona)
-  liberables.push(materialSol, geometriaSol, texturaCorona, materialCorona)
+  const geometriaSol = new THREE.PlaneGeometry(2, 2)
+  const sol = new THREE.Mesh(geometriaSol, materialSol)
+  sol.frustumCulled = false
+  sol.renderOrder = 3
+  raiz.add(sol)
+  liberables.push(materialSol, geometriaSol)
 
   const geometriaPlaneta = new THREE.SphereGeometry(1, 64, 32)
   liberables.push(geometriaPlaneta)
@@ -278,11 +216,15 @@ function crearSistema(fecha: Date) {
     const [longitudPolo, latitudPolo] = ROTACION[datos.id].polo
     const inclinacion = new THREE.Quaternion().setFromUnitVectors(arriba, direccionEcliptica(longitudPolo, latitudPolo, polo))
 
-    // Órbita: 256 puntos por anomalía excéntrica, comprimidos a la escala visible.
-    const posiciones = new Float32Array(PUNTOS_ORBITA * 3)
-    const anomalias = new Float32Array(PUNTOS_ORBITA)
-    for (let k = 0; k < PUNTOS_ORBITA; k += 1) {
-      const anomalia = (k / PUNTOS_ORBITA) * Math.PI * 2
+    // Órbita: puntitos a distancia fija a lo largo de ella (por anomalía excéntrica), comprimidos a
+    // la escala visible.
+    const cantidad = Math.round(
+      Math.min(PUNTITOS_ORBITA.maximo, Math.max(PUNTITOS_ORBITA.minimo, (2 * Math.PI * radioOrbitaVisible(datos.a)) / PUNTITOS_ORBITA.separacion)),
+    )
+    const posiciones = new Float32Array(cantidad * 3)
+    const anomalias = new Float32Array(cantidad)
+    for (let k = 0; k < cantidad; k += 1) {
+      const anomalia = (k / cantidad) * Math.PI * 2
       aEscalaVisible(posicionHeliocentrica(datos, siglosIniciales, punto, anomalia))
       posiciones.set([punto.x, punto.y, punto.z], k * 3)
       anomalias[k] = anomalia
@@ -297,15 +239,25 @@ function crearSistema(fecha: Date) {
       uniforms: {
         uColor: { value: new THREE.Vector3(r, g, b) },
         uAnomaliaPlaneta: { value: 0 },
-        uAparicion: { value: 0 },
+        uTamano: { value: 0 },
+        uSeparacion: { value: (2 * Math.PI * radioOrbitaVisible(datos.a)) / cantidad },
+        uAltoPx: { value: 720 },
         // El planeta ocupa radio/distancia radianes de su órbita vista desde el Sol.
         uHueco: { value: (1.3 * radioVisible(datos.radio)) / radioOrbitaVisible(datos.a) },
       },
+      // Sin profundidad (el pase no les pone contorno) y sustituyendo el color y la marca de
+      // caricatura del píxel: van después del cielo, que se suma.
       transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      blending: THREE.CustomBlending,
+      blendEquation: THREE.AddEquation,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.ZeroFactor,
+      blendSrcAlpha: THREE.OneFactor,
+      blendDstAlpha: THREE.ZeroFactor,
     })
-    const orbita = new THREE.LineLoop(geometriaOrbita, materialOrbita)
+    const orbita = new THREE.Points(geometriaOrbita, materialOrbita)
+    orbita.renderOrder = 2
     orbita.frustumCulled = false
     raiz.add(orbita)
     liberables.push(material, geometriaOrbita, materialOrbita)
@@ -313,21 +265,23 @@ function crearSistema(fecha: Date) {
   })
 
   const tierra = planetas.find((planeta) => planeta.id === 'tierra')
-  // Atmósfera: cáscara aditiva un 3.5 % mayor que la Tierra, hija de su malla.
+  // Atmósfera: un aro de caricatura alrededor de la Tierra (cáscara un 5 % mayor, hija de su malla).
   const materialAtmosfera = new THREE.ShaderMaterial({
     vertexShader: PLANETA_VERT,
     fragmentShader: ATMOSFERA_FRAG,
-    uniforms: { uSol: { value: new THREE.Vector3() }, uAparicion: { value: 0 } },
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uSol: { value: new THREE.Vector3() },
+      uCentro: { value: new THREE.Vector3() },
+      uRadio: { value: 1 },
+      uAparicion: { value: 0 },
+    },
   })
   const atmosfera = new THREE.Mesh(geometriaTierra, materialAtmosfera)
-  atmosfera.scale.setScalar(1.035)
+  atmosfera.scale.setScalar(1.06)
   tierra?.malla.add(atmosfera)
   liberables.push(materialAtmosfera)
 
-  // La Luna: siempre la misma cara hacia la Tierra, con mares y cráteres (aspecto 8).
+  // La Luna: mares, cráteres y una cara dormilona que mira a la cámara (aspecto 8).
   const materialLuna = new THREE.ShaderMaterial({
     vertexShader: PLANETA_VERT,
     fragmentShader: PLANETA_FRAG,
@@ -350,9 +304,10 @@ function crearSistema(fecha: Date) {
     tierra.material.uniforms.uPoblacion.value = mapasTierra.poblacion
   }
 
-  // Anillos de Saturno en su plano ecuatorial, con la sombra del planeta.
+  // Anillos de Saturno en su plano ecuatorial, con la sombra del planeta: sólidos (los huecos se
+  // descartan), para que el pase los entinte contra el cielo.
   const saturno = planetas.find((planeta) => planeta.id === 'saturno')
-  const geometriaAnillos = new THREE.RingGeometry(ANILLOS_SATURNO.interior, ANILLOS_SATURNO.exterior, 256, 1)
+  const geometriaAnillos = new THREE.RingGeometry(ANILLOS_SATURNO.interior - 0.02, ANILLOS_SATURNO.exterior + 0.02, 256, 1)
   const materialAnillos = new THREE.ShaderMaterial({
     vertexShader: ANILLOS_VERT,
     fragmentShader: ANILLOS_FRAG,
@@ -362,8 +317,6 @@ function crearSistema(fecha: Date) {
       uRadioPlaneta: { value: 1 },
       uAparicion: { value: 0 },
     },
-    transparent: true,
-    depthWrite: false,
     side: THREE.DoubleSide,
   })
   const anillos = new THREE.Mesh(geometriaAnillos, materialAnillos)
@@ -371,60 +324,43 @@ function crearSistema(fecha: Date) {
   liberables.push(geometriaAnillos, materialAnillos)
   const tumbarAnillo = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2)
 
-  // Cinturón de asteroides (con los huecos de Kirkwood, resonancias con Júpiter a 2.50, 2.82 y
-  // 2.95 UA) y cinturón de Kuiper (más poblado en los plutinos, a 39.4 UA, y entre 42 y 48).
-  const huecosKirkwood = [2.5, 2.82, 2.95, 3.27]
-  const geometriaAsteroides = crearCinturon(
-    CINTURONES.asteroides.desde,
-    CINTURONES.asteroides.hasta,
-    CINTURONES.asteroides.cantidad,
-    (ua) => huecosKirkwood.every((hueco) => Math.abs(ua - hueco) > 0.025),
-    (5 * Math.PI) / 180,
-    20260922,
-  )
-  const geometriaKuiper = crearCinturon(
-    CINTURONES.kuiper.desde,
-    CINTURONES.kuiper.hasta,
-    CINTURONES.kuiper.cantidad,
-    (ua, aleatorio) => aleatorio() < 0.35 + 0.65 * Math.max(Math.exp(-(((ua - 39.4) / 0.8) ** 2)), ua > 42 && ua < 48 ? 1 : 0),
-    (8 * Math.PI) / 180,
-    20260923,
-  )
-  // Tenues: a esta distancia ningún asteroide se vería; son un polvo fino que dibuja el cinturón.
-  const materialAsteroides = materialCinturon(new THREE.Vector3(0.9, 0.82, 0.7).multiplyScalar(0.38))
-  const materialKuiper = materialCinturon(new THREE.Vector3(0.6, 0.68, 0.85).multiplyScalar(0.3))
-  const asteroides = new THREE.Points(geometriaAsteroides, materialAsteroides)
-  const kuiper = new THREE.Points(geometriaKuiper, materialKuiper)
-  asteroides.frustumCulled = false
-  kuiper.frustumCulled = false
-  raiz.add(asteroides, kuiper)
-  liberables.push(geometriaAsteroides, geometriaKuiper, materialAsteroides, materialKuiper)
-
   const posicionSol = new THREE.Vector3()
   const giro = new THREE.Quaternion()
 
   const direccionLuna = new THREE.Vector3()
+  const poseLuna = new THREE.Vector3()
+  const giroRaiz = new THREE.Quaternion()
 
   /** Coloca todo en `anios` de simulación desde la fecha de partida y aplica el fundido. */
   const actualizar = ({
     anios,
     segundos,
     segundosGiro,
+    pulsaciones: pulsos,
     aparicion,
-    pixeles,
+    altoPixeles,
+    camara,
+    orientacionCamara,
+    tanMitadFov,
     escala,
-    brilloCinturones,
     guias,
     luna: visibilidadLuna,
     lejanos,
-    exposicionSol,
   }: EstadoFotograma): void => {
     const siglos = siglosIniciales + anios / 100
     raiz.updateWorldMatrix(true, false)
     sol.getWorldPosition(posicionSol)
-    materialSol.uniforms.uAparicion.value = aparicion * exposicionSol
+    materialSol.uniforms.uAparicion.value = aparicion
     materialSol.uniforms.uTiempo.value = segundos
-    materialCorona.color.setRGB(0.9, 0.62, 0.36).multiplyScalar(aparicion * exposicionSol * exposicionSol)
+    materialSol.uniforms.uPulsaciones.value = pulsos
+    const radioSolPx = (SOL.radio / Math.max(camara.distanceTo(posicionSol), 1e-3)) * (altoPixeles / 2 / tanMitadFov)
+    const escalaSol =
+      Math.max(1, (SOL.minimoPx * (altoPixeles / 720)) / Math.max(radioSolPx, 1e-3)) * (SOL.cerca + (1 - SOL.cerca) * lejanos)
+    materialSol.uniforms.uTamano.value = SOL.radio * SOL.medioLado * escalaSol
+    SOL_EN_ESCENA.posicion.copy(posicionSol)
+    SOL_EN_ESCENA.radio = SOL.radio * escalaSol
+    SOL_EN_ESCENA.visible = aparicion
+    const tamanoPuntito = PUNTITOS_ORBITA.tamano * (altoPixeles / 720) * guias
 
     for (const planeta of planetas) {
       aEscalaVisible(posicionHeliocentrica(planeta.datos, siglos, planeta.malla.position))
@@ -439,21 +375,40 @@ function crearSistema(fecha: Date) {
       uniformes.uAparicion.value = aparicion * (esTierra ? 1 : 0.45 + 0.55 * lejanos)
       uniformes.uTiempo.value = segundos
       planeta.materialOrbita.uniforms.uAnomaliaPlaneta.value = anomaliaEnFecha(planeta.datos, siglos)
-      planeta.materialOrbita.uniforms.uAparicion.value = aparicion * guias
-      planeta.orbita.visible = guias > 0.002
+      planeta.materialOrbita.uniforms.uTamano.value = tamanoPuntito * Math.min(1, aparicion * 1.5)
+      planeta.materialOrbita.uniforms.uAltoPx.value = altoPixeles
+      planeta.orbita.visible = tamanoPuntito * aparicion > 0.5
     }
 
     if (tierra) {
       materialAtmosfera.uniforms.uSol.value.copy(posicionSol)
       materialAtmosfera.uniforms.uAparicion.value = aparicion
+      tierra.malla.getWorldPosition(materialAtmosfera.uniforms.uCentro.value)
+      materialAtmosfera.uniforms.uRadio.value = tierra.malla.scale.x
       // La Luna gira alrededor de la Tierra en su plano (5.1° sobre la eclíptica).
       const angulo = (2 * Math.PI * anios) / LUNA.periodoAnios + 1.1
       direccionLuna.set(Math.cos(angulo), Math.sin(angulo) * Math.sin(LUNA.inclinacion), -Math.sin(angulo) * Math.cos(LUNA.inclinacion))
+      if (visibilidadLuna > 0) {
+        // La pose, en el marco del sistema: ejes de la cámara (derecha, arriba, hacia delante)
+        // llevados al marco local de la raíz.
+        raiz.getWorldQuaternion(giroRaiz).invert()
+        const [derecha, arriba, fondo] = LUNA.pose
+        poseLuna
+          .set(derecha, arriba, -fondo)
+          .applyQuaternion(orientacionCamara)
+          .applyQuaternion(giroRaiz)
+          .normalize()
+        direccionLuna.lerp(poseLuna, visibilidadLuna).normalize()
+      }
       luna.position.copy(tierra.malla.position).addScaledVector(direccionLuna, LUNA.distancia * escala)
       luna.scale.setScalar(radioVisible(1) * LUNA.radio * escala)
       luna.visible = visibilidadLuna > 0.002
       materialLuna.uniforms.uSol.value.copy(posicionSol)
-      materialLuna.uniforms.uAparicion.value = aparicion * visibilidadLuna
+      materialLuna.uniforms.uAparicion.value = aparicion
+      materialLuna.uniforms.uTiempo.value = segundos
+      // Aparece creciendo (en caricatura no se funde: se infla) y posa algo más grande de lo que
+      // tocaría, para que su cara se lea.
+      luna.scale.multiplyScalar(Math.min(1, visibilidadLuna * 1.2) * (1 + LUNA.aumentoPose * visibilidadLuna))
     }
 
     if (saturno) {
@@ -469,16 +424,6 @@ function crearSistema(fecha: Date) {
       anillos.visible = lejanos > 0.01
     }
 
-    for (const [material, tamano] of [
-      [materialAsteroides, 1.3],
-      [materialKuiper, 1.2],
-    ] as const) {
-      material.uniforms.uAnios.value = anios
-      material.uniforms.uTamano.value = Math.max(1, tamano * pixeles)
-      material.uniforms.uAparicion.value = aparicion * brilloCinturones * guias
-    }
-    asteroides.visible = guias > 0.002
-    kuiper.visible = guias > 0.002
   }
 
   return {
@@ -499,7 +444,6 @@ export function SistemaSolar({
   fecha,
   quieto = false,
   escalaPlanetas,
-  distanciaReferencia = 90,
   ritmo,
   guias,
   luna,
@@ -508,7 +452,8 @@ export function SistemaSolar({
 }: SistemaSolarProps) {
   const sistema = useMemo(() => crearSistema(fecha ?? new Date()), [fecha])
   const relojes = useRef({ orbitas: 0, giros: 0, segundos: 0 })
-  const posiciones = useRef({ camara: new THREE.Vector3(), sol: new THREE.Vector3() })
+  const posicionCamara = useRef(new THREE.Vector3())
+  const orientacionCamara = useRef(new THREE.Quaternion())
 
   useEffect(() => () => sistema.liberar(), [sistema])
 
@@ -522,10 +467,15 @@ export function SistemaSolar({
     if (tierra) tierra.current = sistema.tierra
   }, [sistema, tierra])
 
-  useFrame(({ gl, camera }, delta) => {
+  useEffect(() => () => void (SOL_EN_ESCENA.visible = 0), [])
+
+  useFrame(({ gl, clock, camera }, delta) => {
     const valor = aparicion?.current ?? 1
     sistema.raiz.visible = valor > 0.002
-    if (!sistema.raiz.visible) return
+    if (!sistema.raiz.visible) {
+      SOL_EN_ESCENA.visible = 0
+      return
+    }
     // Los relojes sólo corren mientras se ve: al aparecer, los planetas están donde están hoy. Con
     // el ritmo bajo (al acercarse a la Tierra) las órbitas casi se detienen y los giros van a un
     // tercio: la Tierra sigue rotando a la vista.
@@ -536,26 +486,20 @@ export function SistemaSolar({
       relojes.current.giros += paso * Math.max(factor, 0.35)
       relojes.current.segundos += paso
     }
-    const { camara, sol } = posiciones.current
-    camera.getWorldPosition(camara)
-    sistema.raiz.getWorldPosition(sol)
-    const distanciaSol = Math.max(camara.distanceTo(sol), 1e-3)
-    const brilloCinturones = Math.min(1, Math.pow(distanciaReferencia / distanciaSol, 0.9))
-    // Con el Sol cerca la cámara cierra el diafragma: su disco sigue blanco pero su resplandor
-    // (el bloom de un disco grande a ×5) ya no vela media pantalla.
-    const exposicionSol = Math.min(1, Math.max(0.3, Math.pow(distanciaSol / (0.7 * distanciaReferencia), 1.3)))
     sistema.actualizar({
       anios: relojes.current.orbitas / segundosPorAnio,
       segundos: relojes.current.segundos,
       segundosGiro: relojes.current.giros,
+      pulsaciones: pulsaciones(clock.getElapsedTime()),
       aparicion: valor,
-      pixeles: gl.getPixelRatio(),
+      altoPixeles: gl.domElement.height,
+      camara: camera.getWorldPosition(posicionCamara.current),
+      orientacionCamara: camera.getWorldQuaternion(orientacionCamara.current),
+      tanMitadFov: Math.tan(THREE.MathUtils.degToRad((camera instanceof THREE.PerspectiveCamera ? camera.fov : 45) / 2)),
       escala: escalaPlanetas?.current ?? 1,
-      brilloCinturones,
       guias: guias?.current ?? 1,
       luna: luna?.current ?? 1,
       lejanos: lejanos?.current ?? 1,
-      exposicionSol,
     })
   })
 

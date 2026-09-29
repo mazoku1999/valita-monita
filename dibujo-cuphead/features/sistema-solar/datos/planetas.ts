@@ -53,17 +53,8 @@ export const radioOrbitaVisible = (ua: number): number => ESCALA_ORBITA * Math.p
 /** Tamaño visible: 0.62 unidades para la Tierra, ∝ √radio (Júpiter 2.1, Mercurio 0.38). */
 export const radioVisible = (radiosTerrestres: number): number => 0.62 * Math.sqrt(radiosTerrestres)
 
-/** Radio visible del Sol (a escala real serían 109 Tierras: taparía hasta Marte). */
-export const RADIO_SOL = 2.4
-
 /** Anillos de Saturno en radios de Saturno: C 1.24–1.53, B 1.53–1.95, Cassini, A 2.03–2.27. */
 export const ANILLOS_SATURNO = { interior: 1.24, exterior: 2.27 } as const
-
-/** Cinturón de asteroides y de Kuiper (UA). */
-export const CINTURONES = {
-  asteroides: { desde: 2.1, hasta: 3.3, cantidad: 3600 },
-  kuiper: { desde: 30.5, hasta: 50, cantidad: 2400 },
-} as const
 
 const GRADO = Math.PI / 180
 const J2000_MS = Date.UTC(2000, 0, 1, 12, 0, 0)

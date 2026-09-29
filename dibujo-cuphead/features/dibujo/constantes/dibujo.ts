@@ -29,8 +29,8 @@ export const COLORES_PLANOS = {
   degradado: 0.22,
   /** Saturación extra. */
   croma: 1.2,
-  /** Paso del desenfoque de simplificación (texels de 1/2; σ ≈ 1.75·paso). */
-  desenfoque: 1.4,
+  /** σ del desenfoque de simplificación (texels de 1/2). */
+  desenfoque: 2.45,
   /** Cuánto se acercan tono y croma a la paleta de época (0–1). */
   fuerzaEpoca: 0.45,
 } as const
@@ -42,8 +42,8 @@ export const COLORES_PLANOS = {
 export const ACUARELA = {
   umbralesAguada: [0.075, 0.18, 0.38] as const,
   escalaPapel: 2.2,
-  /** Paso del desenfoque de la luz de las aguadas (texels de 1/4; σ ≈ 1.75·paso). */
-  desenfoqueAguada: 2.0,
+  /** σ del desenfoque de la luz de las aguadas (texels de 1/4). */
+  desenfoqueAguada: 3.5,
 } as const
 
 /**

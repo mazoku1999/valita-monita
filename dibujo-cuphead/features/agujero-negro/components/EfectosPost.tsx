@@ -1,8 +1,8 @@
 'use client'
 
-import { EffectComposer, ToneMapping } from '@react-three/postprocessing'
+import { EffectComposer } from '@react-three/postprocessing'
 import { useFrame } from '@react-three/fiber'
-import { type EffectComposer as ComposerDeEfectos, ToneMappingMode } from 'postprocessing'
+import type { EffectComposer as ComposerDeEfectos } from 'postprocessing'
 import { useEffect, useMemo, useRef } from 'react'
 import { avanzarRitmo, latido, pulsaciones, tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
 import { PasoDibujo } from '@/features/dibujo/utils/PasoDibujo'
@@ -10,10 +10,10 @@ import { ajuste } from '../store/vistaCamaraStore'
 import { suavizar } from '../utils/aleatorio'
 
 /**
- * Posproceso del dibujo animado. El agujero negro ya se traza en caricatura (ver
- * `shaders/lenteCaricatura.frag.ts`) en su propio buffer, que compone el pase de dibujo por encima
- * de todo lo demás: ni resplandores ni bloom (en un dibujo animado la luz se dibuja, no se
- * difumina). El tono (ACES) sólo afecta a lo que todavía se renderiza con materiales realistas.
+ * Posproceso del dibujo animado: sólo el pase de dibujo. El agujero negro ya se traza en caricatura
+ * (ver `shaders/lenteCaricatura.frag.ts`) en su propio buffer y el sistema solar sale dibujado de
+ * la escena; ni resplandores ni bloom (en un dibujo animado la luz se dibuja, no se difumina). El
+ * tono (ACES) lo aplica el propio pase, sólo a lo que todavía se renderiza con materiales realistas.
  */
 export function EfectosPost() {
   const pasoDibujo = useMemo(() => new PasoDibujo(), [])
@@ -63,7 +63,6 @@ export function EfectosPost() {
 
   return (
     <EffectComposer ref={compositor} multisampling={0}>
-      <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
       <primitive object={pasoDibujo} />
     </EffectComposer>
   )
