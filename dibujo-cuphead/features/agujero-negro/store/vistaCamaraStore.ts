@@ -13,7 +13,6 @@ export type ClaveAjuste =
   | 'inclinacion'
   | 'encuadreX'
   | 'encuadreY'
-  | 'gusanoMuestras'
   | 'dibujo'
   | 'dibujoSoloTinta'
   | 'dibujoGrosor'
@@ -27,7 +26,6 @@ const CLAVES_AJUSTE: readonly ClaveAjuste[] = [
   'inclinacion',
   'encuadreX',
   'encuadreY',
-  'gusanoMuestras',
   'dibujo',
   'dibujoSoloTinta',
   'dibujoGrosor',

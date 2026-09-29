@@ -348,14 +348,16 @@ function crearSistema(fecha: Date) {
     lejanos,
   }: EstadoFotograma): void => {
     const siglos = siglosIniciales + anios / 100
+    // En caricatura nada se funde desde el negro (salía una mancha oscura): todo aparece creciendo.
+    const crecer = aparicion * aparicion * (3 - 2 * aparicion)
     raiz.updateWorldMatrix(true, false)
     sol.getWorldPosition(posicionSol)
-    materialSol.uniforms.uAparicion.value = aparicion
+    materialSol.uniforms.uAparicion.value = 1
     materialSol.uniforms.uTiempo.value = segundos
     materialSol.uniforms.uPulsaciones.value = pulsos
     const radioSolPx = (SOL.radio / Math.max(camara.distanceTo(posicionSol), 1e-3)) * (altoPixeles / 2 / tanMitadFov)
     const escalaSol =
-      Math.max(1, (SOL.minimoPx * (altoPixeles / 720)) / Math.max(radioSolPx, 1e-3)) * (SOL.cerca + (1 - SOL.cerca) * lejanos)
+      Math.max(1, (SOL.minimoPx * (altoPixeles / 720)) / Math.max(radioSolPx, 1e-3)) * (SOL.cerca + (1 - SOL.cerca) * lejanos) * crecer
     materialSol.uniforms.uTamano.value = SOL.radio * SOL.medioLado * escalaSol
     SOL_EN_ESCENA.posicion.copy(posicionSol)
     SOL_EN_ESCENA.radio = SOL.radio * escalaSol
@@ -366,13 +368,13 @@ function crearSistema(fecha: Date) {
       aEscalaVisible(posicionHeliocentrica(planeta.datos, siglos, planeta.malla.position))
       const esTierra = planeta.id === 'tierra'
       const alejamiento = esTierra ? 1 : 0.12 + 0.88 * lejanos
-      planeta.malla.scale.setScalar(radioVisible(planeta.datos.radio) * escala * alejamiento)
+      planeta.malla.scale.setScalar(radioVisible(planeta.datos.radio) * escala * alejamiento * crecer)
       const periodo = ROTACION[planeta.id].periodo
       giro.setFromAxisAngle(arriba, ((2 * Math.PI * segundosGiro) / periodo) % (2 * Math.PI))
       planeta.malla.quaternion.copy(planeta.inclinacion).multiply(giro)
       const uniformes = planeta.material.uniforms
       uniformes.uSol.value.copy(posicionSol)
-      uniformes.uAparicion.value = aparicion * (esTierra ? 1 : 0.45 + 0.55 * lejanos)
+      uniformes.uAparicion.value = 1
       uniformes.uTiempo.value = segundos
       planeta.materialOrbita.uniforms.uAnomaliaPlaneta.value = anomaliaEnFecha(planeta.datos, siglos)
       planeta.materialOrbita.uniforms.uTamano.value = tamanoPuntito * Math.min(1, aparicion * 1.5)
@@ -382,7 +384,7 @@ function crearSistema(fecha: Date) {
 
     if (tierra) {
       materialAtmosfera.uniforms.uSol.value.copy(posicionSol)
-      materialAtmosfera.uniforms.uAparicion.value = aparicion
+      materialAtmosfera.uniforms.uAparicion.value = 1
       tierra.malla.getWorldPosition(materialAtmosfera.uniforms.uCentro.value)
       materialAtmosfera.uniforms.uRadio.value = tierra.malla.scale.x
       // La Luna gira alrededor de la Tierra en su plano (5.1° sobre la eclíptica).
@@ -401,10 +403,10 @@ function crearSistema(fecha: Date) {
         direccionLuna.lerp(poseLuna, visibilidadLuna).normalize()
       }
       luna.position.copy(tierra.malla.position).addScaledVector(direccionLuna, LUNA.distancia * escala)
-      luna.scale.setScalar(radioVisible(1) * LUNA.radio * escala)
+      luna.scale.setScalar(radioVisible(1) * LUNA.radio * escala * crecer)
       luna.visible = visibilidadLuna > 0.002
       materialLuna.uniforms.uSol.value.copy(posicionSol)
-      materialLuna.uniforms.uAparicion.value = aparicion
+      materialLuna.uniforms.uAparicion.value = 1
       materialLuna.uniforms.uTiempo.value = segundos
       // Aparece creciendo (en caricatura no se funde: se infla) y posa algo más grande de lo que
       // tocaría, para que su cara se lea.
@@ -419,9 +421,9 @@ function crearSistema(fecha: Date) {
       saturno.malla.getWorldPosition(materialAnillos.uniforms.uCentroPlaneta.value)
       materialAnillos.uniforms.uRadioPlaneta.value = saturno.malla.scale.x
       materialAnillos.uniforms.uSol.value.copy(posicionSol)
-      // Reducidos a un punto, sus bandas finas titilarían como polvo: se apagan antes que el planeta.
-      materialAnillos.uniforms.uAparicion.value = aparicion * lejanos * lejanos
-      anillos.visible = lejanos > 0.01
+      // Reducidos a unos píxeles, sus bandas y su tinta serían una mancha: se quitan antes que el planeta.
+      materialAnillos.uniforms.uAparicion.value = 1
+      anillos.visible = lejanos > 0.3
     }
 
   }

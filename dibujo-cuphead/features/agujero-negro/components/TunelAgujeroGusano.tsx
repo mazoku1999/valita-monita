@@ -5,8 +5,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { VIAJE } from '../constantes/viajeScroll'
-import { ajuste } from '../store/vistaCamaraStore'
-import { AGUJERO_GUSANO_FRAG, AGUJERO_GUSANO_VERT } from '../shaders/agujeroGusano'
+import { AGUJERO_GUSANO_CARICATURA_FRAG, AGUJERO_GUSANO_VERT } from '../shaders/agujeroGusanoCaricatura'
 import { CIELO_SISTEMA_FRAG, CIELO_SISTEMA_VERT } from '../shaders/cieloSistemaSolar'
 
 /** Recorrido de la cámara por el agujero de gusano (ver el shader: garganta de radio 1 y longitud 3). */
@@ -19,8 +18,6 @@ const GUSANO = {
   /** Balanceo lento de la posición cuando no se hace scroll (amplitud en l y frecuencia en rad/s). */
   balanceo: 0.12,
   balanceoRitmo: 0.4,
-  /** Desenfoque de movimiento: una muestra más por cada tanto de l recorrido en el fotograma (máximo 3). */
-  lPorMuestra: 0.03,
   /** Seguimiento de la orientación de la cámara: a corto plazo el eje queda fijo en el mundo (~0.8 s). */
   ritmoGiro: 1.2,
   /**
@@ -31,15 +28,6 @@ const GUSANO = {
   entradaHasta: 0.4,
   /** Giro lento de los cielos alrededor del eje durante el paso (rad/s); al salir se detiene. */
   giroCielo: 0.012,
-  /**
-   * Luz del cielo de este lado al empezar el paso (fracción de la normal) y tramo del paso en el
-   * que se enciende: la boca aparece primero sola en la oscuridad y el resplandor de alrededor
-   * llega después, en vez de pasar de negro a un fondo pardo de golpe.
-   */
-  luzCercanaInicial: 0.12,
-  luzCercanaTramo: 0.3,
-  /** Exposición del cielo del otro lado durante el paso (vuelve a 1 en el último 20 % para salir). */
-  exposicionPaso: 2.4,
   /**
    * Cielo del sistema solar en el dibujo animado: más tenue que en el original. El dibujo pone su
    * propio cielo en acuarela y sus estrellas; con toda su luz, la Vía Láctea se volvía una franja
@@ -83,15 +71,16 @@ const materialAditivo = (
   })
 
 /**
- * Viaje por el interior del agujero, estilo Interstellar: ya dentro del horizonte la cámara
- * recorre un agujero de gusano trazado por píxel (`shaders/agujeroGusano.ts`) durante la fase del
- * túnel (ver `constantes/viajeScroll.ts`): la boca del otro lado se ve delante como una esfera de
- * cielo lensado que crece hasta rodearnos, dentro los cielos se enrollan por las paredes y se
- * retuercen al avanzar, y al salir se abre el cielo del otro lado: el de nuestro sistema solar, que
- * sigue siendo el fondo de la escena siguiente (`EscenaSistemaSolar`, que va como hija de este
- * marco). El eje del agujero de gusano sigue la orientación de la cámara con retraso, de modo que
- * el arrastre y el cursor mueven la vista como si el eje estuviera fijo en el mundo; los hijos
- * comparten ese marco, así que el sistema solar queda fijo respecto a su cielo.
+ * Viaje por el interior del agujero: ya dentro del horizonte la cámara recorre un agujero de gusano
+ * trazado por píxel y dibujado como un remolino de dibujo animado
+ * (`shaders/agujeroGusanoCaricatura.ts`) durante la fase del túnel (ver `constantes/viajeScroll.ts`):
+ * la boca del otro lado es una ventana al cielo rodeada de bandas en espiral que crece hasta
+ * rodearnos, las paredes giran en espiral y salen hacia fuera al avanzar, y al salir se abre el
+ * cielo del otro lado: el de nuestro sistema solar, que sigue siendo el fondo de la escena siguiente
+ * (`EscenaSistemaSolar`, que va como hija de este marco). El eje del agujero de gusano sigue la
+ * orientación de la cámara con retraso, de modo que el arrastre y el cursor mueven la vista como si
+ * el eje estuviera fijo en el mundo; los hijos comparten ese marco, así que el sistema solar queda
+ * fijo respecto a su cielo.
  */
 export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
   const { size } = useThree()
@@ -101,7 +90,6 @@ export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
   const tiempo = useRef(0)
   const giroCielo = useRef(0)
   const lSuave = useRef<number>(GUSANO.lInicio)
-  const lPrevio = useRef<number>(GUSANO.lInicio)
   const rotacion = useRef(new THREE.Matrix4())
   const inversa = useRef(new THREE.Quaternion())
 
@@ -111,17 +99,21 @@ export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
       uCamaraMundo: { value: new THREE.Matrix4() },
       uMarcoInverso: { value: new THREE.Matrix3() },
       uL: { value: GUSANO.lInicio as number },
-      uDeltaL: { value: 0 },
-      uMuestras: { value: 1 },
       uTiempo: { value: 0 },
       uGiro: { value: 0 },
       uOpacidad: { value: 0 },
       uAnguloPixel: { value: 0.001 },
-      uLuzCercana: { value: 1 },
-      uExposicionLejana: { value: 1 },
     }
     const geometriaPantalla = new THREE.PlaneGeometry(2, 2)
-    const materialGusano = materialAditivo(AGUJERO_GUSANO_VERT, AGUJERO_GUSANO_FRAG, uniformsGusano)
+    // El remolino sustituye lo que haya detrás (color y marca de caricatura): los píxeles de cielo
+    // salen negros con alfa 1 y el pase de dibujo pinta allí su cielo.
+    const materialGusano = materialAditivo(AGUJERO_GUSANO_VERT, AGUJERO_GUSANO_CARICATURA_FRAG, uniformsGusano)
+    Object.assign(materialGusano, {
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.ZeroFactor,
+      blendSrcAlpha: THREE.OneFactor,
+      blendDstAlpha: THREE.ZeroFactor,
+    })
     const gusano = new THREE.Mesh(geometriaPantalla, materialGusano)
     gusano.frustumCulled = false
     gusano.renderOrder = -5
@@ -186,7 +178,6 @@ export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
       grupo.quaternion.copy(camera.quaternion)
       iniciado.current = true
       lSuave.current = GUSANO.lInicio
-      lPrevio.current = GUSANO.lInicio
     } else {
       grupo.quaternion.slerp(camera.quaternion, 1 - Math.exp(-paso * GUSANO.ritmoGiro))
     }
@@ -200,8 +191,6 @@ export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
     lSuave.current += (lObjetivo - lSuave.current) * (1 - Math.exp(-paso * GUSANO.ritmoAvance))
     const balanceo = movimientoReducido ? 0 : GUSANO.balanceo * Math.sin(tiempo.current * GUSANO.balanceoRitmo)
     const l = lSuave.current + balanceo
-    const deltaL = l - lPrevio.current
-    lPrevio.current = l
 
     const u = recursos.uniformsGusano
     camera.updateMatrixWorld()
@@ -211,11 +200,6 @@ export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
     rotacion.current.makeRotationFromQuaternion(inversa.current)
     u.uMarcoInverso.value.setFromMatrix4(rotacion.current)
     u.uL.value = l
-    u.uDeltaL.value = deltaL
-    // Muestras del desenfoque según lo recorrido en el fotograma; `?gusanoMuestras=1` lo desactiva
-    // en desarrollo (capturas de calibración sin estelas).
-    const maximoMuestras = Math.round(ajuste('gusanoMuestras', 3))
-    u.uMuestras.value = Math.min(maximoMuestras, 1 + Math.min(2, Math.floor(Math.abs(deltaL) / GUSANO.lPorMuestra)))
     u.uTiempo.value = tiempo.current
     u.uGiro.value = giroCielo.current
     // Al salir por la boca, el cielo trazado del otro lado se funde con el del sistema solar (más
@@ -224,9 +208,6 @@ export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
     u.uOpacidad.value = opacidad * (1 - cambioCielo)
     recursos.uniformsCielo.uOpacidad.value = opacidad * cambioCielo * GUSANO.luzCieloSistema
     recursos.cielo.visible = opacidad * cambioCielo > 0.002
-    u.uExposicionLejana.value = 1 + (GUSANO.exposicionPaso - 1) * (1 - suavizar(0.8, 1, fraccion))
-    u.uLuzCercana.value =
-      GUSANO.luzCercanaInicial + (1 - GUSANO.luzCercanaInicial) * suavizar(0, GUSANO.luzCercanaTramo, fraccion)
     const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 45
     u.uAnguloPixel.value = THREE.MathUtils.degToRad(fov) / Math.max(size.height, 1)
     recursos.gusano.visible = u.uOpacidad.value > 0.002

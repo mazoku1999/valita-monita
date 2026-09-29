@@ -23,6 +23,11 @@ Schwarzschild como en el original, pero el disco es un sólido de dibujo animado
 de color planas y arcos de movimiento, cantos con brillo, anillo de fotones grueso, sombra de
 tinta) y el shader escribe, además del color, qué objeto hay en cada píxel.
 
+El agujero de gusano (`features/agujero-negro/shaders/agujeroGusanoCaricatura.ts`) conserva su
+trazado por píxel, pero se dibuja como una espiral hipnótica de los años 30: bandas planas que
+giran (cálidas las que llegan al otro lado, moradas las que vuelven) con tinta entre ellas, y la
+boca de salida como una ventana al cielo que crece hasta rodearnos.
+
 El sistema solar también sale ya dibujado de la escena (`features/sistema-solar/shaders/sistemaSolar.ts`):
 el Sol con cara (ojos de "pastel" que parpadean, mejillas, una boca que canta al compás) y rayos
 que giran; planetas de colores planos con sombra de color, brillo de barniz y tinta en el borde;
@@ -37,7 +42,7 @@ El dibujo es un pase al final del posproceso (`features/agujero-negro/components
 - `utils/PasoDibujo.ts`: el pase. Pinta el cielo en acuarela con los rayos de sol detrás del
   agujero y detrás del Sol, entinta los contornos (entre objetos del agujero, entre sus bandas de
   color y, por fuera, en los saltos de profundidad del resto), tonea (ACES) y lleva a colores
-  planos de época lo que todavía es realista (el túnel del agujero de gusano), compone lo dibujado,
+  planos de época lo poco que todavía es realista (el cielo lejano del sistema solar), compone lo dibujado,
   las aguadas de luz y el papel, dibuja las estrellas y destellos de caricatura y pasa todo por la
   película antigua.
 - `shaders/dibujo.ts`: cielo y rayos de sol, tinta, composición, destellos y película.
@@ -65,7 +70,7 @@ Además de las del original (`?vista=canto|anillo|elevada|elevadaCercana|inferio
 Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta`,
 `dibujo-v0.3-acuarela`, `dibujo-v0.4-pelicula`, `dibujo-v0.5-animacion`,
 `dibujo-v0.6-viaje-completo`, `dibujo-v0.7-agujero-caricatura`, `dibujo-v0.8-estrellas`,
-`dibujo-v0.9-sistema-solar` (y lo que siga).
+`dibujo-v0.9-sistema-solar`, `dibujo-v0.10-remolino` (y lo que siga).
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
