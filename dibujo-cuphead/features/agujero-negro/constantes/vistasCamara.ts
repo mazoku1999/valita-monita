@@ -1,4 +1,3 @@
-import type { AspectoCamara } from '../utils/campoAspecto'
 import { FOTOGRAMAS_CAMARA, type FotogramaCamara } from '../utils/fotogramasCamara'
 import { ENCUADRE_PANTALLA, INCLINACION_PANTALLA } from './parametrosAgujero'
 
@@ -19,16 +18,6 @@ export interface VistaCamara extends EncuadreVista {
   readonly descripcion: string
   /** Recorrido ligado al scroll. Todas las vistas comparten los `progreso` y azimuts de canto. */
   readonly fotogramas: readonly FotogramaCamara[]
-  /**
-   * Ajustes de CÁMARA del encuadre (exposición del gas, apertura y tamaño máximo de grano del
-   * polvo). Es lo único que cambia entre vistas: el mundo es el mismo modelo desde cualquier
-   * ángulo (ver el shader de la lente) y entre encuadres estos ajustes se interpolan con la
-   * cámara real (`utils/campoAspecto.ts`). Exposiciones calibradas contra la captura 30 del
-   * usuario (24 unidades, ~10°): con 5.4 la vista elevada tenía el doble de píxeles casi
-   * blancos (14 % frente a 5 %) y el halo a 1–3 R al doble; con 3.2 calca el reparto de
-   * luminancia (percentil 90: 0.78/0.56/0.39/0.23 frente a 0.75/0.54/0.37/0.20 a 1–4 R).
-   */
-  readonly aspecto: AspectoCamara
 }
 
 /** Recorrido que conserva el ritmo de azimut de canto con elevación, distancia y fov fijos. */
@@ -43,7 +32,6 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     fotogramas: FOTOGRAMAS_CAMARA,
     inclinacion: INCLINACION_PANTALLA,
     encuadre: ENCUADRE_PANTALLA,
-    aspecto: { ganancia: 5.8, apertura: 1, tamanoMaximo: 30 },
   },
   anillo: {
     id: 'anillo',
@@ -55,8 +43,6 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     fotogramas: derivarRecorrido({ polar: Math.PI / 2, distancia: 19.5, fov: 40 }),
     inclinacion: INCLINACION_PANTALLA,
     encuadre: ENCUADRE_PANTALLA,
-    // Tan cerca, las chispas son nítidas y pequeñas (apertura corta, tope de 14 px).
-    aspecto: { ganancia: 5.0, apertura: 0.5, tamanoMaximo: 14 },
   },
   elevada: {
     id: 'elevada',
@@ -67,7 +53,6 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     fotogramas: derivarRecorrido({ polar: 1.35, distancia: 27.5, fov: 41 }),
     inclinacion: INCLINACION_PANTALLA,
     encuadre: ENCUADRE_PANTALLA,
-    aspecto: { ganancia: 3.2, apertura: 1, tamanoMaximo: 23 },
   },
   elevadaCercana: {
     id: 'elevadaCercana',
@@ -79,7 +64,6 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     fotogramas: derivarRecorrido({ polar: Math.PI / 2 - 0.28, distancia: 20.8, fov: 40 }),
     inclinacion: INCLINACION_PANTALLA,
     encuadre: ENCUADRE_PANTALLA,
-    aspecto: { ganancia: 4.0, apertura: 0.6, tamanoMaximo: 14 },
   },
   inferior: {
     id: 'inferior',
@@ -91,7 +75,6 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     fotogramas: derivarRecorrido({ polar: Math.PI / 2 + 0.08, distancia: 19.5, fov: 40 }),
     inclinacion: INCLINACION_PANTALLA,
     encuadre: ENCUADRE_PANTALLA,
-    aspecto: { ganancia: 3.8, apertura: 0.6, tamanoMaximo: 14 },
   },
   cenital: {
     id: 'cenital',
@@ -102,9 +85,6 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     // entrar o salir de esta vista no hace rotar toda la pantalla.
     inclinacion: INCLINACION_PANTALLA,
     encuadre: ENCUADRE_PANTALLA,
-    // De frente el disco (ópticamente fino) necesita algo más de exposición que Above para no
-    // salir apagado y pardo: borde interno en crema, el resto en oro y el resplandor alrededor.
-    aspecto: { ganancia: 4.0, apertura: 1, tamanoMaximo: 22 },
   },
   lejana: {
     id: 'lejana',
@@ -116,7 +96,6 @@ export const VISTAS_CAMARA: Readonly<Record<IdVista, VistaCamara>> = {
     fotogramas: derivarRecorrido({ polar: 1.45, distancia: 60, fov: 40 }),
     inclinacion: INCLINACION_PANTALLA,
     encuadre: ENCUADRE_PANTALLA,
-    aspecto: { ganancia: 5.5, apertura: 1, tamanoMaximo: 30 },
   },
 }
 

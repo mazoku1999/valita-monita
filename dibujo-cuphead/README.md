@@ -17,19 +17,24 @@ esta carpeta en `next.config.mjs`). El proyecto original lo excluye de su `tscon
 
 ## Dónde está el dibujo
 
-La escena 3D es la del original; el dibujo es un pase al final del posproceso
+El agujero negro se dibuja en caricatura desde el propio trazado de rayos
+(`features/agujero-negro/shaders/lenteCaricatura.frag.ts`): cada píxel sigue su geodésica de
+Schwarzschild como en el original, pero el disco es un sólido de dibujo animado (caras con bandas
+de color planas y arcos de movimiento, cantos con brillo, anillo de fotones grueso, sombra de
+tinta) y el shader escribe, además del color, qué objeto hay en cada píxel. El resto de la escena
+es la del original; el dibujo es un pase al final del posproceso
 (`features/agujero-negro/components/EfectosPost.tsx` → `features/dibujo`):
 
-- `utils/PasoDibujo.ts`: el pase. Reduce la imagen, orienta los bordes (tensor de estructura con
-  memoria en el tiempo), entinta con una diferencia de gaussianas que sigue el flujo de los bordes
-  (más las siluetas de los cuerpos frente al cielo, sacadas de la profundidad), compone colores
-  planos por bandas con la paleta de época, el cielo en acuarela y las aguadas de luz, dibuja las
-  estrellas y destellos de caricatura y pasa todo por la película antigua.
-- `shaders/dibujo.ts`: análisis, tinta, composición, destellos y película.
+- `utils/PasoDibujo.ts`: el pase. Pinta el cielo en acuarela con los rayos de sol detrás del
+  agujero, entinta los contornos (entre objetos del agujero, entre sus bandas de color y en los
+  saltos de profundidad del resto), compone colores planos por bandas con la paleta de época, las
+  aguadas de luz y el papel, dibuja las estrellas y destellos de caricatura y pasa todo por la
+  película antigua.
+- `shaders/dibujo.ts`: cielo y rayos de sol, tinta, composición, destellos y película.
 - `shaders/acuarela.ts`: paleta de época, cielo nocturno en acuarela y papel.
-- `constantes/dibujo.ts`: grosor y umbral de la tinta, bandas de color, aguadas, película, hervor.
+- `constantes/dibujo.ts`: grosor de la tinta, bandas de color, aguadas, película, hervor.
 - `store/ritmoDibujo.ts`: el ritmo de 24 dibujos por segundo (entre dibujos la pantalla no cambia y
-  no se calcula nada).
+  no se calcula nada) y el compás (112 pulsaciones por minuto) con el que late el disco.
 - `utils/destellos.ts`: estrellas del cielo y destellos de la banda de polvo.
 
 ## Claves de desarrollo (sólo con `next dev`)
@@ -41,13 +46,13 @@ Además de las del original (`?vista=canto|anillo|elevada|elevadaCercana|inferio
 | --- | --- |
 | `dibujo=0` | la escena sin dibujar (para comparar) |
 | `dibujoSoloTinta=1` | sólo la tinta sobre papel |
-| `dibujoUmbral` | umbral de la tinta (más negativo, menos líneas) |
-| `dibujoGrosor` | grosor de la tinta (σ en texels de 1/2) |
+| `dibujoGrosor` | grosor de la tinta (radio en px a 720 de alto; la línea mide el doble) |
 
 ## Versiones
 
 Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta`,
-`dibujo-v0.3-acuarela`, `dibujo-v0.4-pelicula`, `dibujo-v0.5-animacion` (y lo que siga).
+`dibujo-v0.3-acuarela`, `dibujo-v0.4-pelicula`, `dibujo-v0.5-animacion`,
+`dibujo-v0.6-viaje-completo`, `dibujo-v0.7-agujero-caricatura` (y lo que siga).
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

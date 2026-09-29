@@ -30,3 +30,16 @@ export function tocaDibujar(): boolean {
 export function numeroDeDibujo(): number {
   return dibujoActual
 }
+
+/**
+ * Latido del estilo rubber hose: en los dibujos animados de los años 30 todo "baila" al compás de
+ * la música (las cosas se estiran, rebotan y respiran). Un compás de foxtrot (112 por minuto), con
+ * pulsos marcados; se evalúa con el tiempo del dibujo, así que avanza a saltos como el resto.
+ */
+export const COMPAS = { pulsacionesPorMinuto: 112 } as const
+
+export function latido(tiempo: number): number {
+  const fase = (tiempo * COMPAS.pulsacionesPorMinuto) / 60
+  const onda = 0.5 + 0.5 * Math.cos(2 * Math.PI * fase)
+  return onda * onda * onda
+}

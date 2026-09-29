@@ -119,23 +119,24 @@ float orilla(float n, float u, float ancho) {
 }
 
 vec3 cieloAcuarela(vec3 dir) {
-  vec3 noche = vec3(0.105, 0.140, 0.215);
-  vec3 azul = vec3(0.140, 0.215, 0.305);
-  vec3 verdoso = vec3(0.200, 0.320, 0.360);
-  vec3 violeta = vec3(0.180, 0.160, 0.270);
+  // Azul noche vivo (como las noches de Cuphead), más oscuro hacia arriba y algo morado hacia abajo.
+  vec3 alto = vec3(0.090, 0.160, 0.370);
+  vec3 bajo = vec3(0.190, 0.170, 0.430);
+  vec3 claro = vec3(0.230, 0.360, 0.680);
+  vec3 oscuro = vec3(0.060, 0.100, 0.260);
   float grande = fbm3(dir * 1.2 + vec3(2.0, 5.0, 1.0));
   float medio = fbm3(dir * 2.6 + vec3(-4.0, 1.5, 7.0));
   float fino = ruido3(dir * 19.0);
-  vec3 c = mix(noche, azul, smoothstep(0.35, 0.7, grande));
-  c = mix(c, violeta, 0.35 * smoothstep(0.55, 0.75, medio) * (1.0 - smoothstep(0.4, 0.6, grande)));
-  // Manchas claras con su orilla oscura.
+  vec3 c = mix(bajo, alto, smoothstep(-0.35, 0.55, dir.y));
+  c = mix(c, oscuro, 0.35 * smoothstep(0.5, 0.75, medio) * (1.0 - smoothstep(0.4, 0.6, grande)));
+  // Manchas claras de la aguada, con la orilla más oscura donde se secó el agua.
   float campo = grande + 0.35 * (medio - 0.5);
   float mancha = aguada(campo, 0.58, 0.012);
-  c = mix(c, verdoso, 0.4 * mancha);
-  c *= 1.0 - 0.16 * orilla(campo, 0.58, 0.018);
+  c = mix(c, claro, 0.28 * mancha);
+  c *= 1.0 - 0.12 * orilla(campo, 0.58, 0.018);
   float mancha2 = aguada(medio + 0.2 * (grande - 0.5), 0.66, 0.012);
-  c = mix(c, azul * 1.25, 0.4 * mancha2);
-  c *= 1.0 - 0.15 * orilla(medio + 0.2 * (grande - 0.5), 0.66, 0.016);
+  c = mix(c, mix(claro, bajo, 0.4), 0.22 * mancha2);
+  c *= 1.0 - 0.12 * orilla(medio + 0.2 * (grande - 0.5), 0.66, 0.016);
   // Grano del pigmento.
   c *= 0.93 + 0.1 * fino;
   return c;

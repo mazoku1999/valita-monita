@@ -81,18 +81,6 @@ export function gBordeSombra(observador: Readonly<Observador>, distancia: number
 }
 
 /**
- * Exposición de la cámara en la zambullida (multiplica la ganancia del gas). Entre ~12 y 2
- * unidades la cara cercana del disco llena media pantalla de luz y una cámara con medición media
- * cerraría el diafragma; más cerca la sombra domina y lo vuelve a abrir. Medido en el recorrido:
- * sin ella, a 4.5 unidades el 55 % de la pantalla pasaba de 0.6 sRGB (el disco quemado a blanco).
- */
-export const exposicionZambullida = (distancia: number, progreso: number): number => {
-  if (progreso <= VIAJE.acercamientoFin) return 1
-  const x = Math.log(Math.max(distancia, 1e-3) / 5) / 0.55
-  return 1 - 0.45 * Math.exp(-x * x)
-}
-
-/**
  * Reloj de lo que ve la cámara: la luz del disco llega comprimida en el tiempo por el mismo
  * factor g que la azula, así que al caer el gas y los escombros se ven girar más deprisa (×2 a 3
  * unidades, ×3.8 en el horizonte). Se integra el reloj real con la g del borde de la sombra; la

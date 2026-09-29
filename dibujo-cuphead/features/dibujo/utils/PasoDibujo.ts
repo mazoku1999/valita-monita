@@ -1,26 +1,27 @@
 import { Pass } from 'postprocessing'
 import * as THREE from 'three'
-import { ACUARELA, COLORES_PLANOS, HERVOR, ORIENTACION, PELICULA, TINTA } from '../constantes/dibujo'
-import { numeroDeDibujo } from '../store/ritmoDibujo'
-import { crearGeometriaDestellos, generarDestellos } from './destellos'
+import { refBufferGas } from '@/features/agujero-negro/store/mallaGas'
+import { ACUARELA, COLORES_PLANOS, HERVOR, PELICULA, TINTA } from '../constantes/dibujo'
 import {
   CIELO_FRAG,
   COMPONER_FRAG,
+  CONTORNO_FRAG,
   COPIA_FRAG,
   DESENFOQUE_FRAG,
   DESTELLO_FRAG,
   DESTELLO_VERT,
-  DOG_FRAG,
-  LIC_FRAG,
-  ORIENTACION_FRAG,
   PANTALLA_VERT,
   PELICULA_FRAG,
   REDUCIR_FRAG,
-  TENSOR_FRAG,
 } from '../shaders/dibujo'
+import { numeroDeDibujo } from '../store/ritmoDibujo'
+import { crearGeometriaDestellos, generarDestellos } from './destellos'
 
-/** Objetivo HDR sin profundidad; con `salidas` > 1, varias texturas a la vez (MRT). */
-const objetivo = (ancho: number, alto: number, filtro: THREE.MagnificationTextureFilter = THREE.LinearFilter, salidas = 1) =>
+/** Radio aparente de la sombra (parámetro de impacto crítico, r_s = 1). */
+const RADIO_SOMBRA = 2.598
+
+/** Objetivo HDR sin profundidad. */
+const objetivo = (ancho: number, alto: number, filtro: THREE.MagnificationTextureFilter = THREE.LinearFilter) =>
   new THREE.WebGLRenderTarget(ancho, alto, {
     type: THREE.HalfFloatType,
     format: THREE.RGBAFormat,
@@ -28,7 +29,6 @@ const objetivo = (ancho: number, alto: number, filtro: THREE.MagnificationTextur
     magFilter: filtro,
     generateMipmaps: false,
     depthBuffer: false,
-    count: salidas,
   })
 
 const material = (fragmentShader: string, uniforms: Record<string, THREE.IUniform>): THREE.ShaderMaterial =>
@@ -41,93 +41,88 @@ const material = (fragmentShader: string, uniforms: Record<string, THREE.IUnifor
     depthWrite: false,
   })
 
+const suavizar = (borde0: number, borde1: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - borde0) / (borde1 - borde0)))
+  return t * t * (3 - 2 * t)
+}
+
 /** Parámetros ajustables en caliente (claves de desarrollo en la URL, ver `vistaCamaraStore`). */
 export interface AjustesDibujo {
   activo: boolean
   /** Sólo la tinta sobre papel (para revisar las líneas). */
   soloTinta: boolean
-  umbral: number
+  /** Radio del trazo de tinta (px a 720 de alto). */
   grosor: number
 }
 
 /**
- * Pase del dibujo animado: redibuja la imagen de la escena al estilo de los dibujos de los años
- * 30. Va al final de la cadena de posproceso (después del tono):
+ * Pase del dibujo animado. El agujero negro ya llega dibujado en caricatura desde su propio buffer
+ * (color y qué objeto hay en cada píxel, ver `shaders/lenteCaricatura.frag.ts`); este pase lo compone
+ * sobre el cielo y le pone la tinta y la película:
  *
- * 1. Reducciones a 1/4 (orientación de los bordes) y a 1/2 (color y luz del dibujo).
- * 2. Orientación: tensor de estructura → desenfoque con memoria en el tiempo → tangente del borde.
- * 3. Tinta (FDoG): diferencia de gaussianas a través del borde y suavizado a lo largo de él.
- * 4. Composición: colores planos por bandas y la tinta encima.
+ * 1. Cielo en acuarela anclado a la esfera celeste, con rayos de sol detrás del agujero.
+ * 2. Contornos a partir de los objetos (y de los saltos de profundidad dentro del horizonte), con
+ *    grosor de pincel variable y el hervor del dibujo a mano.
+ * 3. Composición: cielo (con aguadas de luz), lo que aún se renderiza con materiales realistas en
+ *    colores planos de época, el agujero de caricatura y la tinta; papel.
+ * 4. Estrellas y destellos de caricatura; película antigua a 24 fotogramas por segundo.
  */
 export class PasoDibujo extends Pass {
-  /** Cámara de la escena: ancla el cielo en acuarela a la esfera celeste. */
+  /** Cámara de la escena: ancla el cielo a la esfera celeste y sitúa el agujero. */
   camara: THREE.Camera | null = null
-  /**
-   * Cuánto del cielo abierto se pinta como cielo (0–1). Dentro del horizonte, antes de que aparezca
-   * el agujero de gusano, la oscuridad es oscuridad.
-   */
+  /** Cuánto del cielo abierto se pinta como cielo (0–1): dentro del horizonte, oscuridad. */
   cieloPintado = 1
+  /** Cuánto se ve el agujero de caricatura (sólo fuera del horizonte). */
+  gasVisible = 1
+  /** Visibilidad de los destellos de la banda de polvo (sólo con la cámara fuera del horizonte). */
+  bandaVisible = 1
+  /** Latido del compás (0–1), ver `store/ritmoDibujo.ts`. */
+  latido = 0
 
-  readonly ajustes: AjustesDibujo = {
-    activo: true,
-    soloTinta: false,
-    umbral: TINTA.umbral,
-    grosor: TINTA.sigmaBorde,
-  }
+  readonly ajustes: AjustesDibujo = { activo: true, soloTinta: false, grosor: TINTA.grosor }
 
   private readonly escenaQuad = new THREE.Scene()
   private readonly camaraQuad = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private readonly geometriaQuad = new THREE.PlaneGeometry(2, 2)
   private readonly quad: THREE.Mesh
 
-  private readonly cuarto = objetivo(2, 2)
-  private readonly tensor = objetivo(2, 2)
-  private readonly tensorIntermedio = objetivo(2, 2)
-  /** Tensor suavizado con memoria en el tiempo (ping-pong). */
-  private readonly historia = [objetivo(2, 2), objetivo(2, 2)] as const
-  private readonly orientacion = objetivo(2, 2)
   private readonly media = objetivo(2, 2)
   private readonly mediaIntermedia = objetivo(2, 2)
-  private readonly luz = objetivo(2, 2)
   private readonly colorSuave = objetivo(2, 2)
-  private readonly respuesta = objetivo(2, 2)
-  private readonly lineas = objetivo(2, 2)
-  private readonly cielo = objetivo(2, 2)
+  private readonly cuarto = objetivo(2, 2)
   private readonly aguadaIntermedia = objetivo(2, 2)
   private readonly aguada = objetivo(2, 2)
+  private readonly cielo = objetivo(2, 2)
+  private readonly contornos = objetivo(2, 2)
   /** El dibujo compuesto (sRGB), antes de pasar por la película. */
   private readonly dibujo = objetivo(2, 2)
+
   private readonly uCamara = {
     uProyInversa: { value: new THREE.Matrix4() },
     uCamaraMundo: { value: new THREE.Matrix4() },
   }
+  private readonly uAgujero = { value: new THREE.Vector4() }
 
   private readonly matReducir: THREE.ShaderMaterial
   private readonly matDesenfoque: THREE.ShaderMaterial
-  private readonly matTensor: THREE.ShaderMaterial
-  private readonly matOrientacion: THREE.ShaderMaterial
-  private readonly matDog: THREE.ShaderMaterial
-  private readonly matLic: THREE.ShaderMaterial
-  private readonly matComponer: THREE.ShaderMaterial
-  private readonly matCopia: THREE.ShaderMaterial
   private readonly matCielo: THREE.ShaderMaterial
+  private readonly matContorno: THREE.ShaderMaterial
+  private readonly matComponer: THREE.ShaderMaterial
   private readonly matPelicula: THREE.ShaderMaterial
+  private readonly matCopia: THREE.ShaderMaterial
   private readonly geometriaDestellos = crearGeometriaDestellos(generarDestellos())
   private readonly matDestellos: THREE.ShaderMaterial
   private readonly escenaDestellos = new THREE.Scene()
-  /** Visibilidad de los destellos de la banda de polvo (sólo con la cámara fuera del horizonte). */
-  bandaVisible = 1
 
-  private indiceHistoria = 0
-  private conHistoria = false
   private anchoActual = 0
   private altoActual = 0
   private tiempo = 0
+  private readonly auxiliar = new THREE.Vector3()
 
   constructor() {
     super('PasoDibujo')
     this.needsSwap = true
-    // La profundidad de la escena da las siluetas de los objetos frente al cielo.
+    // La profundidad de la escena separa el cielo abierto de lo que tiene cuerpo.
     this.needsDepthTexture = true
 
     this.matReducir = material(REDUCIR_FRAG, { uEntrada: { value: null }, uTexelEntrada: { value: new THREE.Vector2() } })
@@ -137,38 +132,30 @@ export class PasoDibujo extends Pass {
       uHistoria: { value: null },
       uMezcla: { value: 1 },
     })
-    this.matTensor = material(TENSOR_FRAG, { uReducida: { value: this.cuarto.texture }, uTexel: { value: new THREE.Vector2() } })
-    this.matOrientacion = material(ORIENTACION_FRAG, { uTensor: { value: null } })
-    this.matDog = material(DOG_FRAG, {
-      uLuz: { value: this.luz.texture },
-      uOrientacion: { value: this.orientacion.texture },
-      uTexel: { value: new THREE.Vector2() },
-      uSigma: { value: TINTA.sigmaBorde },
-      uK: { value: TINTA.k },
-      uRho: { value: TINTA.rho },
-      uNivelTinta: { value: new THREE.Vector3(...TINTA.nivelTinta) },
+    this.matCielo = material(CIELO_FRAG, {
       uProfundidad: { value: null },
-      uPesoSilueta: { value: 0 },
-      uPesoCalidez: { value: TINTA.pesoCalidez },
+      uTexelEntrada: { value: new THREE.Vector2() },
+      uCieloPintado: { value: 1 },
+      uAgujero: this.uAgujero,
+      uAspecto: { value: 1 },
+      uTiempo: { value: 0 },
+      uLatido: { value: 0 },
+      ...this.uCamara,
     })
-    this.matLic = material(LIC_FRAG, {
-      uRespuesta: { value: this.respuesta.texture },
-      uOrientacion: { value: this.orientacion.texture },
-      uTexel: { value: new THREE.Vector2() },
-      uSigma: { value: TINTA.sigmaFlujo },
+    this.matContorno = material(CONTORNO_FRAG, {
+      uIdGas: { value: null },
+      uProfundidad: { value: null },
+      uResolucion: { value: new THREE.Vector2() },
+      uCercaLejos: { value: new THREE.Vector2(0.1, 1400) },
+      uGrosor: { value: TINTA.grosor },
+      uHervor: { value: new THREE.Vector3(0, 0, HERVOR.amplitud) },
+      uGasVisible: { value: 1 },
     })
     this.matComponer = material(COMPONER_FRAG, {
       uColorSuave: { value: this.colorSuave.texture },
-      uLineas: { value: this.lineas.texture },
-      uUmbralesBanda: { value: new THREE.Vector3(...COLORES_PLANOS.umbrales) },
-      uValoresBanda: { value: new THREE.Vector3(...COLORES_PLANOS.valores) },
-      uDegradado: { value: COLORES_PLANOS.degradado },
-      uCroma: { value: COLORES_PLANOS.croma },
-      uUmbral: { value: TINTA.umbral },
-      uSuavidad: { value: TINTA.suavidad },
-      uTinta: { value: new THREE.Vector3(...TINTA.color) },
-      uAPantalla: { value: 1 },
-      uSoloTinta: { value: 0 },
+      uContornos: { value: this.contornos.texture },
+      uGasColor: { value: null },
+      uGasVisible: { value: 1 },
       uCielo: { value: this.cielo.texture },
       uAguada: { value: this.aguada.texture },
       uUmbralesAguada: { value: new THREE.Vector3(...ACUARELA.umbralesAguada) },
@@ -176,6 +163,13 @@ export class PasoDibujo extends Pass {
       uEscalaPapel: { value: ACUARELA.escalaPapel },
       uFuerzaEpoca: { value: COLORES_PLANOS.fuerzaEpoca },
       uHervor: { value: new THREE.Vector3(0, 0, HERVOR.amplitud) },
+      uUmbralesBanda: { value: new THREE.Vector3(...COLORES_PLANOS.umbrales) },
+      uValoresBanda: { value: new THREE.Vector3(...COLORES_PLANOS.valores) },
+      uDegradado: { value: COLORES_PLANOS.degradado },
+      uCroma: { value: COLORES_PLANOS.croma },
+      uTinta: { value: new THREE.Vector3(...TINTA.color) },
+      uAPantalla: { value: 1 },
+      uSoloTinta: { value: 0 },
     })
     this.matPelicula = material(PELICULA_FRAG, {
       uImagen: { value: this.dibujo.texture },
@@ -184,7 +178,9 @@ export class PasoDibujo extends Pass {
       uAPantalla: { value: 1 },
       uPelicula: { value: new THREE.Vector4(PELICULA.grano, PELICULA.polvo, PELICULA.rayas, PELICULA.parpadeo) },
       uPelicula2: { value: new THREE.Vector3(PELICULA.vaiven, PELICULA.vineta, PELICULA.envejecido) },
+      uAberracion: { value: PELICULA.aberracion },
     })
+    this.matCopia = material(COPIA_FRAG, { uEntrada: { value: null }, uAPantalla: { value: 1 } })
     this.matDestellos = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       vertexShader: DESTELLO_VERT,
@@ -215,13 +211,6 @@ export class PasoDibujo extends Pass {
     const mallaDestellos = new THREE.Mesh(this.geometriaDestellos, this.matDestellos)
     mallaDestellos.frustumCulled = false
     this.escenaDestellos.add(mallaDestellos)
-    this.matCielo = material(CIELO_FRAG, {
-      uProfundidad: { value: null },
-      uTexelEntrada: { value: new THREE.Vector2() },
-      uCieloPintado: { value: 1 },
-      ...this.uCamara,
-    })
-    this.matCopia = material(COPIA_FRAG, { uEntrada: { value: null }, uAPantalla: { value: 1 } })
 
     this.quad = new THREE.Mesh(this.geometriaQuad, this.matReducir)
     this.quad.frustumCulled = false
@@ -236,27 +225,23 @@ export class PasoDibujo extends Pass {
     this.altoActual = alto
     const anchoC = Math.max(2, Math.round(ancho / 4))
     const altoC = Math.max(2, Math.round(alto / 4))
-    for (const rt of [this.cuarto, this.tensor, this.tensorIntermedio, ...this.historia, this.orientacion, this.aguadaIntermedia, this.aguada])
-      rt.setSize(anchoC, altoC)
+    for (const rt of [this.cuarto, this.aguadaIntermedia, this.aguada]) rt.setSize(anchoC, altoC)
     const anchoM = Math.max(2, Math.round(ancho / 2))
     const altoM = Math.max(2, Math.round(alto / 2))
-    for (const rt of [this.media, this.mediaIntermedia, this.luz, this.colorSuave, this.respuesta, this.lineas, this.cielo])
-      rt.setSize(anchoM, altoM)
-    ;(this.matCielo.uniforms.uTexelEntrada.value as THREE.Vector2).set(0.5 / ancho, 0.5 / alto)
-    ;(this.matComponer.uniforms.uResolucion.value as THREE.Vector2).set(ancho, alto)
-    ;(this.matPelicula.uniforms.uResolucion.value as THREE.Vector2).set(ancho, alto)
-    ;(this.matDestellos.uniforms.uResolucion.value as THREE.Vector2).set(ancho, alto)
+    for (const rt of [this.media, this.mediaIntermedia, this.colorSuave, this.cielo]) rt.setSize(anchoM, altoM)
+    this.contornos.setSize(ancho, alto)
     this.dibujo.setSize(ancho, alto)
+
+    ;(this.matCielo.uniforms.uTexelEntrada.value as THREE.Vector2).set(0.5 / ancho, 0.5 / alto)
+    this.matCielo.uniforms.uAspecto.value = ancho / alto
+    for (const m of [this.matContorno, this.matComponer, this.matPelicula, this.matDestellos])
+      (m.uniforms.uResolucion.value as THREE.Vector2).set(ancho, alto)
     this.matComponer.uniforms.uEscalaPapel.value = ACUARELA.escalaPapel * Math.max(1, alto / 720)
-    this.conHistoria = false
-    ;(this.matTensor.uniforms.uTexel.value as THREE.Vector2).set(1 / anchoC, 1 / altoC)
-    ;(this.matDog.uniforms.uTexel.value as THREE.Vector2).set(1 / anchoM, 1 / altoM)
-    ;(this.matLic.uniforms.uTexel.value as THREE.Vector2).set(1 / anchoM, 1 / altoM)
   }
 
   override setDepthTexture(textura: THREE.Texture): void {
-    this.matDog.uniforms.uProfundidad.value = textura
     this.matCielo.uniforms.uProfundidad.value = textura
+    this.matContorno.uniforms.uProfundidad.value = textura
     this.matDestellos.uniforms.uProfundidad.value = textura
   }
 
@@ -272,20 +257,30 @@ export class PasoDibujo extends Pass {
     this.dibujar(renderer, this.matReducir, destino)
   }
 
-  private desenfocar(
-    renderer: THREE.WebGLRenderer,
-    entrada: THREE.WebGLRenderTarget,
-    paso: THREE.Vector2Like,
-    destino: THREE.WebGLRenderTarget,
-    historia: THREE.WebGLRenderTarget | null = null,
-    mezcla = 1,
-  ) {
+  private desenfocar(renderer: THREE.WebGLRenderer, entrada: THREE.WebGLRenderTarget, paso: THREE.Vector2Like, destino: THREE.WebGLRenderTarget) {
     const u = this.matDesenfoque.uniforms
     u.uEntrada.value = entrada.texture
     ;(u.uPaso.value as THREE.Vector2).set(paso.x, paso.y)
-    u.uHistoria.value = historia ? historia.texture : null
-    u.uMezcla.value = historia ? mezcla : 1
+    u.uMezcla.value = 1
     this.dibujar(renderer, this.matDesenfoque, destino)
+  }
+
+  /**
+   * El agujero en pantalla (centro y radio de la sombra en fracción de la altura) para los rayos
+   * de sol; con la cámara dentro del horizonte o detrás, sin rayos.
+   */
+  private situarAgujero(camara: THREE.Camera): void {
+    const distancia = camara.position.length()
+    const perspectiva = camara instanceof THREE.PerspectiveCamera ? camara : null
+    if (!perspectiva || distancia < 1.2) {
+      this.uAgujero.value.set(0.5, 0.5, 0.1, 0)
+      return
+    }
+    const p = this.auxiliar.set(0, 0, 0).project(perspectiva)
+    const angulo = Math.asin(Math.min(1, (RADIO_SOMBRA * Math.sqrt(Math.max(0, 1 - 1 / distancia))) / distancia))
+    const radio = (0.5 * Math.tan(angulo)) / Math.tan(THREE.MathUtils.degToRad(perspectiva.fov) / 2)
+    const delante = p.z < 1 ? 1 : 0
+    this.uAgujero.value.set(0.5 + 0.5 * p.x, 0.5 + 0.5 * p.y, radio, delante * this.gasVisible)
   }
 
   override render(
@@ -307,81 +302,69 @@ export class PasoDibujo extends Pass {
       return
     }
 
-    const paso = Math.min(Math.max(deltaTime, 0), 0.25)
-    this.tiempo += paso
-    const anchoC = this.cuarto.width
-    const altoC = this.cuarto.height
-    const anchoM = this.media.width
-    const altoM = this.media.height
-
-    // 1. Reducciones.
-    this.reducir(renderer, inputBuffer.texture, { x: 1 / this.anchoActual, y: 1 / this.altoActual }, this.cuarto)
-    this.reducir(renderer, inputBuffer.texture, { x: 0.5 / this.anchoActual, y: 0.5 / this.altoActual }, this.media)
-
-    // 2. Orientación de los bordes.
-    this.dibujar(renderer, this.matTensor, this.tensor)
-    const pasoT = ORIENTACION.pasoDesenfoque
-    this.desenfocar(renderer, this.tensor, { x: pasoT / anchoC, y: 0 }, this.tensorIntermedio)
-    const previa = this.historia[this.indiceHistoria]
-    const actual = this.historia[1 - this.indiceHistoria]
-    const mezcla = this.conHistoria ? 1 - Math.exp(-paso / ORIENTACION.tauTemporal) : 1
-    this.desenfocar(renderer, this.tensorIntermedio, { x: 0, y: pasoT / altoC }, actual, previa, mezcla)
-    this.indiceHistoria = 1 - this.indiceHistoria
-    this.conHistoria = true
-    this.matOrientacion.uniforms.uTensor.value = actual.texture
-    this.dibujar(renderer, this.matOrientacion, this.orientacion)
-
-    // 3. Luz para la tinta (desenfoque ligero) y color simplificado para los planos.
-    const pasoL = TINTA.desenfoquePrevio
-    this.desenfocar(renderer, this.media, { x: pasoL / anchoM, y: 0 }, this.mediaIntermedia)
-    this.desenfocar(renderer, this.mediaIntermedia, { x: 0, y: pasoL / altoM }, this.luz)
-    const pasoC = COLORES_PLANOS.desenfoque
-    this.desenfocar(renderer, this.media, { x: pasoC / anchoM, y: 0 }, this.mediaIntermedia)
-    this.desenfocar(renderer, this.mediaIntermedia, { x: 0, y: pasoC / altoM }, this.colorSuave)
-
-    // 4. Tinta: diferencia de gaussianas a través del borde y suavizado a lo largo de él.
-    this.matDog.uniforms.uSigma.value = this.ajustes.grosor
-    this.matDog.uniforms.uPesoSilueta.value = this.matDog.uniforms.uProfundidad.value ? TINTA.pesoSilueta : 0
-    this.dibujar(renderer, this.matDog, this.respuesta)
-    this.dibujar(renderer, this.matLic, this.lineas)
-
-    // 5. Luz de las aguadas (muy suavizada), cielo en acuarela (anclado a la esfera celeste) y máscara
-    // del cielo abierto.
-    const pasoA = ACUARELA.desenfoqueAguada
-    this.desenfocar(renderer, this.cuarto, { x: pasoA / anchoC, y: 0 }, this.aguadaIntermedia)
-    this.desenfocar(renderer, this.aguadaIntermedia, { x: 0, y: pasoA / altoC }, this.aguada)
+    this.tiempo += Math.min(Math.max(deltaTime, 0), 0.25)
     const camara = this.camara
     if (camara) {
       camara.updateMatrixWorld()
       this.uCamara.uProyInversa.value.copy(camara.projectionMatrixInverse)
       this.uCamara.uCamaraMundo.value.copy(camara.matrixWorld)
+      this.situarAgujero(camara)
+      if (camara instanceof THREE.PerspectiveCamera) (this.matContorno.uniforms.uCercaLejos.value as THREE.Vector2).set(camara.near, camara.far)
     }
-    this.matCielo.uniforms.uCieloPintado.value = this.matCielo.uniforms.uProfundidad.value ? this.cieloPintado : 0
+    const gas = refBufferGas.current
+    const gasVisible = gas ? this.gasVisible : 0
+    const semilla = Math.floor(numeroDeDibujo() / HERVOR.cadaDibujos)
+    const hervorX = (semilla * 12.9898) % 97
+    const hervorY = (semilla * 78.233) % 89
+
+    // 1. Reducciones y versiones suavizadas de la escena (para lo que aún es realista).
+    this.reducir(renderer, inputBuffer.texture, { x: 0.5 / this.anchoActual, y: 0.5 / this.altoActual }, this.media)
+    this.reducir(renderer, inputBuffer.texture, { x: 1 / this.anchoActual, y: 1 / this.altoActual }, this.cuarto)
+    const pasoC = COLORES_PLANOS.desenfoque
+    this.desenfocar(renderer, this.media, { x: pasoC / this.media.width, y: 0 }, this.mediaIntermedia)
+    this.desenfocar(renderer, this.mediaIntermedia, { x: 0, y: pasoC / this.media.height }, this.colorSuave)
+    const pasoA = ACUARELA.desenfoqueAguada
+    this.desenfocar(renderer, this.cuarto, { x: pasoA / this.cuarto.width, y: 0 }, this.aguadaIntermedia)
+    this.desenfocar(renderer, this.aguadaIntermedia, { x: 0, y: pasoA / this.cuarto.height }, this.aguada)
+
+    // 2. Cielo en acuarela con los rayos de sol del agujero.
+    const uc = this.matCielo.uniforms
+    uc.uCieloPintado.value = uc.uProfundidad.value ? this.cieloPintado : 0
+    uc.uTiempo.value = this.tiempo
+    uc.uLatido.value = this.latido
     this.dibujar(renderer, this.matCielo, this.cielo)
 
-    // 6. Composición.
+    // 3. Contornos.
+    const ul = this.matContorno.uniforms
+    ul.uIdGas.value = gas ? gas.textures[1] : null
+    ul.uGasVisible.value = gasVisible
+    ul.uGrosor.value = this.ajustes.grosor
+    ;(ul.uHervor.value as THREE.Vector3).set(hervorX, hervorY, HERVOR.amplitud)
+    this.dibujar(renderer, this.matContorno, this.contornos)
+
+    // 4. Composición.
     const u = this.matComponer.uniforms
-    u.uUmbral.value = this.ajustes.umbral
+    u.uGasColor.value = gas ? gas.textures[0] : null
+    u.uGasVisible.value = gasVisible
     u.uSoloTinta.value = this.ajustes.soloTinta ? 1 : 0
     u.uAPantalla.value = 1
-    const semilla = Math.floor(numeroDeDibujo() / HERVOR.cadaDibujos)
-    ;(u.uHervor.value as THREE.Vector3).set((semilla * 12.9898) % 97, (semilla * 78.233) % 89, HERVOR.amplitud)
+    ;(u.uHervor.value as THREE.Vector3).set(hervorX, hervorY, HERVOR.amplitud)
     this.dibujar(renderer, this.matComponer, this.dibujo)
 
-    // Estrellas y destellos de caricatura encima del dibujo.
+    // 5. Estrellas y destellos de caricatura.
     if (camara) {
       const ud = this.matDestellos.uniforms
       ;(ud.uVistaProyeccion.value as THREE.Matrix4).multiplyMatrices(camara.projectionMatrix, camara.matrixWorldInverse)
       ;(ud.uPosCamara.value as THREE.Vector3).copy(camara.position)
       ud.uDibujo.value = numeroDeDibujo()
       ud.uTiempo.value = this.tiempo
-      ud.uEstrellasVisibles.value = this.matCielo.uniforms.uCieloPintado.value
-      ud.uBandaVisible.value = ud.uProfundidad.value ? this.bandaVisible : 0
+      ud.uEstrellasVisibles.value = uc.uCieloPintado.value
+      ud.uBandaVisible.value = ud.uProfundidad.value ? this.bandaVisible * suavizar(0, 1, gasVisible) : 0
       renderer.setRenderTarget(this.dibujo)
       renderer.render(this.escenaDestellos, this.camaraQuad)
     }
 
-    // 7. Película antigua (a 24 fotogramas por segundo, como en un proyector).
+    // 6. Película antigua.
     this.matPelicula.uniforms.uFotograma.value = Math.floor(this.tiempo * PELICULA.fotogramasPorSegundo) % 100000
     this.matPelicula.uniforms.uAPantalla.value = aPantalla
     this.dibujar(renderer, this.matPelicula, destino)
@@ -390,34 +373,25 @@ export class PasoDibujo extends Pass {
 
   override dispose(): void {
     for (const rt of [
-      this.cuarto,
-      this.tensor,
-      this.tensorIntermedio,
-      ...this.historia,
-      this.orientacion,
       this.media,
       this.mediaIntermedia,
-      this.luz,
       this.colorSuave,
-      this.respuesta,
-      this.lineas,
-      this.cielo,
+      this.cuarto,
       this.aguadaIntermedia,
       this.aguada,
+      this.cielo,
+      this.contornos,
       this.dibujo,
     ])
       rt.dispose()
     for (const m of [
       this.matReducir,
       this.matDesenfoque,
-      this.matTensor,
-      this.matOrientacion,
-      this.matDog,
-      this.matLic,
-      this.matComponer,
-      this.matCopia,
       this.matCielo,
+      this.matContorno,
+      this.matComponer,
       this.matPelicula,
+      this.matCopia,
       this.matDestellos,
     ])
       m.dispose()

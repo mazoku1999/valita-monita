@@ -3,7 +3,6 @@
 import { Canvas } from '@react-three/fiber'
 import { CAMARA_AGUJERO } from '../constantes/parametrosAgujero'
 import { CamaraNarrativa } from './CamaraNarrativa'
-import { CampoPolvoEstelar } from './CampoPolvoEstelar'
 import { EfectosPost } from './EfectosPost'
 import { EscenaSistemaSolar } from './EscenaSistemaSolar'
 import { LenteGravitacionalQuad } from './LenteGravitacionalQuad'
@@ -32,7 +31,7 @@ export function AgujeroNegroCanvas({ onListo }: AgujeroNegroCanvasProps) {
       style={{ width: '100%', height: '100%' }}
     >
       <LenteGravitacionalQuad />
-      <CampoPolvoEstelar />
+      {/* Sin el polvo realista: en el dibujo animado lo sustituyen los destellos de caricatura. */}
       <CamaraNarrativa />
       <TunelAgujeroGusano>
         <EscenaSistemaSolar />

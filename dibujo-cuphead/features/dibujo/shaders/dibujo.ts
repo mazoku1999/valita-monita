@@ -103,172 +103,10 @@ void main() {
 }
 `
 
-/**
- * Tensor de estructura de color (Di Zenzo): suma por canal de (gx², gx·gy, gy²) con Sobel. Los
- * bordes entre colores de igual luminancia (océano y continente) también orientan la tinta.
- */
-export const TENSOR_FRAG = /* glsl */ `
-uniform sampler2D uReducida;
-uniform vec2 uTexel;
 
-in vec2 vUv;
-out vec4 fragColor;
 
-vec3 c(float x, float y) {
-  return texture(uReducida, vUv + vec2(x, y) * uTexel).rgb;
-}
 
-void main() {
-  vec3 tl = c(-1.0, 1.0), t = c(0.0, 1.0), tr = c(1.0, 1.0);
-  vec3 l = c(-1.0, 0.0), r = c(1.0, 0.0);
-  vec3 bl = c(-1.0, -1.0), b = c(0.0, -1.0), br = c(1.0, -1.0);
-  vec3 gx = (tr + 2.0 * r + br - tl - 2.0 * l - bl) * 0.125;
-  vec3 gy = (tl + 2.0 * t + tr - bl - 2.0 * b - br) * 0.125;
-  fragColor = vec4(dot(gx, gx), dot(gx, gy), dot(gy, gy), 1.0);
-}
-`
 
-/**
- * Orientación de los bordes a partir del tensor suavizado: la tangente (autovector menor) en
- * ángulo doble (cos 2θ, sin 2θ), que se interpola sin saltos de signo; B: coherencia.
- */
-export const ORIENTACION_FRAG = /* glsl */ `
-uniform sampler2D uTensor;
-
-in vec2 vUv;
-out vec4 fragColor;
-
-void main() {
-  vec3 t = texture(uTensor, vUv).xyz;
-  float E = t.x;
-  float F = t.y;
-  float G = t.z;
-  float d = sqrt(max(0.25 * (E - G) * (E - G) + F * F, 0.0));
-  float l1 = 0.5 * (E + G) + d;
-  float l2 = 0.5 * (E + G) - d;
-  vec2 v1 = vec2(F, l1 - E);
-  vec2 v2 = vec2(l1 - G, F);
-  vec2 gradiente = dot(v1, v1) > dot(v2, v2) ? v1 : v2;
-  gradiente = dot(gradiente, gradiente) > 1e-14 ? normalize(gradiente) : vec2(0.0, 1.0);
-  vec2 tangente = vec2(-gradiente.y, gradiente.x);
-  float coherencia = (l1 - l2) / (l1 + l2 + 1e-9);
-  fragColor = vec4(tangente.x * tangente.x - tangente.y * tangente.y, 2.0 * tangente.x * tangente.y, coherencia, 1.0);
-}
-`
-
-/** Tangente del borde en `uv` a partir de la orientación en ángulo doble (sin sentido propio). */
-const TANGENTE_GLSL = /* glsl */ `
-vec2 tangenteBorde(sampler2D orientacion, vec2 uv) {
-  vec2 doble = texture(orientacion, uv).xy;
-  float angulo = 0.5 * atan(doble.y, doble.x);
-  return vec2(cos(angulo), sin(angulo));
-}
-`
-
-/**
- * Primera mitad de la tinta (FDoG): diferencia de gaussianas en 1D A TRAVÉS del borde (a lo largo
- * del gradiente): negativa en el lado oscuro de cada borde, casi nula en las zonas planas.
- *
- * La escena está hecha de resplandores suaves, sin bordes duros: un dibujante no entinta cada
- * degradado, pero sí la silueta de cada cuerpo (el planeta, la sombra del agujero, el gas denso del
- * disco: donde la escena escribió profundidad frente al cielo) y el borde de las formas brillantes.
- * Por eso a la luminancia se le suma un escalón en la silueta y otro suave en un nivel de brillo:
- * esas curvas se vuelven bordes y la tinta las recorre.
- */
-export const DOG_FRAG = /* glsl */ `
-uniform sampler2D uLuz;
-uniform sampler2D uOrientacion;
-uniform vec2 uTexel;
-uniform float uSigma;
-uniform float uK;
-uniform float uRho;
-// Nivel de luminancia (sRGB) cuya curva se entinta (el borde de las formas brillantes: el disco,
-// el anillo, el Sol), ancho del escalón y su peso frente a los bordes de verdad.
-uniform vec3 uNivelTinta;
-// Siluetas: la profundidad de la escena separa lo que tiene cuerpo (planetas, la sombra del agujero,
-// el gas denso del disco) del cielo vacío; ese paso pesa como un borde muy marcado.
-uniform sampler2D uProfundidad;
-uniform float uPesoSilueta;
-// Peso de la "calidez" (rojo − azul): la tierra y el mar, o una nube y el océano, apenas difieren en
-// luminosidad pero sí en color; así sus bordes también se entintan.
-uniform float uPesoCalidez;
-
-in vec2 vUv;
-out vec4 fragColor;
-
-${TANGENTE_GLSL}
-
-float realzar(float l) {
-  return l + uNivelTinta.z * smoothstep(uNivelTinta.x - uNivelTinta.y, uNivelTinta.x + uNivelTinta.y, l);
-}
-
-float cuerpo(vec2 uv) {
-  return 1.0 - step(0.99999, texture(uProfundidad, uv).r);
-}
-
-void main() {
-  vec2 t = tangenteBorde(uOrientacion, vUv);
-  vec2 n = vec2(-t.y, t.x);
-  float sc = uSigma;
-  float ss = uK * uSigma;
-  float radio = ceil(2.5 * ss);
-  float sumaC = 0.0;
-  float sumaS = 0.0;
-  float pesoC = 0.0;
-  float pesoS = 0.0;
-  for (int i = -8; i <= 8; i++) {
-    float x = float(i);
-    if (abs(x) > radio) continue;
-    vec2 uv = vUv + n * x * uTexel;
-    vec4 muestra = texture(uLuz, uv);
-    float l = realzar(muestra.a) + uPesoCalidez * (muestra.r - muestra.b) + uPesoSilueta * cuerpo(uv);
-    float gc = exp(-0.5 * x * x / (sc * sc));
-    float gs = exp(-0.5 * x * x / (ss * ss));
-    sumaC += l * gc;
-    pesoC += gc;
-    sumaS += l * gs;
-    pesoS += gs;
-  }
-  fragColor = vec4(sumaC / pesoC - uRho * sumaS / pesoS, 0.0, 0.0, 1.0);
-}
-`
-
-/**
- * Segunda mitad de la tinta: la respuesta se suaviza A LO LARGO del borde siguiendo la curva del
- * flujo (integral de convolución de línea): las líneas quedan continuas y sin dientes.
- */
-export const LIC_FRAG = /* glsl */ `
-uniform sampler2D uRespuesta;
-uniform sampler2D uOrientacion;
-uniform vec2 uTexel;
-uniform float uSigma;
-
-in vec2 vUv;
-out vec4 fragColor;
-
-${TANGENTE_GLSL}
-
-void main() {
-  float suma = texture(uRespuesta, vUv).r;
-  float peso = 1.0;
-  float radio = ceil(2.5 * uSigma);
-  for (int lado = -1; lado <= 1; lado += 2) {
-    vec2 p = vUv;
-    vec2 previa = tangenteBorde(uOrientacion, vUv) * float(lado);
-    for (int i = 1; i <= 8; i++) {
-      if (float(i) > radio) break;
-      vec2 t = tangenteBorde(uOrientacion, p);
-      if (dot(t, previa) < 0.0) t = -t;
-      p += t * uTexel;
-      previa = t;
-      float g = exp(-0.5 * float(i * i) / (uSigma * uSigma));
-      suma += texture(uRespuesta, p).r * g;
-      peso += g;
-    }
-  }
-  fragColor = vec4(suma / peso, 0.0, 0.0, 1.0);
-}
-`
 
 /**
  * Cielo en acuarela a 1/2 de resolución (su dibujo es amplio) y máscara del cielo abierto en A: donde
@@ -279,6 +117,12 @@ export const CIELO_FRAG = /* glsl */ `
 uniform sampler2D uProfundidad;
 uniform vec2 uTexelEntrada;
 uniform float uCieloPintado;
+// Rayos de sol detrás del agujero (como el fondo de los títulos de Cuphead): posición del agujero en
+// pantalla (xy, uv), radio de su sombra (z, fracción de la altura) y peso (w).
+uniform vec4 uAgujero;
+uniform float uAspecto;
+uniform float uTiempo;
+uniform float uLatido;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -286,13 +130,112 @@ out vec4 fragColor;
 ${RUIDO3_GLSL}
 ${CIELO_ACUARELA_GLSL}
 
+vec3 rayosDeSol(vec2 uv, vec3 cielo) {
+  vec2 q = (uv - uAgujero.xy) * vec2(uAspecto, 1.0);
+  // Distancia en radios del disco (el disco mide ~4.2 radios de sombra).
+  float d = length(q) / max(uAgujero.z * 4.2, 1e-4);
+  float angulo = atan(q.y, q.x);
+  // Rayos alternos con borde de aerógrafo, que giran despacio y laten con el compás.
+  float rayo = smoothstep(-0.25, 0.25, cos(angulo * 16.0 + uTiempo * 0.12));
+  float resplandor = exp(-d * 0.42);
+  vec3 calido = vec3(1.0, 0.70, 0.46);
+  vec3 rosa = vec3(0.86, 0.36, 0.46);
+  vec3 morado = vec3(0.40, 0.22, 0.50);
+  vec3 c = mix(morado, rosa, exp(-d * 0.55));
+  c = mix(c, calido, exp(-d * 1.4));
+  float mezcla = uAgujero.w * resplandor * (0.62 + 0.38 * rayo) * (0.9 + 0.1 * uLatido);
+  return mix(cielo, c, clamp(mezcla, 0.0, 1.0));
+}
+
 void main() {
   float cielo = 0.0;
   cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(-1.0, -1.0)).r);
   cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(1.0, -1.0)).r);
   cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(-1.0, 1.0)).r);
   cielo += step(0.99999, texture(uProfundidad, vUv + uTexelEntrada * vec2(1.0, 1.0)).r);
-  fragColor = vec4(cieloAcuarela(direccionMundo(vUv)), 0.25 * cielo * uCieloPintado);
+  vec3 c = cieloAcuarela(direccionMundo(vUv));
+  if (uAgujero.w > 0.0) c = rayosDeSol(vUv, c);
+  fragColor = vec4(c, 0.25 * cielo * uCieloPintado);
+}
+`
+
+/**
+ * Contornos de tinta a partir de QUÉ HAY en cada píxel, no de la imagen: con el agujero a la vista,
+ * los objetos del buffer del agujero (cielo, caras del disco, cantos, anillo, sombra); dentro del
+ * horizonte, los saltos de profundidad de la escena (planetas frente al cielo). Para cada píxel se
+ * miran doce puntos en un círculo del grosor del trazo: la fracción que cae en otro objeto da una
+ * línea de ese grosor con el borde suave. El grosor varía a lo largo de la línea, como la presión de
+ * un pincel, y todo "hierve" un poco de un dibujo a otro. Entre las bandas del disco van líneas
+ * más finas, del color de la banda oscurecido (R: tinta, G: líneas de color).
+ */
+export const CONTORNO_FRAG = /* glsl */ `
+uniform sampler2D uIdGas;
+uniform sampler2D uProfundidad;
+uniform vec2 uResolucion;
+uniform vec2 uCercaLejos;
+uniform float uGrosor;
+uniform vec3 uHervor;
+uniform float uGasVisible;
+
+in vec2 vUv;
+out vec4 fragColor;
+
+${PAPEL_GLSL}
+
+float profundidadLineal(float d) {
+  float z = d * 2.0 - 1.0;
+  return 2.0 * uCercaLejos.x * uCercaLejos.y / (uCercaLejos.y + uCercaLejos.x - z * (uCercaLejos.y - uCercaLejos.x));
+}
+
+float objetoEn(vec2 uv, out float banda) {
+  vec2 t = vec2(textureSize(uIdGas, 0));
+  vec4 id = texelFetch(uIdGas, ivec2(clamp(uv, 0.0, 0.9999) * t), 0);
+  banda = floor(id.g * 5.0 + 0.5);
+  return floor(id.r * 5.0 + 0.5);
+}
+
+float zEn(vec2 uv) {
+  vec2 t = vec2(textureSize(uProfundidad, 0));
+  float d = texelFetch(uProfundidad, ivec2(clamp(uv, 0.0, 0.9999) * t), 0).r;
+  return d >= 0.99999 ? 1e6 : profundidadLineal(d);
+}
+
+void main() {
+  float escala = uResolucion.y / 720.0;
+  vec2 px = vUv * uResolucion;
+  vec2 p = px / (70.0 * escala) + uHervor.xy;
+  vec2 hervor = 2.0 * uHervor.z * escala * (vec2(ruidoPapel(p), ruidoPapel(p.yx + 13.7)) - 0.5);
+  vec2 uv = vUv + hervor / uResolucion;
+  // Presión del pincel: el trazo engorda y adelgaza a lo largo de la línea.
+  float grosor = uGrosor * escala * (0.72 + 0.56 * ruidoPapel(px / (38.0 * escala) + uHervor.yx * 0.3));
+
+  bool conGas = uGasVisible > 0.5;
+  float banda0;
+  float objeto0 = objetoEn(uv, banda0);
+  float z0 = zEn(uv);
+  float tinta = 0.0;
+  float bandas = 0.0;
+  for (int k = 0; k < 12; k++) {
+    float a = 6.2831853 * float(k) / 12.0;
+    vec2 direccion = vec2(cos(a), sin(a));
+    vec2 q = uv + direccion * grosor / uResolucion;
+    if (conGas) {
+      float banda;
+      float objeto = objetoEn(q, banda);
+      // El anillo y la sombra se tocan sin línea: el anillo es el borde de la sombra.
+      bool pareja = (objeto == 4.0 && objeto0 == 5.0) || (objeto == 5.0 && objeto0 == 4.0);
+      if (objeto != objeto0 && !pareja) tinta += 1.0;
+      if (objeto0 == 1.0 && k % 2 == 0) {
+        float bandaCerca;
+        float objetoCerca = objetoEn(uv + direccion * 0.55 * grosor / uResolucion, bandaCerca);
+        if (objetoCerca == 1.0 && bandaCerca != banda0) bandas += 1.0;
+      }
+    } else {
+      float z = zEn(q);
+      if (abs(z - z0) > 0.06 * min(z, z0)) tinta += 1.0;
+    }
+  }
+  fragColor = vec4(tinta / 12.0, bandas / 6.0, 0.0, 1.0);
 }
 `
 
@@ -304,11 +247,14 @@ void main() {
  */
 export const COMPONER_FRAG = /* glsl */ `
 uniform sampler2D uColorSuave;
-uniform sampler2D uLineas;
-// Cielo en acuarela (RGB) y máscara del cielo abierto (A), ver CIELO_FRAG.
+// Contornos (R: tinta, G: líneas de color entre bandas), ver CONTORNO_FRAG.
+uniform sampler2D uContornos;
+// El agujero de caricatura (color lineal y cobertura en A) y cuánto se ve (fuera del horizonte).
+uniform sampler2D uGasColor;
+uniform float uGasVisible;
+// Cielo en acuarela con los rayos (RGB) y máscara del cielo abierto (A), ver CIELO_FRAG.
 uniform sampler2D uCielo;
-// La luz de la escena muy suavizada (a 1/4): las aguadas son manchas amplias y redondas, sin el
-// ruido de las chispas en sus orillas.
+// La luz de la escena muy suavizada (a 1/4): las aguadas son manchas amplias y redondas.
 uniform sampler2D uAguada;
 // Aguadas de luz sobre el cielo: umbrales de luminancia (sRGB) de los tres tonos.
 uniform vec3 uUmbralesAguada;
@@ -316,17 +262,13 @@ uniform vec3 uUmbralesAguada;
 uniform vec2 uResolucion;
 uniform float uEscalaPapel;
 uniform float uFuerzaEpoca;
-// Hervor de la tinta: semilla del dibujo (xy) y amplitud en píxeles (z). Cada dos dibujos la tinta
-// y el borde de los colores se desplazan un poco, como cuando cada fotograma se calcaba a mano.
+// Hervor: semilla del dibujo (xy) y amplitud en píxeles (z) (el borde de los colores de la escena).
 uniform vec3 uHervor;
-// Bandas de color: umbrales de claridad (OKLab) entre bandas y el valor de las tres bandas claras;
-// la más oscura no se aplana (el cielo y las sombras conservan su degradado, sin manchas).
+// Bandas de color de lo que aún se renderiza con materiales realistas (planetas, el túnel).
 uniform vec3 uUmbralesBanda;
 uniform vec3 uValoresBanda;
 uniform float uDegradado;
 uniform float uCroma;
-uniform float uUmbral;
-uniform float uSuavidad;
 uniform vec3 uTinta;
 uniform float uAPantalla;
 uniform float uSoloTinta;
@@ -338,8 +280,6 @@ ${OKLAB_GLSL}
 ${PALETA_EPOCA_GLSL}
 ${PAPEL_GLSL}
 
-// Lectura bicúbica (B-spline con cuatro lecturas bilineales): las curvas de nivel de una textura
-// reducida salen redondas; con la interpolación lineal se veían poligonales, a escalones.
 vec4 texturaBicubica(sampler2D t, vec2 uv) {
   vec2 tamano = vec2(textureSize(t, 0));
   vec2 p = uv * tamano - 0.5;
@@ -359,17 +299,11 @@ vec4 texturaBicubica(sampler2D t, vec2 uv) {
     s1.y * (s0.x * texture(t, vec2(c0.x, c1.y)) + s1.x * texture(t, vec2(c1.x, c1.y)));
 }
 
-// Orilla de acuarela: se oscurece el lado claro de cada umbral (el pigmento que se acumula en el
-// borde de una aguada al secarse). Se mide en el propio valor, no con derivadas de pantalla (que
-// cambian por bloques de 2×2 píxeles y dejaban el borde dentado): donde la luz cae despacio, la
-// orilla es ancha y suave, como en una aguada de verdad.
 float orillaAguada(float valor, float umbral, float ancho) {
   float x = (valor - umbral) / ancho;
   return x > 0.0 ? exp(-x * x) : 0.0;
 }
 
-// La luz de la escena sobre el cielo: tres aguadas del color de la luz (llevado a la paleta),
-// cada una más clara y amarilla, con su orilla.
 vec3 aguadasDeLuz(vec3 cielo, vec3 escena) {
   float luz = dot(escena, vec3(0.299, 0.587, 0.114)) * 1.25;
   float w = max(fwidth(luz), 1e-4) * 0.75;
@@ -377,8 +311,6 @@ vec3 aguadasDeLuz(vec3 cielo, vec3 escena) {
   float t2 = smoothstep(uUmbralesAguada.y - w, uUmbralesAguada.y + w, luz);
   float t3 = smoothstep(uUmbralesAguada.z - w, uUmbralesAguada.z + w, luz);
   vec3 tono = colorDeEpoca(clamp(escena * (0.75 / max(luz, 0.02)), 0.0, 1.0), 0.75);
-  // La aguada más tenue es un resplandor frío: el cielo aclarado hacia un azul claro (la Vía Láctea,
-  // el borde de un halo). Con el tono de la luz, dorado sobre azul noche, salía gris parduzca.
   vec3 c1 = mix(cielo * 1.45, vec3(0.58, 0.70, 0.76), 0.14);
   vec3 c2 = tono * 0.9;
   vec3 c3 = mix(tono, vec3(1.0, 0.95, 0.82), 0.55);
@@ -402,25 +334,30 @@ vec3 coloresPlanos(vec3 srgb) {
   return srgbDesdeOklab(lab);
 }
 
-vec2 desplazamientoHervor(vec2 px, float escala) {
-  vec2 p = px / (70.0 * escala) + uHervor.xy;
-  return vec2(ruidoPapel(p), ruidoPapel(p.yx + 13.7)) - 0.5;
-}
-
 void main() {
   float escala = uResolucion.y / 720.0;
-  vec2 hervor = 2.0 * uHervor.z * escala * desplazamientoHervor(vUv * uResolucion, escala) / uResolucion;
-  vec3 escena = texturaBicubica(uColorSuave, vUv + 0.5 * hervor).rgb;
+  vec2 p = vUv * uResolucion / (70.0 * escala) + uHervor.xy;
+  vec2 hervor = uHervor.z * escala * (vec2(ruidoPapel(p), ruidoPapel(p.yx + 13.7)) - 0.5) / uResolucion;
+
+  // Fondo: el cielo pintado (con las aguadas de la luz de la escena) o lo que la escena todavía
+  // renderiza con materiales realistas, llevado a colores planos de época.
+  vec3 escena = texturaBicubica(uColorSuave, vUv + hervor).rgb;
   vec4 cielo = texture(uCielo, vUv);
   vec3 objeto = colorDeEpoca(coloresPlanos(escena), uFuerzaEpoca);
   vec3 c = mix(objeto, aguadasDeLuz(cielo.rgb, texturaBicubica(uAguada, vUv).rgb), cielo.a);
-  // Papel de acuarela bajo todo (más visible en lo claro).
-  float grano = papel(vUv * uResolucion, uEscalaPapel);
-  c *= 0.9 + 0.12 * grano;
+
+  // El agujero de caricatura por encima.
+  vec4 gas = texture(uGasColor, vUv);
+  c = mix(c, srgbDesdeLineal(gas.rgb), clamp(gas.a, 0.0, 1.0) * uGasVisible);
+
+  // Papel de acuarela bajo la pintura.
+  c *= 0.93 + 0.1 * papel(vUv * uResolucion, uEscalaPapel);
   if (uSoloTinta > 0.5) c = vec3(0.96, 0.93, 0.86);
-  float respuesta = texture(uLineas, vUv + hervor).r;
-  float tinta = 1.0 - smoothstep(uUmbral - uSuavidad, uUmbral, respuesta);
-  c = mix(c, uTinta, tinta);
+
+  // Tinta: líneas de color entre bandas y contornos negros.
+  vec2 lineas = texture(uContornos, vUv).rg;
+  c = mix(c, c * 0.5, smoothstep(0.12, 0.4, lineas.g) * 0.8);
+  c = mix(c, uTinta, smoothstep(0.08, 0.3, lineas.r));
   fragColor = vec4(uAPantalla > 0.5 ? c : linealDesdeSRGB(c), 1.0);
 }
 `
@@ -443,6 +380,8 @@ uniform float uAPantalla;
 uniform vec4 uPelicula;
 // x vaivén (px a 720 de alto), y viñeta, z envejecido.
 uniform vec3 uPelicula2;
+// Separación de los colores en el borde del cuadro (fracción de la pantalla).
+uniform float uAberracion;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -474,9 +413,15 @@ void main() {
   float f = uFotograma;
   vec2 px = vUv * uResolucion;
 
-  // Vaivén del cuadro.
+  // Vaivén del cuadro y aberración cromática (la lente del proyector separa un poco los colores hacia
+  // los bordes, como en las copias viejas).
   vec2 vaiven = (vec2(hash11(f * 1.37 + 0.1), hash11(f * 2.71 + 5.3)) - 0.5) * vec2(0.5, 1.0) * uPelicula2.x * escala;
-  vec3 c = texture(uImagen, vUv + vaiven / uResolucion).rgb;
+  vec2 uvCuadro = vUv + vaiven / uResolucion;
+  vec2 separacion = (vUv - 0.5) * uAberracion;
+  vec3 c = vec3(
+    texture(uImagen, uvCuadro + separacion).r,
+    texture(uImagen, uvCuadro).g,
+    texture(uImagen, uvCuadro - separacion).b);
 
   // Tono envejecido: un poco de sepia, calidez y un negro de tinta vieja; los colores siguen vivos
   // (el filtro de Cuphead es cálido, no marrón).

@@ -3,7 +3,7 @@ import { esIdVista, VISTA_INICIAL, type IdVista } from '../constantes/vistasCama
 
 /**
  * Claves de calibración que se pueden fijar desde la URL SÓLO en desarrollo, por ejemplo
- * `?vista=inferior&polar=1.75&ganancia=6&bloomUmbral=0.7`. Sirven para afinar una vista con
+ * `?vista=inferior&polar=1.75&dibujoGrosor=2.5`. Sirven para afinar una vista con
  * capturas sin editar código; en producción se ignoran y mandan las constantes de cada vista.
  */
 export type ClaveAjuste =
@@ -13,25 +13,9 @@ export type ClaveAjuste =
   | 'inclinacion'
   | 'encuadreX'
   | 'encuadreY'
-  | 'ganancia'
-  | 'bloomUmbral'
-  | 'bloomIntensidad'
-  | 'bloomRadio'
-  | 'bloomNiveles'
-  | 'resplandorBase'
-  | 'resplandorPolvo'
-  | 'resplandorPolvoRadio'
-  | 'resplandorPolvoNiveles'
-  | 'niebla'
-  | 'nieblaLuz'
-  | 'anillo'
-  | 'polvoExposicion'
-  | 'polvoExponente'
   | 'gusanoMuestras'
-  | 'nieblaCaida'
   | 'dibujo'
   | 'dibujoSoloTinta'
-  | 'dibujoUmbral'
   | 'dibujoGrosor'
 
 export type AjustesCalibracion = Partial<Record<ClaveAjuste, number>>
@@ -43,25 +27,9 @@ const CLAVES_AJUSTE: readonly ClaveAjuste[] = [
   'inclinacion',
   'encuadreX',
   'encuadreY',
-  'ganancia',
-  'bloomUmbral',
-  'bloomIntensidad',
-  'bloomRadio',
-  'bloomNiveles',
-  'resplandorBase',
-  'resplandorPolvo',
-  'resplandorPolvoRadio',
-  'resplandorPolvoNiveles',
-  'niebla',
-  'nieblaLuz',
-  'anillo',
-  'polvoExposicion',
-  'polvoExponente',
   'gusanoMuestras',
-  'nieblaCaida',
   'dibujo',
   'dibujoSoloTinta',
-  'dibujoUmbral',
   'dibujoGrosor',
 ]
 
