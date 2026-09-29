@@ -82,6 +82,8 @@ export class PasoDibujo extends Pass {
   latido = 0
   /** Pulsaciones del compás transcurridas (las estrellas bailan con ellas). */
   pulsaciones = 0
+  /** Radio del iris de la película (1 abierto, 0 cerrado). */
+  iris = 1
 
   readonly ajustes: AjustesDibujo = { activo: true, soloTinta: false, grosor: TINTA.grosor }
 
@@ -187,6 +189,7 @@ export class PasoDibujo extends Pass {
       uPelicula: { value: new THREE.Vector4(PELICULA.grano, PELICULA.polvo, PELICULA.rayas, PELICULA.parpadeo) },
       uPelicula2: { value: new THREE.Vector3(PELICULA.vaiven, PELICULA.vineta, PELICULA.envejecido) },
       uAberracion: { value: PELICULA.aberracion },
+      uIris: { value: 1 },
     })
     this.matCopia = material(COPIA_FRAG, { uEntrada: { value: null }, uAPantalla: { value: 1 } })
     this.matDestellos = new THREE.ShaderMaterial({
@@ -398,6 +401,7 @@ export class PasoDibujo extends Pass {
     // 6. Película antigua.
     this.matPelicula.uniforms.uFotograma.value = Math.floor(this.tiempo * PELICULA.fotogramasPorSegundo) % 100000
     this.matPelicula.uniforms.uAPantalla.value = aPantalla
+    this.matPelicula.uniforms.uIris.value = this.iris
     this.dibujar(renderer, this.matPelicula, destino)
     renderer.autoClear = limpiezaPrevia
   }

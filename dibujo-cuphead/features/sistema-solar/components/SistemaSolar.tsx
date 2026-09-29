@@ -131,6 +131,12 @@ const TINTE_ORBITA: Readonly<Record<IdPlaneta, readonly [number, number, number]
   neptuno: [0.7, 0.8, 1.0],
 }
 
+/** Pulso del compás (1 en cada pulsación, cae enseguida), como `latido` en el ritmo del dibujo. */
+const pulso = (n: number): number => {
+  const onda = 0.5 + 0.5 * Math.cos(2 * Math.PI * n)
+  return onda * onda * onda
+}
+
 /** Separación entre los puntitos de una órbita (unidades del sistema) y tamaño del punto (px a 720 de alto). */
 const PUNTITOS_ORBITA = { separacion: 0.9, minimo: 40, maximo: 400, tamano: 2.4 } as const
 
@@ -208,6 +214,7 @@ function crearSistema(fecha: Date) {
         uTiempo: { value: 0 },
         uMapa: { value: vacia },
         uPoblacion: { value: vacia },
+        uRebote: { value: 0 },
       },
     })
     const malla = new THREE.Mesh(esTierra ? geometriaTierra : geometriaPlaneta, material)
@@ -274,6 +281,7 @@ function crearSistema(fecha: Date) {
       uCentro: { value: new THREE.Vector3() },
       uRadio: { value: 1 },
       uAparicion: { value: 0 },
+      uRebote: { value: 0 },
     },
   })
   const atmosfera = new THREE.Mesh(geometriaTierra, materialAtmosfera)
@@ -290,6 +298,7 @@ function crearSistema(fecha: Date) {
       uSol: { value: new THREE.Vector3() },
       uAparicion: { value: 0 },
       uTiempo: { value: 0 },
+      uRebote: { value: 0 },
     },
   })
   const luna = new THREE.Mesh(geometriaPlaneta, materialLuna)
@@ -316,6 +325,7 @@ function crearSistema(fecha: Date) {
       uCentroPlaneta: { value: new THREE.Vector3() },
       uRadioPlaneta: { value: 1 },
       uAparicion: { value: 0 },
+      uRebote: { value: 0 },
     },
     side: THREE.DoubleSide,
   })
@@ -364,7 +374,7 @@ function crearSistema(fecha: Date) {
     SOL_EN_ESCENA.visible = aparicion
     const tamanoPuntito = PUNTITOS_ORBITA.tamano * (altoPixeles / 720) * guias
 
-    for (const planeta of planetas) {
+    planetas.forEach((planeta, indice) => {
       aEscalaVisible(posicionHeliocentrica(planeta.datos, siglos, planeta.malla.position))
       const esTierra = planeta.id === 'tierra'
       const alejamiento = esTierra ? 1 : 0.12 + 0.88 * lejanos
@@ -380,11 +390,14 @@ function crearSistema(fecha: Date) {
       planeta.materialOrbita.uniforms.uTamano.value = tamanoPuntito * Math.min(1, aparicion * 1.5)
       planeta.materialOrbita.uniforms.uAltoPx.value = altoPixeles
       planeta.orbita.visible = tamanoPuntito * aparicion > 0.5
-    }
+      // Rebote al compás: los planetas pares en el pulso y los impares a contratiempo.
+      uniformes.uRebote.value = pulso(pulsos + 0.5 * (indice % 2))
+    })
 
     if (tierra) {
       materialAtmosfera.uniforms.uSol.value.copy(posicionSol)
       materialAtmosfera.uniforms.uAparicion.value = 1
+      materialAtmosfera.uniforms.uRebote.value = tierra.material.uniforms.uRebote.value
       tierra.malla.getWorldPosition(materialAtmosfera.uniforms.uCentro.value)
       materialAtmosfera.uniforms.uRadio.value = tierra.malla.scale.x
       // La Luna gira alrededor de la Tierra en su plano (5.1° sobre la eclíptica).
@@ -408,6 +421,7 @@ function crearSistema(fecha: Date) {
       materialLuna.uniforms.uSol.value.copy(posicionSol)
       materialLuna.uniforms.uAparicion.value = 1
       materialLuna.uniforms.uTiempo.value = segundos
+      materialLuna.uniforms.uRebote.value = pulso(pulsos + 0.25)
       // Aparece creciendo (en caricatura no se funde: se infla) y posa algo más grande de lo que
       // tocaría, para que su cara se lea.
       luna.scale.multiplyScalar(Math.min(1, visibilidadLuna * 1.2) * (1 + LUNA.aumentoPose * visibilidadLuna))
@@ -423,6 +437,7 @@ function crearSistema(fecha: Date) {
       materialAnillos.uniforms.uSol.value.copy(posicionSol)
       // Reducidos a unos píxeles, sus bandas y su tinta serían una mancha: se quitan antes que el planeta.
       materialAnillos.uniforms.uAparicion.value = 1
+      materialAnillos.uniforms.uRebote.value = saturno.material.uniforms.uRebote.value
       anillos.visible = lejanos > 0.3
     }
 

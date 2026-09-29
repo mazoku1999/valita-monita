@@ -6,6 +6,8 @@ import type { EffectComposer as ComposerDeEfectos } from 'postprocessing'
 import { useEffect, useMemo, useRef } from 'react'
 import { avanzarRitmo, latido, pulsaciones, tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
 import { PasoDibujo } from '@/features/dibujo/utils/PasoDibujo'
+import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
+import { VIAJE } from '../constantes/viajeScroll'
 import { ajuste } from '../store/vistaCamaraStore'
 import { suavizar } from '../utils/aleatorio'
 
@@ -56,6 +58,13 @@ export function EfectosPost() {
     pasoDibujo.bandaVisible = suavizar(1.3, 2.5, distanciaCentro)
     pasoDibujo.latido = latido(clock.getElapsedTime())
     pasoDibujo.pulsaciones = pulsaciones(clock.getElapsedTime())
+    // El iris se cierra sobre la sombra al cruzar el horizonte y se abre sobre el remolino.
+    const progreso = obtenerProgreso()
+    const { irisCierre, irisApertura } = VIAJE
+    pasoDibujo.iris =
+      progreso < irisApertura.desde
+        ? 1 - suavizar(irisCierre.desde, irisCierre.hasta, progreso)
+        : suavizar(irisApertura.desde, irisApertura.hasta, progreso)
     pasoDibujo.ajustes.activo = ajuste('dibujo', 1) > 0.5
     pasoDibujo.ajustes.soloTinta = ajuste('dibujoSoloTinta', 0) > 0.5
     pasoDibujo.ajustes.grosor = ajuste('dibujoGrosor', pasoDibujo.ajustes.grosor)

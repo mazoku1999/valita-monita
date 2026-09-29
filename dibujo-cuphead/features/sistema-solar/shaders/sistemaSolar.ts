@@ -121,17 +121,35 @@ vec3 luzCaricatura(vec3 albedo, vec3 n, vec3 l, vec3 v, float brillo, out float 
 }
 `
 
+/**
+ * Rebote de rubber hose: en cada pulso del compás el cuerpo se aplasta un poco en pantalla (más
+ * ancho y más bajo) alrededor de su centro; la luz se calcula con la esfera sin deformar.
+ */
+const REBOTE_GLSL = /* glsl */ `
+uniform float uRebote;
+
+vec4 conRebote(vec4 vista, vec3 centroVista) {
+  vec3 d = vista.xyz - centroVista;
+  d.x *= 1.0 + 0.03 * uRebote;
+  d.y *= 1.0 - 0.03 * uRebote;
+  return vec4(centroVista + d, vista.w);
+}
+`
+
 export const PLANETA_VERT = /* glsl */ `
 varying vec3 vNormalMundo;
 varying vec3 vPosMundo;
 varying vec3 vLocal;
+
+${REBOTE_GLSL}
 
 void main() {
   vLocal = normalize(position);
   vec4 mundo = modelMatrix * vec4(position, 1.0);
   vPosMundo = mundo.xyz;
   vNormalMundo = normalize(mat3(modelMatrix) * normal);
-  gl_Position = projectionMatrix * viewMatrix * mundo;
+  vec3 centroVista = (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+  gl_Position = projectionMatrix * conRebote(viewMatrix * mundo, centroVista);
 }
 `
 
@@ -424,13 +442,17 @@ varying vec3 vPosMundo;
 varying float vRadio;
 varying vec3 vNormalMundo;
 
+${REBOTE_GLSL}
+
 void main() {
-  // La geometría del anillo se genera en radios del planeta (1 = su ecuador).
+  // La geometría del anillo se genera en radios del planeta (1 = su ecuador); su origen es el
+  // centro de Saturno, así que rebota con él.
   vRadio = length(position.xy);
   vec4 mundo = modelMatrix * vec4(position, 1.0);
   vPosMundo = mundo.xyz;
   vNormalMundo = normalize(mat3(modelMatrix) * vec3(0.0, 0.0, 1.0));
-  gl_Position = projectionMatrix * viewMatrix * mundo;
+  vec3 centroVista = (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+  gl_Position = projectionMatrix * conRebote(viewMatrix * mundo, centroVista);
 }
 `
 

@@ -444,9 +444,13 @@ void main() {
  * - Parpadeo del brillo, grano fino (más en los tonos medios), motas de polvo de un fotograma, algún
  *   pelo que se queda unos fotogramas y rayas verticales que duran un rato y se desplazan.
  * - Viñeta.
+ * - El iris: un círculo que se cierra o se abre, como las transiciones de los dibujos de la época
+ *   (su borde tiembla un poco, dibujado a mano).
  */
 export const PELICULA_FRAG = /* glsl */ `
 uniform sampler2D uImagen;
+// Radio del iris (1 abierto del todo, 0 cerrado).
+uniform float uIris;
 uniform vec2 uResolucion;
 uniform float uFotograma;
 uniform float uAPantalla;
@@ -496,6 +500,17 @@ void main() {
     texture(uImagen, uvCuadro + separacion).r,
     texture(uImagen, uvCuadro).g,
     texture(uImagen, uvCuadro - separacion).b);
+
+  // Iris: fuera del círculo, negro (el tono envejecido lo lleva a tinta vieja y la película sigue
+  // encima: grano, motas y rayas).
+  if (uIris < 0.999) {
+    vec2 qi = (vUv - 0.5) * vec2(uResolucion.x / uResolucion.y, 1.0);
+    float rMaximo = length(vec2(0.5 * uResolucion.x / uResolucion.y, 0.5));
+    float anguloIris = atan(qi.y, qi.x);
+    float radioIris = uIris * rMaximo * 1.03 * (1.0 + 0.012 * sin(anguloIris * 5.0 + f * 0.7));
+    float w = 1.0 / uResolucion.y;
+    c *= 1.0 - smoothstep(radioIris - w, radioIris + w, length(qi));
+  }
 
   // Tono envejecido: un poco de sepia, calidez y un negro de tinta vieja; los colores siguen vivos
   // (el filtro de Cuphead es cálido, no marrón).

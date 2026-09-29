@@ -25,6 +25,12 @@ export const VIAJE = {
   distanciaInterior: 0.35,
   /** Elevación mínima durante la caída (radianes sobre el plano): se pasa por encima del gas, no a través. */
   elevacionMinima: 0.17,
+  /**
+   * Iris de los dibujos animados de los años 30 (ver PELICULA_FRAG): se cierra sobre la sombra al
+   * cruzar el horizonte y se abre sobre el remolino del agujero de gusano.
+   */
+  irisCierre: { desde: enProgreso(430), hasta: enProgreso(446) },
+  irisApertura: { desde: enProgreso(484), hasta: enProgreso(510) },
   /** Fin del paso por el agujero de gusano: la cámara sale por la boca del otro lado. */
   tunelFin: enProgreso(780),
   /** El sistema solar aparece delante mientras se sale por la boca y está entero aquí. */
