@@ -94,9 +94,12 @@ flores como las de un ramo (gerberas, rosas, lirios, clavelinas, bocas de dragó
 - **La vida** (`utils/vida.ts`, `shaders/vida.ts`, `components/VidaDelValle.tsx`): hileras de
   eucaliptos con claros, nubes de la mañana (unas agarradas a las faldas del Tunari, otras en el
   cielo del oeste), mariposas que aletean y a ratos planean, y pétalos que lleva la brisa.
-- **Las rosas**: pétalos en tres vueltas (de fuera adentro y de atrás adelante), cada uno oscuro en
-  su base y claro en el borde enrollado, sépalos verdes y el capullo en espiral; los tallos se mecen
-  con su flor y quedan siempre detrás de ella.
+- **Las flores de cerca**: rosas con pétalos en tres vueltas (de fuera adentro y de atrás adelante),
+  cada uno oscuro en su base y claro en el borde enrollado, sépalos verdes y el capullo en espiral;
+  lirios "stargazer" con tres pétalos de fuera y tres de dentro, borde ondulado, banda fucsia con
+  motitas, garganta verde, estambres con sus anteras y el pistilo; gerberas con dos coronas de
+  pétalos de punta dentada y un aro de florecillas; bocas de dragón de labios lobulados con su
+  mancha amarilla. Los tallos se mecen con su flor y quedan siempre detrás de ella.
 - **El pase en el valle** (`VALLE_EN_ESCENA`): cielo de mañana en vez del nocturno (con el
   cinturón de Venus rosado frente al Sol), sin estrellas, y la tinta de profundidad sólo en las
   siluetas contra el cielo, algo más fina. Las nubes lejanas escriben la profundidad del cielo para
@@ -121,7 +124,8 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.6-viaje-completo`, `dibujo-v0.7-agujero-caricatura`, `dibujo-v0.8-estrellas`,
 `dibujo-v0.9-sistema-solar`, `dibujo-v0.10-remolino`, `dibujo-v0.11-pulido`,
 `dibujo-v0.12-sistema-solar-fisico`, `dibujo-v0.13-entrada-tierra`, `dibujo-v0.14-valle`,
-`dibujo-v0.15-flores`, `dibujo-v0.16-vida-y-destino`, `dibujo-v0.17-nubes-de-verdad`.
+`dibujo-v0.15-flores`, `dibujo-v0.16-vida-y-destino`, `dibujo-v0.17-nubes-de-verdad`,
+`dibujo-v0.18-flores-de-cerca`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

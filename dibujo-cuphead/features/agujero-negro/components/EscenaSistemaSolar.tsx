@@ -225,7 +225,13 @@ export function EscenaSistemaSolar() {
         const e = suavizar(0, 1, tramoPlaneo)
         interpolarDireccion(haciaCamara, cochabamba.current, e, direccionEntrada)
         const kmAMundo = radioTierra / RADIO_TIERRA_KM
-        const logAltura = [Math.log(cerca - radioTierra), ...BAJADA_LOG_KM.map((ln) => ln + Math.log(kmAMundo))]
+        // En pantallas estrechas (un móvil en vertical) la bajada va algo más alta, para que Bolivia
+        // y la nube del corazón quepan a lo ancho; la entrada en la nube, igual.
+        const estrecha = Math.log(Math.max(1, Math.sqrt(16 / 9 / (perspectiva?.aspect ?? 16 / 9))))
+        const logAltura = [
+          Math.log(cerca - radioTierra),
+          ...BAJADA_LOG_KM.map((ln, i) => ln + Math.log(kmAMundo) + (i < BAJADA_LOG_KM.length - 1 ? estrecha : 0)),
+        ]
         const altura = Math.exp(interpolarMonotono(progreso * CARRIL_VH, BAJADA_VH, logAltura, true))
         RECORTE_ENTRADA.cerca = ENTRADA.cerca * Math.max(altura - NUBE_CORAZON.cima * kmAMundo, 0.05 * kmAMundo)
         const giroFinal = suavizar(GIRO_NOROESTE[0], GIRO_NOROESTE[1], progreso * CARRIL_VH)

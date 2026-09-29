@@ -191,17 +191,30 @@ vec4 gerbera(vec2 p) {
   vec4 lienzo = vec4(0.0);
   float lado;
   float largo;
-  // Como la del ramo: pétalos finos rosa pálido, más intensos hacia dentro, un aro de florecillas
-  // rosa fuerte y el centro pequeño, morado oscuro. Líneas del color del pétalo, no negras.
+  // Como la del ramo: dos coronas de pétalos finos rosa pálido, más intensos hacia dentro, cada uno
+  // con su nervio claro y la punta con dos dientecillos; dentro, un aro de florecillas rosa fuerte
+  // con puntitos dorados y el centro pequeño, morado oscuro. Líneas del color del pétalo.
   vec3 palido = vVariante < 0.7 ? vec3(0.99, 0.8, 0.86) : vec3(1.0, 0.72, 0.82);
-  vec3 linea = vec3(0.86, 0.5, 0.66);
-  float d1 = corona(p, 24.0, 0.2, 1.0, 0.13, 0.0, lado, largo);
-  capaConLinea(lienzo, d1, mix(vec3(0.94, 0.56, 0.74), palido, smoothstep(0.1, 0.45, largo)), linea, 1.0);
-  float d2 = corona(p, 24.0, 0.18, 0.6, 0.11, PI / 24.0, lado, largo);
-  capaConLinea(lienzo, d2, mix(vec3(0.92, 0.5, 0.7), palido * 0.97, smoothstep(0.2, 0.8, largo)), linea, 0.8);
+  vec3 linea = vec3(0.84, 0.46, 0.64);
+  float giro = vVariante * 2.0;
+  float d1 = corona(p, 22.0, 0.2, 1.0, 0.14, giro, lado, largo);
+  // Punta con dos dientes: una muesca en medio del extremo.
+  d1 = max(d1, -(length(vec2(lado * 0.14, (largo - 1.0) * 0.8)) - 0.035));
+  vec3 petalo = mix(vec3(0.94, 0.54, 0.73), palido, smoothstep(0.1, 0.45, largo));
+  petalo = mix(petalo, mix(palido, vec3(1.0), 0.45), (1.0 - smoothstep(0.08, 0.22, abs(lado))) * smoothstep(0.3, 0.6, largo) * vDetalle);
+  capaConLinea(lienzo, d1, petalo, linea, 1.0);
+  float d2 = corona(p, 22.0, 0.18, 0.66, 0.12, giro + PI / 22.0, lado, largo);
+  vec3 petalo2 = mix(vec3(0.92, 0.48, 0.7), palido * 0.97, smoothstep(0.2, 0.8, largo));
+  petalo2 = mix(petalo2, mix(palido, vec3(1.0), 0.35), (1.0 - smoothstep(0.08, 0.22, abs(lado))) * smoothstep(0.4, 0.7, largo) * vDetalle);
+  capaConLinea(lienzo, d2, petalo2, linea, 0.8);
+  // Aro de florecillas.
   float r = length(p);
-  vec3 centro = mix(vec3(0.34, 0.12, 0.26), vec3(0.88, 0.44, 0.66), smoothstep(0.1, 0.15, r));
-  capaConLinea(lienzo, r - 0.19, centro, vec3(0.6, 0.24, 0.42), 0.9);
+  float a = atan(p.y, p.x);
+  float florecilla = 1.0 - smoothstep(0.35, 0.5, abs(fract(a * 18.0 / 6.2831853 + r * 3.0) - 0.5) * 2.0);
+  vec3 aro = mix(vec3(0.9, 0.36, 0.6), vec3(1.0, 0.8, 0.5), florecilla * step(0.24, r) * vDetalle);
+  capaConLinea(lienzo, r - 0.3, aro, vec3(0.6, 0.22, 0.42), 0.8);
+  vec3 centro = mix(vec3(0.3, 0.1, 0.22), vec3(0.5, 0.2, 0.36), smoothstep(0.05, 0.17, r));
+  capaConLinea(lienzo, r - 0.18, centro, vec3(0.24, 0.08, 0.18), 0.9);
   return lienzo;
 }
 
@@ -209,24 +222,41 @@ vec4 lirio(vec2 p) {
   vec4 lienzo = vec4(0.0);
   float lado;
   float largo;
+  // Lirio "stargazer" del ramo: tres pétalos de fuera, anchos, y tres de dentro entre ellos, con el
+  // borde ondulado y blanco rosado, una banda fucsia por el centro con motitas oscuras, la garganta
+  // verde amarilla, un nervio claro; seis estambres con sus anteras y el pistilo.
   float giro = vVariante * PI;
-  float d = corona(p, 6.0, 0.02, 1.0, 0.34, giro, lado, largo);
-  vec3 petalo = mix(vec3(0.99, 0.72, 0.84), vec3(1.0, 0.95, 0.97), smoothstep(0.55, 1.0, abs(lado)));
-  petalo = mix(petalo, vec3(0.9, 0.33, 0.58), (1.0 - smoothstep(0.12, 0.3, abs(lado))) * (1.0 - smoothstep(0.55, 0.95, largo)));
-  // Motitas oscuras cerca del centro.
-  vec2 celda = floor(p * 11.0);
-  float mota = step(0.72, hash21(celda)) * (1.0 - smoothstep(0.1, 0.22, length(fract(p * 11.0) - 0.5))) * (1.0 - smoothstep(0.25, 0.55, length(p)));
-  petalo = mix(petalo, vec3(0.55, 0.12, 0.3), mota * vDetalle);
-  capa(lienzo, d, petalo, 1.1);
-  // Estambres: seis hilos entre los pétalos con la punta naranja.
+  vec3 borde = vec3(1.0, 0.93, 0.96);
+  vec3 banda = vec3(0.9, 0.3, 0.58);
+  vec3 linea = vec3(0.72, 0.3, 0.5);
+  for (int vuelta = 0; vuelta < 2; vuelta++) {
+    float fv = float(vuelta);
+    float d = corona(p, 3.0, 0.02, 1.0 - 0.06 * fv, 0.5 - 0.1 * fv, giro + fv * PI / 3.0, lado, largo);
+    // Borde ondulado hacia la punta.
+    d += 0.018 * sin(largo * 38.0 + fv) * smoothstep(0.35, 0.7, largo);
+    vec3 petalo = mix(banda, borde, smoothstep(0.22, 0.62, abs(lado) + 0.35 * smoothstep(0.55, 0.95, largo)));
+    petalo = mix(petalo, vec3(0.82, 0.9, 0.52), 1.0 - smoothstep(0.1, 0.28, largo));
+    // Nervio claro y motitas.
+    petalo = mix(petalo, mix(banda, borde, 0.7), (1.0 - smoothstep(0.03, 0.08, abs(lado))) * step(0.25, largo) * vDetalle);
+    vec2 celda = floor(p * 13.0);
+    float mota = step(0.7, hash21(celda + fv * 7.0)) * (1.0 - smoothstep(0.08, 0.2, length(fract(p * 13.0) - 0.5))) * step(0.2, largo) * (1.0 - smoothstep(0.45, 0.7, largo)) * (1.0 - smoothstep(0.2, 0.55, abs(lado)));
+    petalo = mix(petalo, vec3(0.5, 0.1, 0.28), mota * vDetalle);
+    capaConLinea(lienzo, d, petalo, linea, 1.0);
+  }
+  // Estambres: hilos verdes claros entre los pétalos, con la antera oval de color óxido.
   float r = length(p);
   float angulo = atan(p.y, p.x) - giro - PI / 6.0;
   float sector = PI / 3.0;
-  float delta = (angulo - floor(angulo / sector + 0.5) * sector) * r;
-  float hilo = (1.0 - smoothstep(0.012, 0.024, abs(delta))) * step(r, 0.52);
-  vec3 estambre = mix(vec3(0.62, 0.8, 0.45), vec3(0.85, 0.42, 0.15), step(0.46, r));
-  float punta = (1.0 - smoothstep(0.035, 0.055, abs(delta))) * step(0.44, r) * step(r, 0.56);
-  lienzo.rgb = mix(lienzo.rgb, estambre, max(hilo, punta) * vDetalle);
+  float k = floor(angulo / sector + 0.5);
+  float delta = (angulo - k * sector) * r;
+  float hilo = (1.0 - smoothstep(0.01, 0.022, abs(delta))) * step(r, 0.5) * step(0.06, r);
+  lienzo.rgb = mix(lienzo.rgb, vec3(0.74, 0.86, 0.5), hilo * vDetalle);
+  vec2 enAntera = vec2(delta, r - 0.54);
+  float antera = length(enAntera / vec2(0.055, 0.03)) - 1.0;
+  lienzo.rgb = mix(lienzo.rgb, vec3(0.7, 0.3, 0.12), (1.0 - smoothstep(-0.2, 0.1, antera)) * vDetalle);
+  // El pistilo, más largo, con su punta de tres lóbulos.
+  float pistilo = (1.0 - smoothstep(0.012, 0.026, abs((atan(p.y, p.x) - giro) * r))) * step(r, 0.62);
+  lienzo.rgb = mix(lienzo.rgb, vec3(0.62, 0.8, 0.44), pistilo * vDetalle);
   return lienzo;
 }
 
@@ -342,12 +372,16 @@ vec4 bocaDeDragon(vec2 p) {
       capaConLinea(lienzo, length(q * vec2(1.3, 1.0)) - 0.28, vec3(0.5, 0.7, 0.36), vec3(0.34, 0.5, 0.24), 0.8);
       continue;
     }
-    float labioArriba = length((q - vec2(0.0, 0.08)) * vec2(1.0, 1.3)) - 0.44;
-    float labioAbajo = length((q - vec2(0.0, -0.16)) * vec2(1.2, 1.6)) - 0.3;
-    capaConLinea(lienzo, labioArriba, color, linea, 0.9);
-    capaConLinea(lienzo, labioAbajo, mix(color, vec3(1.0, 0.95, 0.9), 0.35), linea, 0.8);
-    float garganta = length((q - vec2(0.0, -0.05)) * vec2(1.6, 2.4)) - 0.12;
-    lienzo.rgb = mix(lienzo.rgb, vec3(1.0, 0.93, 0.7), (1.0 - smoothstep(-0.02, 0.02, garganta)) * vDetalle);
+    // El labio de arriba, de dos lóbulos; el de abajo, de tres, con la mancha amarilla de la
+    // garganta (por donde entran las abejas).
+    vec2 qa = q - vec2(0.0, 0.1);
+    float labioArriba = min(length((qa - vec2(-0.17, 0.0)) * vec2(1.0, 1.2)) - 0.28, length((qa - vec2(0.17, 0.0)) * vec2(1.0, 1.2)) - 0.28);
+    vec2 qb = q - vec2(0.0, -0.17);
+    float labioAbajo = min(min(length(qb - vec2(-0.2, 0.0)) - 0.16, length(qb - vec2(0.2, 0.0)) - 0.16), length(qb - vec2(0.0, -0.05)) - 0.18);
+    capaConLinea(lienzo, labioArriba, mix(color, color * 1.08, smoothstep(-0.2, 0.2, qa.y)), linea, 0.9);
+    capaConLinea(lienzo, labioAbajo, mix(color, vec3(1.0, 0.95, 0.92), 0.3), linea, 0.8);
+    float garganta = length((q - vec2(0.0, -0.1)) * vec2(1.8, 2.6)) - 0.12;
+    lienzo.rgb = mix(lienzo.rgb, vec3(1.0, 0.86, 0.4), (1.0 - smoothstep(-0.02, 0.02, garganta)) * vDetalle);
   }
   return lienzo;
 }
