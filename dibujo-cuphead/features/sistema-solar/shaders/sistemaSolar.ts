@@ -521,8 +521,8 @@ float pintarDestino(vec2 lonLat, vec3 p, float tierra, inout vec3 color) {
   float pico = floor(largo / PERIODO + 0.5);
   vec2 aCumbre = vec2((fract(largo / PERIODO + 0.5) - 0.5) * PERIODO, cruzado - 0.25 * semiancho);
   float anguloCumbre = atan(aCumbre.y, aCumbre.x);
-  float radioNieve = 17.0 * ancho * (1.0 + 0.32 * cos(5.0 * anguloCumbre + pico * 2.1) + 0.12 * cos(11.0 * anguloCumbre + pico));
-  float nieve = (1.0 - zona(length(aCumbre) - radioNieve, 0.0)) * step(0.45, fract(sin(pico * 12.9898) * 43758.5453));
+  float radioNieve = 11.0 * ancho * (1.0 + 0.3 * cos(5.0 * anguloCumbre + pico * 2.1) + 0.12 * cos(11.0 * anguloCumbre + pico));
+  float nieve = (1.0 - zona(length(aCumbre) - radioNieve, 0.0)) * step(0.55, fract(sin(pico * 12.9898) * 43758.5453));
   vec3 colorNieve = mix(vec3(0.8, 0.84, 0.96), vec3(0.99, 0.98, 1.0), zona(aCumbre.y + 2.0, 0.0));
   suelo = mix(suelo, colorNieve, nieve * monte);
   suelo = mix(suelo, vec3(0.45, 0.33, 0.27), trazo(abs(cruzado) + 2.5 * ondas - semiancho, 1.0) * 0.5);
