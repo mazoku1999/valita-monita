@@ -103,8 +103,9 @@ export function LenteGravitacionalQuad() {
 
   // Prioridad 0: se ejecuta antes de que el compositor de efectos (prioridad 1) dibuje la escena.
   useFrame(({ camera, clock }) => {
-    // Dibujo animado: entre dibujo y dibujo la pantalla no cambia, así que el gas no se traza.
-    if (!tocaDibujar()) return
+    // Dibujo animado: entre dibujo y dibujo la pantalla no cambia, así que el gas no se traza. Dentro
+    // del horizonte (el agujero de gusano, el sistema solar, el valle) el pase no lo usa: tampoco.
+    if (!tocaDibujar() || camera.position.length() < 0.9) return
     const { uniformes, buffer, escenaGas, camaraGas } = recursos
     const dpr = gl.getPixelRatio()
     const ancho = Math.max(2, Math.round(size.width * dpr))

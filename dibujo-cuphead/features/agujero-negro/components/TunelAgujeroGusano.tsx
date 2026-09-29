@@ -207,7 +207,8 @@ export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
     const cambioCielo = suavizar(VIAJE.cieloSistemaInicio, VIAJE.cieloSistemaPleno, progreso)
     u.uOpacidad.value = opacidad * (1 - cambioCielo)
     recursos.uniformsCielo.uOpacidad.value = opacidad * cambioCielo * GUSANO.luzCieloSistema
-    recursos.cielo.visible = opacidad * cambioCielo > 0.002
+    // En el valle de Cochabamba (tras las nubes) el cielo es de día: el del sistema solar se apaga.
+    recursos.cielo.visible = opacidad * cambioCielo > 0.002 && progreso < VIAJE.nubesPleno
     const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 45
     u.uAnguloPixel.value = THREE.MathUtils.degToRad(fov) / Math.max(size.height, 1)
     recursos.gusano.visible = u.uOpacidad.value > 0.002

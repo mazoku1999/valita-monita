@@ -1,16 +1,19 @@
 /**
  * Reparto del scroll del viaje completo (progreso 0..1 sobre un carril de `CARRIL_VH`):
  *
- *   0 ── acercamiento ── caída al horizonte ── agujero de gusano ── sistema solar ── la Tierra ── 1
+ *   0 ── acercamiento ── caída al horizonte ── agujero de gusano ── sistema solar ── la Tierra ──
+ *     ── entrada hasta Cochabamba ── nubes ── el valle ── aterrizaje entre las flores ── 1
  *
  * Los tramos se definen en vh para que alargar uno no cambie el ritmo de los demás; los
  * componentes leen las fracciones de progreso derivadas. El usuario pidió que la entrada fuera
  * un viaje "estilo Interstellar en el agujero de gusano" (con 600vh de túnel le pareció "muy
  * largo": son 300vh), que al salir el viaje nos llevara a nuestro sistema solar, visto desde
  * lejos, y que terminara acercándose a la Tierra. El anillo de papel se quitó del final por
- * ahora (`EscenaAnilloFinal` sigue en el repositorio y recibe sus progresos por props).
+ * ahora (`EscenaAnilloFinal` sigue en el repositorio y recibe sus progresos por props). Después
+ * pidió entrar en la Tierra, ver las nubes y llegar a Cochabamba (Bolivia), a un campo de girasoles
+ * y flores como las de un ramo: es un regalo para su novia.
  */
-export const CARRIL_VH = 1300
+export const CARRIL_VH = 1840
 
 const enProgreso = (vh: number): number => vh / CARRIL_VH
 
@@ -41,7 +44,19 @@ export const VIAJE = {
   cieloSistemaPleno: enProgreso(835),
   /** Fin del acercamiento al sistema solar: se ve entero, del Sol a la órbita de Neptuno. */
   sistemaEntero: enProgreso(1000),
-  /** Viaje final hacia la Tierra: la cámara la busca, se acerca y el tiempo se frena. */
+  /** Viaje hacia la Tierra: la cámara avanza en línea recta hacia ella y el tiempo se frena. */
   tierraInicio: enProgreso(1000),
   tierraFin: enProgreso(1240),
+  /**
+   * Entrada: la Tierra gira hasta que Cochabamba amanece y la cámara planea sobre ella hasta
+   * quedar encima de Bolivia, bajando.
+   */
+  entradaFin: enProgreso(1420),
+  /** Paso por las nubes: cubren la pantalla en `nubesPleno`, cuando la Tierra da paso al valle. */
+  nubesInicio: enProgreso(1385),
+  nubesPleno: enProgreso(1445),
+  nubesFin: enProgreso(1510),
+  /** El valle de Cochabamba: la bajada hasta el corazón de flores y el aterrizaje entre ellas. */
+  valleInicio: enProgreso(1445),
+  aterrizajeFin: enProgreso(1780),
 } as const

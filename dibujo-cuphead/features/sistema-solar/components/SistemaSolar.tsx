@@ -64,6 +64,13 @@ export interface SistemaSolarProps {
   luna?: { readonly current: number }
   /** Recibe la malla de la Tierra (su `position` está en el marco del sistema) para seguirla. */
   tierra?: { current: THREE.Object3D | null }
+  /**
+   * Cuánto se ajusta el giro de la Tierra (0..1) para que en Cochabamba amanezca: con 1 queda
+   * fija a esa hora (el tiempo, al final del viaje, está casi detenido).
+   */
+  alineacionTierra?: { readonly current: number }
+  /** Recibe la vertical de Cochabamba (vector unitario en el marco del sistema). */
+  cochabamba?: { current: THREE.Vector3 }
 }
 
 /** Estado de un fotograma del sistema. */
@@ -71,6 +78,9 @@ interface EstadoFotograma {
   anios: number
   segundos: number
   segundosGiro: number
+  /** Segundos de pantalla desde el fotograma anterior. */
+  paso: number
+  alineacionTierra: number
   aparicion: number
   /** Alto del lienzo en píxeles de dispositivo (los puntos de las órbitas crecen con él). */
   altoPixeles: number
@@ -95,6 +105,15 @@ const SOL = { radio: 3.0, medioLado: 1.75, topePx: 34 } as const
  * se comportan como lo que son, astros lejanos; con el sistema entero a la vista ninguno llega a él.
  */
 const TOPE_PLANETAS_PX = 22
+
+/**
+ * Cochabamba (Bolivia): latitud y longitud (°) y la hora solar a la que llega la cámara: el
+ * amanecer dorado, con el Sol a unos 18° sobre el horizonte, por el este.
+ */
+const COCHABAMBA = { latitud: -17.39, longitud: -66.16, hora: 7.25 } as const
+
+/** Ángulo llevado a (−π, π]. */
+const envolver = (angulo: number): number => angulo - 2 * Math.PI * Math.round(angulo / (2 * Math.PI))
 
 /** La Luna: radio real relativo a la Tierra y órbita comprimida (a escala serían 60 radios). */
 const LUNA = {
@@ -314,6 +333,20 @@ function crearSistema(fecha: Date) {
   const direccionLuna = new THREE.Vector3()
   const posicionPlaneta = new THREE.Vector3()
 
+  // Cochabamba en el marco propio de la Tierra (el del mapa: longitud atan(−z, x), latitud asin(y)).
+  const latitudCochabamba = THREE.MathUtils.degToRad(COCHABAMBA.latitud)
+  const longitudCochabamba = THREE.MathUtils.degToRad(COCHABAMBA.longitud)
+  const puntoCochabamba = new THREE.Vector3(
+    Math.cos(latitudCochabamba) * Math.cos(longitudCochabamba),
+    Math.sin(latitudCochabamba),
+    -Math.cos(latitudCochabamba) * Math.sin(longitudCochabamba),
+  )
+  const verticalCochabamba = new THREE.Vector3()
+  const inclinacionInversa = new THREE.Quaternion()
+  const solDesdeTierra = new THREE.Vector3()
+  /** Lo que se suma al giro propio de la Tierra para que en Cochabamba amanezca al llegar. */
+  let correccionTierra = 0
+
   /**
    * Coloca todo en `anios` de simulación desde la fecha de partida. Al aparecer, todo crece desde
    * nada (en caricatura no se funde desde el negro: salía una mancha oscura); después, cada cosa
@@ -323,6 +356,8 @@ function crearSistema(fecha: Date) {
     anios,
     segundos,
     segundosGiro,
+    paso,
+    alineacionTierra,
     aparicion,
     altoPixeles,
     camara,
@@ -358,8 +393,23 @@ function crearSistema(fecha: Date) {
       }
       planeta.malla.scale.setScalar(radio)
       const periodo = ROTACION[planeta.id].periodo
-      giro.setFromAxisAngle(arriba, ((2 * Math.PI * segundosGiro) / periodo) % (2 * Math.PI))
+      let anguloGiro = ((2 * Math.PI * segundosGiro) / periodo) % (2 * Math.PI)
+      if (planeta.id === 'tierra') {
+        // Hora solar en Cochabamba: el Sol, visto desde la Tierra en su marco sin girar, tiene su
+        // punto subsolar en la longitud `longitudSol`; girar la Tierra un ángulo θ lo lleva a
+        // longitudSol − θ, y amanece (hora h) cuando está (12 − h)·15° al este de Cochabamba.
+        inclinacionInversa.copy(planeta.inclinacion).invert()
+        solDesdeTierra.copy(planeta.malla.position).multiplyScalar(-1).normalize().applyQuaternion(inclinacionInversa)
+        const longitudSol = Math.atan2(-solDesdeTierra.z, solDesdeTierra.x)
+        const objetivo = longitudSol - longitudCochabamba + ((COCHABAMBA.hora - 12) / 24) * 2 * Math.PI
+        // Se sigue sin saltos: el giro corregido va hacia el objetivo por el camino corto.
+        const error = envolver(objetivo - (anguloGiro + correccionTierra))
+        correccionTierra += error * (1 - Math.exp(-paso * 2.5)) * alineacionTierra
+        anguloGiro += correccionTierra
+      }
+      giro.setFromAxisAngle(arriba, anguloGiro)
       planeta.malla.quaternion.copy(planeta.inclinacion).multiply(giro)
+      if (planeta.id === 'tierra') verticalCochabamba.copy(puntoCochabamba).applyQuaternion(planeta.malla.quaternion)
       const uniformes = planeta.material.uniforms
       uniformes.uSol.value.copy(posicionSol)
       uniformes.uAparicion.value = 1
@@ -403,6 +453,7 @@ function crearSistema(fecha: Date) {
   return {
     raiz,
     tierra: tierra?.malla ?? null,
+    verticalCochabamba,
     actualizar,
     cargarMapasTierra,
     liberar: () => {
@@ -421,6 +472,8 @@ export function SistemaSolar({
   guias,
   luna,
   tierra,
+  alineacionTierra,
+  cochabamba,
 }: SistemaSolarProps) {
   const sistema = useMemo(() => crearSistema(fecha ?? new Date()), [fecha])
   const relojes = useRef({ orbitas: 0, giros: 0, segundos: 0 })
@@ -436,7 +489,8 @@ export function SistemaSolar({
 
   useEffect(() => {
     if (tierra) tierra.current = sistema.tierra
-  }, [sistema, tierra])
+    if (cochabamba) cochabamba.current = sistema.verticalCochabamba
+  }, [sistema, tierra, cochabamba])
 
   useEffect(() => () => void (SOL_EN_ESCENA.visible = 0), [])
 
@@ -450,8 +504,8 @@ export function SistemaSolar({
     // Los relojes sólo corren mientras se ve: al aparecer, los planetas están donde están hoy. Con
     // el ritmo bajo (al acercarse a la Tierra) las órbitas casi se detienen y los giros van a un
     // tercio: la Tierra sigue rotando a la vista.
+    const paso = Math.min(delta, 0.25)
     if (!quieto) {
-      const paso = Math.min(delta, 0.25)
       const factor = ritmo?.current ?? 1
       relojes.current.orbitas += paso * factor
       relojes.current.giros += paso * Math.max(factor, 0.35)
@@ -461,6 +515,8 @@ export function SistemaSolar({
       anios: relojes.current.orbitas / segundosPorAnio,
       segundos: relojes.current.segundos,
       segundosGiro: relojes.current.giros,
+      paso,
+      alineacionTierra: alineacionTierra?.current ?? 0,
       aparicion: valor,
       altoPixeles: gl.domElement.height,
       camara: camera.getWorldPosition(posicionCamara.current),
