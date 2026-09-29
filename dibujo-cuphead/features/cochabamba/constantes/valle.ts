@@ -8,7 +8,8 @@
  * centro de un corazón de flores rosadas en medio de un campo de girasoles de Tiquipaya ("la ciudad
  * de las flores"), al pie del Tunari. Geografía de dibujo pero a escala: la cordillera del Tunari al
  * norte (el pie a ~2 km, la cresta a ~9 km y unos 2.300 m sobre el valle), serranías bajas al sur,
- * la ciudad al sureste con la laguna Alalay y, en el cerro de San Pedro, el Cristo de la Concordia.
+ * la ciudad al sureste con la laguna Alalay y el cerro de San Pedro (el del Cristo de la Concordia,
+ * que queda a la espalda de la cámara y no se dibuja).
  */
 
 const radianes = (grados: number): number => (grados * Math.PI) / 180

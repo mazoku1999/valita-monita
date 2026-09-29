@@ -28,6 +28,14 @@ float corazonEn(vec2 xz, vec4 corazon) {
 }
 `
 
+/** La bruma de la mañana en el valle: azulada lejos del Sol, dorada hacia él. */
+export const BRUMA_GLSL = /* glsl */ `
+vec3 colorBruma(vec3 haciaPunto, vec3 sol) {
+  float haciaSol = 0.5 + 0.5 * dot(normalize(haciaPunto.xz + 1e-5), normalize(sol.xz + 1e-5));
+  return mix(vec3(0.76, 0.8, 0.94), vec3(0.98, 0.88, 0.8), pow(haciaSol, 3.0));
+}
+`
+
 const RUIDO_2D = /* glsl */ `
 float hash21(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -113,6 +121,7 @@ varying vec3 vNormal;
 ${SALIDA_CARICATURA}
 ${RUIDO_2D}
 ${CORAZON_GLSL}
+${BRUMA_GLSL}
 
 vec3 colorParcela(float id) {
   if (id < 0.24) return vec3(0.55, 0.72, 0.33);
@@ -188,8 +197,10 @@ void main() {
   vec3 monte = mix(vec3(0.5, 0.66, 0.35), vec3(0.64, 0.6, 0.37), smoothstep(500.0, 1100.0, h));
   monte = mix(monte, vec3(0.6, 0.49, 0.52), smoothstep(1250.0, 1700.0, h + 250.0 * (fbm2(xz / 1500.0) - 0.5)));
   monte = mix(monte, vec3(0.68, 0.58, 0.63), smoothstep(1850.0, 2150.0, h));
-  float bosque = zona(fbm2(xz / 700.0 + 3.0), 0.62) * (1.0 - smoothstep(600.0, 1100.0, h));
-  monte = mix(monte, vec3(0.3, 0.47, 0.3), bosque * 0.85);
+  // Los bosquecillos: manchas de borde suave, de aerógrafo, algo más oscuras que la ladera (duras y
+  // casi negras parecían de camuflaje).
+  float bosque = smoothstep(0.58, 0.7, fbm2(xz / 700.0 + 3.0)) * (1.0 - smoothstep(600.0, 1100.0, h));
+  monte = mix(monte, vec3(0.38, 0.54, 0.36), bosque * 0.7);
   float nieve = zona(h + 260.0 * (fbm2(xz / 900.0 + 9.0) - 0.5) + 180.0 * n.y, 2250.0);
   monte = mix(monte, vec3(0.97, 0.96, 1.0), nieve);
   color = mix(color, monte, ladera);
@@ -224,19 +235,19 @@ void main() {
     color = mix(color, corazon, 1.0 - zona(dCorazon, 0.0));
   }
 
-  // Luz de la mañana en tres tonos, sombra lila y el alba rosada en las cumbres.
+  // Luz de la mañana en tres tonos, sombra lila y el alba rosada en las cumbres. En los montes, el
+  // paso entre tonos es de aerógrafo: con el borde a un píxel seguía los triángulos de la malla.
   float ndl = dot(n, uSol);
-  float luz = mix(0.74, 0.92, zona(ndl, 0.1));
-  luz = mix(luz, 1.07, zona(ndl, 0.42));
-  vec3 tinte = mix(vec3(0.82, 0.8, 0.98), vec3(1.0), zona(ndl, 0.1));
+  float blando = 0.07 * smoothstep(600.0, 3000.0, dCamara);
+  float enLuz = smoothstep(0.1 - blando, 0.1 + blando + fwidth(ndl) + 1e-4, ndl);
+  float luz = mix(0.74, 0.92, enLuz);
+  luz = mix(luz, 1.07, smoothstep(0.42 - blando, 0.42 + blando + fwidth(ndl) + 1e-4, ndl));
+  vec3 tinte = mix(vec3(0.82, 0.8, 0.98), vec3(1.0), enLuz);
   color *= luz * tinte;
-  color = mix(color, color * vec3(1.1, 0.9, 0.88), smoothstep(1200.0, 2300.0, h) * zona(ndl, 0.1) * 0.8);
+  color = mix(color, color * vec3(1.1, 0.9, 0.88), smoothstep(1200.0, 2300.0, h) * enLuz * 0.8);
 
-  // Bruma: azulada lejos del Sol, dorada hacia él; en el horizonte, el color del cielo.
-  vec3 haciaPunto = normalize(p - uCamara);
-  float haciaSol = 0.5 + 0.5 * dot(normalize(haciaPunto.xz + 1e-5), normalize(uSol.xz + 1e-5));
-  vec3 bruma = mix(vec3(0.76, 0.8, 0.94), vec3(0.98, 0.88, 0.8), pow(haciaSol, 3.0));
-  color = mix(color, bruma, 0.9 * (1.0 - exp(-dCamara / 17000.0)));
+  // Bruma; en el horizonte, el color del cielo.
+  color = mix(color, colorBruma(p - uCamara, uSol), 0.9 * (1.0 - exp(-dCamara / 17000.0)));
 
   gl_FragColor = salidaCaricatura(color);
 }
@@ -247,7 +258,10 @@ void main() {
  * de círculos con su tinta, crema con el lado en sombra lila y un borde rosado de mañana) que se
  * acercan a la cámara como al bajar a través de ellas. Las lejanas son pocas y pequeñas; las del
  * medio tapan la pantalla entera (es cuando la Tierra da paso al valle); las últimas se abren y
- * dejan ver el valle. Escriben su profundidad (una por capa) para que el pase entinte sus bordes.
+ * dejan ver el valle. En el centro dejan un claro (`uHueco`, en altos de pantalla): primero rodean
+ * el corazón del mapa mientras la cámara baja hacia él y se cierran sobre él; al abrirse, el claro
+ * crece desde el centro, donde está el corazón de flores. Escriben su profundidad (una por capa)
+ * para que el pase entinte sus bordes.
  */
 export const NUBES_VERT = /* glsl */ `
 out vec2 vUv;
@@ -263,6 +277,7 @@ uniform float uAvance;
 uniform float uAspecto;
 uniform float uTiempo;
 uniform vec2 uCercaLejos;
+uniform float uHueco;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -274,9 +289,10 @@ const float COBERTURA[7] = float[](0.3, 0.6, 1.0, 0.85, 0.55, 0.35, 0.2);
 ${RUIDO_2D}
 
 // Nubes de dibujo por celdas: cada una, un racimo de dos bolas de borde festoneado (como las nubes
-// de los dibujos animados). Devuelve la distancia (en celdas) al borde, negativa dentro, y la
-// posición relativa a la bola más cercana (para la luz).
-float nube(vec2 p, float cobertura, float semilla, out vec2 relativa) {
+// de los dibujos animados). Las celdas cuyo centro cae en el claro del centro de la pantalla no
+// llevan nube (p = pantalla · escala + desplazamiento). Devuelve la distancia (en celdas) al borde,
+// negativa dentro, y la posición relativa a la bola más cercana (para la luz).
+float nube(vec2 p, float cobertura, float semilla, float escala, vec2 desplazamiento, out vec2 relativa) {
   vec2 i = floor(p);
   vec2 f = fract(p);
   float mejor = 1e3;
@@ -285,7 +301,9 @@ float nube(vec2 p, float cobertura, float semilla, out vec2 relativa) {
     for (int x = -1; x <= 1; x++) {
       vec2 c = vec2(float(x), float(y));
       vec2 celda = i + c + semilla * 17.0;
-      if (hash21(celda + 3.7) > cobertura) continue;
+      float enPantalla = length((i + c + 0.5 - desplazamiento) / escala);
+      float local = cobertura * smoothstep(0.75 * uHueco, 1.15 * uHueco + 1e-3, enPantalla);
+      if (hash21(celda + 3.7) > local) continue;
       for (int b = 0; b < 2; b++) {
         vec2 azar = hash22(celda + float(b) * 4.3);
         vec2 centro = c + 0.25 + 0.5 * azar + (b == 1 ? vec2(0.32, -0.12) * (azar.x - 0.3) : vec2(0.0));
@@ -320,11 +338,16 @@ void main() {
     // Las capas se van llenando al acercarse (de lejos, unas nubecillas sueltas).
     float cobertura = COBERTURA[k] * smoothstep(2.1, 0.55, dz);
     if (cobertura < 0.02) continue;
-    vec2 p = q * 3.2 * dz + vec2(float(k) * 7.3, float(k) * 3.1) + vec2(uTiempo * 0.012, 0.0);
-    vec2 relativa;
-    float d = cobertura > 0.97 ? -1.0 : nube(p, cobertura, float(k), relativa);
-    if (cobertura > 0.97) relativa = vec2(0.0, 0.4);
-    float w = max(fwidth(d), 1e-4);
+    float escala = 3.2 * dz;
+    vec2 desplazamiento = vec2(float(k) * 7.3, float(k) * 3.1) + vec2(uTiempo * 0.012, 0.0);
+    vec2 p = q * escala + desplazamiento;
+    vec2 relativa = vec2(0.0, 0.4);
+    // La capa llena tapa la pantalla entera (salvo que aún quede claro en el centro).
+    float d = cobertura > 0.97 && uHueco < 0.01 ? -1.0 : nube(p, min(cobertura, 0.985), float(k), escala, desplazamiento, relativa);
+    // El ancho de un píxel, de la coordenada (continua): la distancia salta en los bordes de celda
+    // (una bola de dos celdas más allá no entra en la vecindad; en el claro, la vecindad está vacía)
+    // y su fwidth pintaba rayas rectas de tinta.
+    float w = max(fwidth(p.x), 1e-4);
     if (d > w) continue;
     float luz = dot(relativa, normalize(vec2(-0.6, 0.8)));
     vec3 color = mix(vec3(0.86, 0.82, 0.94), vec3(1.0, 0.97, 0.93), smoothstep(-0.25, 0.35, luz));

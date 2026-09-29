@@ -56,7 +56,7 @@ export const alturaValle = (x: number, z: number): number => {
   // Cierre del valle al este y al oeste.
   const aLosLados = Math.abs(x - 2500) - 21000
   h = Math.max(h, suave(0, 7000, aLosLados) * (720 + 320 * (fbm(x / 2500 + 3, z / 2500) - 0.5)))
-  // El cerro de San Pedro, con el Cristo de la Concordia.
+  // El cerro de San Pedro (el del Cristo de la Concordia).
   const dx = x - CERRO_SAN_PEDRO.centro[0]
   const dz = z - CERRO_SAN_PEDRO.centro[1]
   h += CERRO_SAN_PEDRO.altura * Math.exp(-(dx * dx + dz * dz) / (2 * CERRO_SAN_PEDRO.radio * CERRO_SAN_PEDRO.radio))

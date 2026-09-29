@@ -7,6 +7,11 @@ import { VIAJE } from '@/features/agujero-negro/constantes/viajeScroll'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { NUBES_FRAG, NUBES_VERT } from '../shaders/valle'
 
+const suavizar = (borde0: number, borde1: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - borde0) / (borde1 - borde0)))
+  return t * t * (3 - 2 * t)
+}
+
 /**
  * El paso por las nubes al entrar en la Tierra (ver `NUBES_FRAG`): una capa de pantalla completa
  * que se dibuja encima de todo mientras la cámara baja hacia Cochabamba. Tapa la pantalla entera
@@ -24,6 +29,7 @@ export function NubesDeEntrada() {
         uAspecto: { value: 1 },
         uTiempo: { value: 0 },
         uCercaLejos: { value: new THREE.Vector2(0.1, 1400) },
+        uHueco: { value: 0 },
       },
       // Encima de todo y sustituyendo el color y la marca de caricatura; su profundidad (por capa)
       // es la que ve el pase para entintar los bordes.
@@ -59,6 +65,9 @@ export function NubesDeEntrada() {
     if (!malla.visible) return
     const u = (malla.material as THREE.ShaderMaterial).uniforms
     u.uAvance.value = avance
+    // El claro del centro: amplio al llegar las nubes, se cierra justo antes de taparlo todo y se
+    // vuelve a abrir desde el centro al salir.
+    u.uHueco.value = 0.6 * (1 - suavizar(0.18, 0.42, avance)) + 0.75 * suavizar(0.52, 0.75, avance)
     u.uAspecto.value = size.width / Math.max(size.height, 1)
     u.uTiempo.value = clock.getElapsedTime()
     if (camera instanceof THREE.PerspectiveCamera) (u.uCercaLejos.value as THREE.Vector2).set(camera.near, camera.far)

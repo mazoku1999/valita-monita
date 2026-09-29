@@ -11,3 +11,10 @@ export const VALLE_EN_ESCENA = {
   rotacion: new THREE.Matrix3(),
   sol: new THREE.Vector3(0, 1, 0),
 }
+
+/**
+ * Plano de recorte cercano que pide la entrada en la Tierra (lo escribe `EscenaSistemaSolar`): al
+ * final la cámara baja a unos cientos de km del mapa, más cerca que el plano del viaje por el
+ * espacio. `EscenaCochabamba` lo aplica mientras no se ve el valle.
+ */
+export const RECORTE_ENTRADA = { cerca: Number.POSITIVE_INFINITY }

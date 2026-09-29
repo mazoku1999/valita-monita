@@ -375,7 +375,9 @@ export class PasoDibujo extends Pass {
     ul.uIdGas.value = gas ? gas.textures[1] : null
     ul.uGasVisible.value = gasVisible
     ul.uSoloCielo.value = VALLE_EN_ESCENA.dia
-    ul.uGrosor.value = this.ajustes.grosor
+    // En el valle, las siluetas contra el cielo van algo más finas (con tantos árboles y nubes, el
+    // trazo del espacio pesaba demasiado).
+    ul.uGrosor.value = this.ajustes.grosor * (1 - 0.28 * VALLE_EN_ESCENA.dia)
     ;(ul.uHervor.value as THREE.Vector3).set(hervorX, hervorY, HERVOR.amplitud)
     this.dibujar(renderer, this.matContorno, this.contornos)
 

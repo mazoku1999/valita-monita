@@ -355,6 +355,7 @@ uniform float uPixelesPorRadian;
 
 varying vec2 vLocal;
 varying float vTipo;
+varying float vAnchoPx;
 
 ${BRISA_GLSL}
 
@@ -379,6 +380,7 @@ void main() {
   vec3 punto = base + ejeX * position.x * grosor * mix(1.0, 0.7, t) + vec3(empuje.x, altura * t, empuje.y);
   vLocal = position.xy;
   vTipo = tipo;
+  vAnchoPx = pixeles;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(punto, 1.0);
 }
 `
@@ -386,13 +388,17 @@ void main() {
 export const TALLO_FRAG = /* glsl */ `
 varying vec2 vLocal;
 varying float vTipo;
+varying float vAnchoPx;
 
 ${SALIDA_CARICATURA}
 
 void main() {
-  vec3 verde = vTipo < 0.5 ? vec3(0.34, 0.52, 0.2) : vec3(0.4, 0.58, 0.28);
+  vec3 verde = vTipo < 0.5 ? vec3(0.36, 0.55, 0.22) : vec3(0.4, 0.58, 0.28);
   verde *= 0.86 + 0.18 * smoothstep(-1.0, 1.0, vLocal.x);
-  gl_FragColor = salidaCaricatura(mix(verde, TINTA, smoothstep(0.62, 0.95, abs(vLocal.x)) * 0.6));
+  // Los bordes a tinta sólo en los tallos anchos en pantalla: en los finos, todo era borde y el pie
+  // del muro de girasoles se veía negro.
+  float borde = smoothstep(0.62, 0.95, abs(vLocal.x)) * smoothstep(1.5, 4.0, vAnchoPx);
+  gl_FragColor = salidaCaricatura(mix(verde, mix(verde * 0.7, TINTA, 0.6), borde));
 }
 `
 
@@ -408,6 +414,7 @@ uniform float uPixelesPorRadian;
 varying vec2 vLocal;
 varying float vLuz;
 varying float vForma;
+varying float vDetalle;
 
 ${BRISA_GLSL}
 
@@ -421,16 +428,19 @@ void main() {
   float mecida = aForma.z < 0.5 ? 0.018 : 0.035;
   vec2 empuje = brisa(union_.xz) * mecida * alturaPlanta * t * t;
   float pixeles = tamano / max(distance(union_, uCamara), 1e-3) * uPixelesPorRadian;
-  // Las hojas llegan después que las flores: desde el aire, unas motitas verdes oscurecían los
-  // macizos.
-  if (pixeles < 3.5) {
+  // Las hojas llegan después que las flores (desde el aire, unas motitas verdes oscurecían los
+  // macizos) y su tinta, con el tamaño: pequeñas, eran casi todo borde, rayas negras en el corazón.
+  if (pixeles < 4.5) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
-  tamano *= smoothstep(3.5, 8.0, pixeles);
+  tamano *= smoothstep(4.5, 9.0, pixeles);
+  vDetalle = smoothstep(9.0, 20.0, pixeles);
   vForma = aForma.z;
-  // La hoja sale del tallo hacia su rumbo, algo caída.
-  vec3 hacia = vec3(sin(rumbo) * cos(inclinacion), -sin(inclinacion) * 0.4, -cos(rumbo) * cos(inclinacion));
+  // La de girasol sale del tallo hacia su rumbo, algo caída; las del ramo suben junto a las flores
+  // (tumbadas parecían nenúfares).
+  float subida = aForma.z < 0.5 ? -0.4 * sin(inclinacion) : sin(inclinacion);
+  vec3 hacia = normalize(vec3(sin(rumbo) * cos(inclinacion), subida, -cos(rumbo) * cos(inclinacion)));
   vec3 lado = normalize(cross(vec3(0.0, 1.0, 0.0), hacia));
   vec3 normal = normalize(cross(hacia, lado));
   vec3 centro = union_ + vec3(empuje.x, 0.0, empuje.y) + hacia * tamano;
@@ -447,6 +457,7 @@ export const HOJA_FRAG = /* glsl */ `
 varying vec2 vLocal;
 varying float vLuz;
 varying float vForma;
+varying float vDetalle;
 
 ${SALIDA_CARICATURA}
 
@@ -459,11 +470,11 @@ void main() {
   float d = abs(p.x) - ancho;
   float w = max(fwidth(d), 1e-4);
   if (d > w) discard;
-  vec3 claro = vForma > 0.5 && vForma < 1.5 ? vec3(0.64, 0.78, 0.64) : vForma < 0.5 ? vec3(0.5, 0.72, 0.28) : vec3(0.46, 0.68, 0.28);
+  vec3 claro = vForma > 0.5 && vForma < 1.5 ? vec3(0.56, 0.72, 0.58) : vForma < 0.5 ? vec3(0.5, 0.72, 0.28) : vec3(0.46, 0.68, 0.28);
   vec3 verde = mix(claro * vec3(0.72, 0.78, 0.8), claro, smoothstep(0.1, 0.5, vLuz));
   verde = mix(verde, verde * 0.8, smoothstep(0.0, 0.9, abs(p.x) / max(ancho, 1e-3)));
-  verde = mix(verde, vec3(0.62, 0.78, 0.36), (1.0 - smoothstep(0.02, 0.06, abs(p.x))) * step(p.y, 0.8));
-  verde = mix(verde, TINTA, 1.0 - smoothstep(0.5 * w, 1.5 * w, abs(d)));
+  verde = mix(verde, vec3(0.62, 0.78, 0.36), (1.0 - smoothstep(0.02, 0.06, abs(p.x))) * step(p.y, 0.8) * vDetalle);
+  verde = mix(verde, mix(verde * 0.72, TINTA, vDetalle), 1.0 - smoothstep(0.5 * w, 1.5 * w, abs(d)));
   gl_FragColor = salidaCaricatura(verde);
 }
 `

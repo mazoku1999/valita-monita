@@ -87,6 +87,8 @@ interface EstadoFotograma {
   /** Posición de la cámara en el mundo y tangente de la mitad de su campo vertical. */
   camara: THREE.Vector3
   tanMitadFov: number
+  /** Hacia dónde tiene la cámara su "arriba", en el mundo (el corazón del mapa se pinta derecho). */
+  arribaCamara: THREE.Vector3
   guias: number
   luna: number
 }
@@ -211,6 +213,12 @@ function crearSistema(fecha: Date) {
         uTiempo: { value: 0 },
         uMapa: { value: vacia },
         uPoblacion: { value: vacia },
+        ...(esTierra
+          ? {
+              uDestino: { value: new THREE.Vector2(COCHABAMBA.longitud, COCHABAMBA.latitud) },
+              uArribaCamara: { value: new THREE.Vector3(0, 1, 0) },
+            }
+          : {}),
       },
     })
     const malla = new THREE.Mesh(esTierra ? geometriaTierra : geometriaPlaneta, material)
@@ -342,6 +350,7 @@ function crearSistema(fecha: Date) {
     -Math.cos(latitudCochabamba) * Math.sin(longitudCochabamba),
   )
   const verticalCochabamba = new THREE.Vector3()
+  const giroMundo = new THREE.Quaternion()
   const inclinacionInversa = new THREE.Quaternion()
   const solDesdeTierra = new THREE.Vector3()
   /** Lo que se suma al giro propio de la Tierra para que en Cochabamba amanezca al llegar. */
@@ -362,6 +371,7 @@ function crearSistema(fecha: Date) {
     altoPixeles,
     camara,
     tanMitadFov,
+    arribaCamara,
     guias,
     luna: visibilidadLuna,
   }: EstadoFotograma): void => {
@@ -409,7 +419,12 @@ function crearSistema(fecha: Date) {
       }
       giro.setFromAxisAngle(arriba, anguloGiro)
       planeta.malla.quaternion.copy(planeta.inclinacion).multiply(giro)
-      if (planeta.id === 'tierra') verticalCochabamba.copy(puntoCochabamba).applyQuaternion(planeta.malla.quaternion)
+      if (planeta.id === 'tierra') {
+        verticalCochabamba.copy(puntoCochabamba).applyQuaternion(planeta.malla.quaternion)
+        planeta.malla.updateWorldMatrix(true, false)
+        planeta.malla.getWorldQuaternion(giroMundo).invert()
+        planeta.material.uniforms.uArribaCamara.value.copy(arribaCamara).applyQuaternion(giroMundo)
+      }
       const uniformes = planeta.material.uniforms
       uniformes.uSol.value.copy(posicionSol)
       uniformes.uAparicion.value = 1
@@ -478,6 +493,7 @@ export function SistemaSolar({
   const sistema = useMemo(() => crearSistema(fecha ?? new Date()), [fecha])
   const relojes = useRef({ orbitas: 0, giros: 0, segundos: 0 })
   const posicionCamara = useRef(new THREE.Vector3())
+  const arribaCamara = useRef(new THREE.Vector3())
 
   useEffect(() => () => sistema.liberar(), [sistema])
 
@@ -521,6 +537,7 @@ export function SistemaSolar({
       altoPixeles: gl.domElement.height,
       camara: camera.getWorldPosition(posicionCamara.current),
       tanMitadFov: Math.tan(THREE.MathUtils.degToRad((camera instanceof THREE.PerspectiveCamera ? camera.fov : 45) / 2)),
+      arribaCamara: arribaCamara.current.setFromMatrixColumn(camera.matrixWorld, 1).normalize(),
       guias: guias?.current ?? 1,
       luna: luna?.current ?? 1,
     })

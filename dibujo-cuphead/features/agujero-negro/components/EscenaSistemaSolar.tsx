@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { SistemaSolar } from '@/features/sistema-solar/components/SistemaSolar'
 import { direccionEcliptica } from '@/features/sistema-solar/datos/planetas'
+import { RECORTE_ENTRADA } from '@/features/cochabamba/store/valle'
 import { VIAJE } from '../constantes/viajeScroll'
 
 /**
@@ -20,7 +21,8 @@ import { VIAJE } from '../constantes/viajeScroll'
  * sólo lo justo para centrar la Tierra (unos grados) y avanza hacia ella. Antes se orientaba hacia
  * un punto de vista fijo de la Tierra y la vista se iba hacia arriba: no respetaba de dónde venía.
  * Al llegar, la Tierra gira hasta que en Cochabamba amanece y la cámara planea sobre ella hasta
- * quedar encima de Bolivia, bajando; allí la reciben las nubes (`NubesDeEntrada`) y el valle.
+ * quedar encima de Bolivia; baja entonces hacia el corazón que marca el destino en el mapa, las
+ * nubes (`NubesDeEntrada`) lo rodean y lo tapan, y al abrirse ya está el valle.
  *
  * Va dentro del marco del agujero de gusano (`TunelAgujeroGusano`), que sigue a la cámara con
  * retraso: el sistema no se mueve respecto al cielo del otro lado (la Vía Láctea que se ve al
@@ -56,10 +58,11 @@ const OCUPACION_TIERRA = 0.72
 const VIAJE_TIERRA = { centrar: [0, 0.35], avance: [0.1, 1], alineacion: [0.35, 0.9] } as const
 
 /**
- * Entrada en la Tierra: altura final sobre Cochabamba (en radios de la Tierra; ahí empiezan las
- * nubes) y cuánto mira la cámara por delante de su camino mientras planea.
+ * Entrada en la Tierra: altura sobre Cochabamba cuando las nubes la tapan (en radios de la Tierra;
+ * el corazón del mapa llena entonces media pantalla), cuánto mira la cámara por delante de su
+ * camino mientras planea y el plano cercano, en fracción de la altura.
  */
-const ENTRADA = { alturaFinal: 0.3, adelanto: 0.3 } as const
+const ENTRADA = { alturaFinal: 0.045, adelanto: 0.3, cerca: 0.25 } as const
 
 const suavizar = (borde0: number, borde1: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - borde0) / (borde1 - borde0)))
@@ -120,6 +123,7 @@ export function EscenaSistemaSolar() {
     const grupo = colocacion.current
     if (!grupo) return
     const progreso = obtenerProgreso()
+    RECORTE_ENTRADA.cerca = Number.POSITIVE_INFINITY
     // Tras las nubes, el valle toma el relevo: el sistema desaparece.
     aparicion.current = progreso < VIAJE.nubesPleno ? suavizar(VIAJE.sistemaInicio, VIAJE.sistemaPleno, progreso) : 0
     grupo.visible = aparicion.current > 0.002
@@ -140,7 +144,8 @@ export function EscenaSistemaSolar() {
     } = auxiliares.current
     const avance = suavizar(VIAJE.sistemaInicio, VIAJE.sistemaEntero, progreso)
     const tramoTierra = Math.min(1, Math.max(0, (progreso - VIAJE.tierraInicio) / (VIAJE.tierraFin - VIAJE.tierraInicio)))
-    const tramoEntrada = Math.min(1, Math.max(0, (progreso - VIAJE.tierraFin) / (VIAJE.entradaFin - VIAJE.tierraFin)))
+    const tramoPlaneo = Math.min(1, Math.max(0, (progreso - VIAJE.tierraFin) / (VIAJE.planeoFin - VIAJE.tierraFin)))
+    const tramoBajada = Math.min(1, Math.max(0, (progreso - VIAJE.tierraFin) / (VIAJE.nubesPleno - VIAJE.tierraFin)))
     // Camino de la Tierra: la cámara la centra y avanza hacia ella; las órbitas se apagan, la Luna
     // aparece, el reloj de las órbitas casi se detiene y la Tierra gira hasta que en Cochabamba
     // amanece.
@@ -187,14 +192,18 @@ export function EscenaSistemaSolar() {
       const recorrido = Math.exp(Math.log(lejos) + (Math.log(cerca) - Math.log(lejos)) * acercar)
       camaraSistema.copy(malla.position).addScaledVector(haciaCamara, recorrido)
       objetivo.copy(malla.position).multiplyScalar(centrar)
-      if (tramoEntrada > 0) {
+      if (tramoBajada > 0) {
         // Entrada: la cámara planea sobre la Tierra desde donde llegó hasta la vertical de
-        // Cochabamba, bajando, y pasa de mirar al centro de la Tierra a mirar el suelo por delante.
-        const e = suavizar(0, 1, tramoEntrada)
+        // Cochabamba y pasa de mirar al centro de la Tierra a mirar el suelo por delante; después
+        // sigue bajando derecha hacia el corazón del mapa. La bajada (en escala logarítmica)
+        // arranca despacio y llega a las nubes todavía bajando, sin frenar.
+        const e = suavizar(0, 1, tramoPlaneo)
+        const b = tramoBajada * tramoBajada * (2 - tramoBajada)
         interpolarDireccion(haciaCamara, cochabamba.current, e, direccionEntrada)
         const alturaInicial = cerca - radioTierra
         const alturaFinal = ENTRADA.alturaFinal * radioTierra
-        const altura = Math.exp(Math.log(alturaInicial) + (Math.log(alturaFinal) - Math.log(alturaInicial)) * e)
+        const altura = Math.exp(Math.log(alturaInicial) + (Math.log(alturaFinal) - Math.log(alturaInicial)) * b)
+        RECORTE_ENTRADA.cerca = ENTRADA.cerca * altura
         camaraSistema.copy(malla.position).addScaledVector(direccionEntrada, radioTierra + altura)
         interpolarDireccion(direccionEntrada, cochabamba.current, ENTRADA.adelanto * (1 - e), direccionMirada)
         objetivo.copy(malla.position).addScaledVector(direccionMirada, radioTierra * e)

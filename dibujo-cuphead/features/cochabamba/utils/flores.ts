@@ -157,15 +157,15 @@ export function generarFlores(semilla = 20260929): DatosFlores {
     planta(x, z, alto, tamano[0] + (tamano[1] - tamano[0]) * azar(), tipo, 135 + (azar() - 0.5) * 60, 30 + 30 * azar(), 0.009)
     // El verde del ramo al pie de las flores cercanas: hojas redondas de eucalipto y hojas largas.
     if (aCamara < 22) {
-      for (let k = 0; k < 3; k += 1) {
+      for (let k = 0; k < 2; k += 1) {
         const eucalipto = azar() < 0.55
         hojas.push([
           x + (azar() - 0.5) * 0.08,
-          alto * (0.12 + 0.36 * azar()),
+          alto * (0.1 + 0.3 * azar()),
           z + (azar() - 0.5) * 0.08,
-          eucalipto ? 0.06 + 0.04 * azar() : 0.13 + 0.1 * azar(),
+          eucalipto ? 0.045 + 0.035 * azar() : 0.08 + 0.07 * azar(),
           360 * azar() * RADIANES,
-          (10 + 45 * azar()) * RADIANES,
+          (15 + 35 * azar()) * RADIANES,
           eucalipto ? FORMA_HOJA.eucalipto : FORMA_HOJA.larga,
           alto,
         ])

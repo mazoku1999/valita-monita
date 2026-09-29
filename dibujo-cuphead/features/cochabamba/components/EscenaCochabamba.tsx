@@ -9,9 +9,10 @@ import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { CAMARA_VALLE, CAMPO, CIUDAD, CORAZON, LAGUNA, RECORTE_VALLE, SOL_MANANA, direccionRumbo, direccionSol } from '../constantes/valle'
 import { CABEZA_FRAG, CABEZA_VERT, HOJA_FRAG, HOJA_VERT, TALLO_FRAG, TALLO_VERT } from '../shaders/flores'
 import { TERRENO_FRAG, TERRENO_VERT } from '../shaders/valle'
-import { VALLE_EN_ESCENA } from '../store/valle'
+import { RECORTE_ENTRADA, VALLE_EN_ESCENA } from '../store/valle'
 import { crearQuadInstanciado, generarFlores } from '../utils/flores'
 import { crearTerreno } from '../utils/terreno'
+import { type UniformesValle, VidaDelValle } from './VidaDelValle'
 
 /**
  * Interpolación cúbica monótona (Fritsch-Carlson) con pendiente nula en los extremos: pasa por los
@@ -129,13 +130,14 @@ export function EscenaCochabamba() {
     })
   }, [])
 
-  // Uniformes de las flores (compartidos por las tres mallas).
-  const uniformesFlores = useMemo(
+  // Uniformes de las flores (compartidos por sus tres mallas y por la vida del valle).
+  const uniformesFlores = useMemo<UniformesValle>(
     () => ({
       uCamara: { value: new THREE.Vector3() },
       uSol: { value: new THREE.Vector3(...direccionSol(SOL_MANANA.rumbo, SOL_MANANA.elevacion)) },
       uTiempo: { value: 0 },
       uPixelesPorRadian: { value: 800 },
+      uEscalaPantalla: { value: 1 },
     }),
     [],
   )
@@ -187,9 +189,10 @@ export function EscenaCochabamba() {
     nodo.visible = visible
     VALLE_EN_ESCENA.dia = visible ? 1 : 0
 
-    // Planos de recorte: los del valle mientras se ve, los del viaje por el espacio si no.
+    // Planos de recorte: los del valle mientras se ve; si no, los del viaje por el espacio (con el
+    // cercano que pida la bajada hacia la Tierra).
     if (camera instanceof THREE.PerspectiveCamera) {
-      const cerca = visible ? RECORTE_VALLE.cerca : CAMARA_AGUJERO.cerca
+      const cerca = visible ? RECORTE_VALLE.cerca : Math.min(CAMARA_AGUJERO.cerca, RECORTE_ENTRADA.cerca)
       const lejos = visible ? RECORTE_VALLE.lejos : CAMARA_AGUJERO.lejos
       if (camera.near !== cerca || camera.far !== lejos) {
         camera.near = cerca
@@ -211,6 +214,7 @@ export function EscenaCochabamba() {
     uniformesFlores.uTiempo.value = clock.getElapsedTime()
     const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 45
     uniformesFlores.uPixelesPorRadian.value = gl.domElement.height / 2 / Math.tan(THREE.MathUtils.degToRad(fov) / 2)
+    uniformesFlores.uEscalaPantalla.value = gl.domElement.height / 720
 
     // Para el cielo del pase: de las direcciones del mundo a las del valle, y el Sol en el valle.
     nodo.updateWorldMatrix(true, false)
@@ -229,6 +233,7 @@ export function EscenaCochabamba() {
           <mesh geometry={flores.cabezas} material={materialesFlores.cabezas} frustumCulled={false} />
         </>
       )}
+      <VidaDelValle uniformes={uniformesFlores} />
     </group>
   )
 }

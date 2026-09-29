@@ -49,9 +49,10 @@ export const VIAJE = {
   tierraFin: enProgreso(1240),
   /**
    * Entrada: la Tierra gira hasta que Cochabamba amanece y la cámara planea sobre ella hasta
-   * quedar encima de Bolivia, bajando.
+   * quedar encima de Bolivia (`planeoFin`); de ahí sigue bajando en vertical hacia el corazón
+   * pintado en el mapa, que las nubes van rodeando hasta taparlo (`nubesPleno`).
    */
-  entradaFin: enProgreso(1420),
+  planeoFin: enProgreso(1395),
   /** Paso por las nubes: cubren la pantalla en `nubesPleno`, cuando la Tierra da paso al valle. */
   nubesInicio: enProgreso(1385),
   nubesPleno: enProgreso(1445),
