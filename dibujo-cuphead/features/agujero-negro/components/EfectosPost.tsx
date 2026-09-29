@@ -4,7 +4,7 @@ import { EffectComposer, ToneMapping } from '@react-three/postprocessing'
 import { useFrame } from '@react-three/fiber'
 import { type EffectComposer as ComposerDeEfectos, ToneMappingMode } from 'postprocessing'
 import { useEffect, useMemo, useRef } from 'react'
-import { avanzarRitmo, latido, tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
+import { avanzarRitmo, latido, pulsaciones, tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
 import { PasoDibujo } from '@/features/dibujo/utils/PasoDibujo'
 import { ajuste } from '../store/vistaCamaraStore'
 import { suavizar } from '../utils/aleatorio'
@@ -55,6 +55,7 @@ export function EfectosPost() {
     pasoDibujo.gasVisible = suavizar(0.98, 1.25, distanciaCentro)
     pasoDibujo.bandaVisible = suavizar(1.3, 2.5, distanciaCentro)
     pasoDibujo.latido = latido(clock.getElapsedTime())
+    pasoDibujo.pulsaciones = pulsaciones(clock.getElapsedTime())
     pasoDibujo.ajustes.activo = ajuste('dibujo', 1) > 0.5
     pasoDibujo.ajustes.soloTinta = ajuste('dibujoSoloTinta', 0) > 0.5
     pasoDibujo.ajustes.grosor = ajuste('dibujoGrosor', pasoDibujo.ajustes.grosor)

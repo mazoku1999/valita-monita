@@ -78,6 +78,8 @@ export class PasoDibujo extends Pass {
   bandaVisible = 1
   /** Latido del compás (0–1), ver `store/ritmoDibujo.ts`. */
   latido = 0
+  /** Pulsaciones del compás transcurridas (las estrellas bailan con ellas). */
+  pulsaciones = 0
 
   readonly ajustes: AjustesDibujo = { activo: true, soloTinta: false, grosor: TINTA.grosor }
 
@@ -191,9 +193,12 @@ export class PasoDibujo extends Pass {
         uResolucion: { value: new THREE.Vector2() },
         uDibujo: { value: 0 },
         uTiempo: { value: 0 },
+        uPulsaciones: { value: 0 },
         uCielo: { value: this.cielo.texture },
         uAguada: { value: this.aguada.texture },
         uProfundidad: { value: null },
+        uGasColor: { value: null },
+        uGasVisible: { value: 1 },
         uEstrellasVisibles: { value: 1 },
         uBandaVisible: { value: 1 },
         uTinta: { value: new THREE.Vector3(...TINTA.color) },
@@ -358,6 +363,9 @@ export class PasoDibujo extends Pass {
       ;(ud.uPosCamara.value as THREE.Vector3).copy(camara.position)
       ud.uDibujo.value = numeroDeDibujo()
       ud.uTiempo.value = this.tiempo
+      ud.uPulsaciones.value = this.pulsaciones
+      ud.uGasColor.value = gas ? gas.textures[0] : null
+      ud.uGasVisible.value = gasVisible
       ud.uEstrellasVisibles.value = uc.uCieloPintado.value
       ud.uBandaVisible.value = ud.uProfundidad.value ? this.bandaVisible * suavizar(0, 1, gasVisible) : 0
       renderer.setRenderTarget(this.dibujo)

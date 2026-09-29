@@ -35,7 +35,9 @@ es la del original; el dibujo es un pase al final del posproceso
 - `constantes/dibujo.ts`: grosor de la tinta, bandas de color, aguadas, película, hervor.
 - `store/ritmoDibujo.ts`: el ritmo de 24 dibujos por segundo (entre dibujos la pantalla no cambia y
   no se calcula nada) y el compás (112 pulsaciones por minuto) con el que late el disco.
-- `utils/destellos.ts`: estrellas del cielo y destellos de la banda de polvo.
+- `utils/destellos.ts`: estrellas del cielo (puntos, destellos de cuatro puntas y estrellas de
+  cinco puntas que bailan al compás), destellos de la banda de polvo que se abren a tiempo con el
+  compás y una estrella fugaz que cruza el cielo de vez en cuando.
 
 ## Claves de desarrollo (sólo con `next dev`)
 
@@ -52,7 +54,8 @@ Además de las del original (`?vista=canto|anillo|elevada|elevadaCercana|inferio
 
 Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta`,
 `dibujo-v0.3-acuarela`, `dibujo-v0.4-pelicula`, `dibujo-v0.5-animacion`,
-`dibujo-v0.6-viaje-completo`, `dibujo-v0.7-agujero-caricatura` (y lo que siga).
+`dibujo-v0.6-viaje-completo`, `dibujo-v0.7-agujero-caricatura`, `dibujo-v0.8-estrellas`
+(y lo que siga).
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

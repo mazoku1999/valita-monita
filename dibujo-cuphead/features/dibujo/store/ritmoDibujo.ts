@@ -38,8 +38,12 @@ export function numeroDeDibujo(): number {
  */
 export const COMPAS = { pulsacionesPorMinuto: 112 } as const
 
+/** Pulsaciones transcurridas (el pulso cae en cada entero). */
+export function pulsaciones(tiempo: number): number {
+  return (tiempo * COMPAS.pulsacionesPorMinuto) / 60
+}
+
 export function latido(tiempo: number): number {
-  const fase = (tiempo * COMPAS.pulsacionesPorMinuto) / 60
-  const onda = 0.5 + 0.5 * Math.cos(2 * Math.PI * fase)
+  const onda = 0.5 + 0.5 * Math.cos(2 * Math.PI * pulsaciones(tiempo))
   return onda * onda * onda
 }
