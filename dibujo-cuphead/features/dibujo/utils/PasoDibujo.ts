@@ -85,6 +85,11 @@ export class PasoDibujo extends Pass {
   pulsaciones = 0
   /** Radio del iris de la película (1 abierto, 0 cerrado). */
   iris = 1
+  /** Cuánto está la cámara dentro de una nube (0–1) y su avance por ella (mueve las volutas). */
+  niebla = 0
+  nieblaAvance = 0
+  /** 1 al salir de la nube (la niebla se abre desde el centro), −1 al entrar (se cierra en él). */
+  nieblaSentido = 1
 
   readonly ajustes: AjustesDibujo = { activo: true, soloTinta: false, grosor: TINTA.grosor }
 
@@ -185,6 +190,9 @@ export class PasoDibujo extends Pass {
       uTinta: { value: new THREE.Vector3(...TINTA.color) },
       uAPantalla: { value: 1 },
       uSoloTinta: { value: 0 },
+      uNiebla: { value: 0 },
+      uNieblaAvance: { value: 0 },
+      uNieblaSentido: { value: 1 },
     })
     this.matPelicula = material(PELICULA_FRAG, {
       uImagen: { value: this.dibujo.texture },
@@ -387,6 +395,9 @@ export class PasoDibujo extends Pass {
     u.uGasColor.value = gas ? gas.textures[0] : null
     u.uGasVisible.value = gasVisible
     u.uSoloTinta.value = this.ajustes.soloTinta ? 1 : 0
+    u.uNiebla.value = this.niebla
+    u.uNieblaAvance.value = this.nieblaAvance
+    u.uNieblaSentido.value = this.nieblaSentido
     u.uAPantalla.value = 1
     ;(u.uHervor.value as THREE.Vector3).set(hervorX, hervorY, HERVOR.amplitud)
     this.dibujar(renderer, this.matComponer, this.dibujo)

@@ -36,7 +36,7 @@ export interface DatosFlores {
   cabezaBase: Float32Array
   cabezaForma: Float32Array
   cabezaCara: Float32Array
-  /** Tallos: base y altura; grosor y tipo. */
+  /** Tallos: base y altura; grosor, tipo y la semilla de su flor. */
   talloBase: Float32Array
   talloForma: Float32Array
   /** Hojas: punto de unión (x, y, z) y tamaño; rumbo, inclinación, forma y la altura de la planta. */
@@ -90,8 +90,10 @@ export function generarFlores(semilla = 20260929): DatosFlores {
 
   const planta = (x: number, z: number, altura: number, tamano: number, tipo: number, rumbo: number, inclinacion: number, grosor: number): void => {
     const variante = azar()
-    cabezas.push([x, 0, z, altura, tamano, tipo, variante, azar(), rumbo * RADIANES, inclinacion * RADIANES])
-    tallos.push([x, 0, z, altura, grosor, tipo])
+    // La semilla de la flor mueve también su tallo (la misma brisa).
+    const semilla = azar()
+    cabezas.push([x, 0, z, altura, tamano, tipo, variante, semilla, rumbo * RADIANES, inclinacion * RADIANES])
+    tallos.push([x, 0, z, altura, grosor, tipo, semilla])
   }
 
   // Girasoles en hileras, mirando al este (al Sol de la mañana) con algo de desorden.
@@ -116,11 +118,11 @@ export function generarFlores(semilla = 20260929): DatosFlores {
   // Las flores del ramo dentro del corazón: más densas junto a la punta, donde se posa la cámara.
   const reparto: readonly [number, number][] = [
     [TIPO_FLOR.gerbera, 0.18],
-    [TIPO_FLOR.rosa, 0.18],
+    [TIPO_FLOR.rosa, 0.22],
     [TIPO_FLOR.lirio, 0.08],
     [TIPO_FLOR.clavelina, 0.2],
     [TIPO_FLOR.bocaDeDragon, 0.14],
-    [TIPO_FLOR.gipsofila, 0.22],
+    [TIPO_FLOR.gipsofila, 0.18],
   ]
   const elegirTipo = (): number => {
     let r = azar()
@@ -132,7 +134,7 @@ export function generarFlores(semilla = 20260929): DatosFlores {
   }
   const medidas: Record<number, { altura: [number, number]; tamano: [number, number] }> = {
     [TIPO_FLOR.gerbera]: { altura: [0.3, 0.46], tamano: [0.05, 0.065] },
-    [TIPO_FLOR.rosa]: { altura: [0.34, 0.52], tamano: [0.04, 0.052] },
+    [TIPO_FLOR.rosa]: { altura: [0.34, 0.52], tamano: [0.05, 0.068] },
     [TIPO_FLOR.lirio]: { altura: [0.44, 0.64], tamano: [0.07, 0.09] },
     [TIPO_FLOR.clavelina]: { altura: [0.22, 0.36], tamano: [0.045, 0.06] },
     [TIPO_FLOR.bocaDeDragon]: { altura: [0.36, 0.56], tamano: [0.035, 0.045] },
@@ -195,7 +197,7 @@ export function generarFlores(semilla = 20260929): DatosFlores {
     cabezaForma: plano(cabezas, 4, 4, 8),
     cabezaCara: plano(cabezas, 2, 8, 10),
     talloBase: plano(tallos, 4, 0, 4),
-    talloForma: plano(tallos, 2, 4, 6),
+    talloForma: plano(tallos, 3, 4, 7),
     hojaBase: plano(hojas, 4, 0, 4),
     hojaForma: plano(hojas, 4, 4, 8),
     cabezas: cabezas.length,

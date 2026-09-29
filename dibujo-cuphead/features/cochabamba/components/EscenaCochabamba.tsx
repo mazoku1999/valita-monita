@@ -5,43 +5,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { CAMARA_AGUJERO } from '@/features/agujero-negro/constantes/parametrosAgujero'
 import { CARRIL_VH, VIAJE } from '@/features/agujero-negro/constantes/viajeScroll'
+import { interpolarMonotono } from '@/features/agujero-negro/utils/interpolarMonotono'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { CAMARA_VALLE, CAMPO, CIUDAD, CORAZON, LAGUNA, RECORTE_VALLE, SOL_MANANA, direccionRumbo, direccionSol } from '../constantes/valle'
 import { CABEZA_FRAG, CABEZA_VERT, HOJA_FRAG, HOJA_VERT, TALLO_FRAG, TALLO_VERT } from '../shaders/flores'
 import { TERRENO_FRAG, TERRENO_VERT } from '../shaders/valle'
+import { NIEBLA } from '@/features/dibujo/store/niebla'
 import { RECORTE_ENTRADA, VALLE_EN_ESCENA } from '../store/valle'
 import { crearQuadInstanciado, generarFlores } from '../utils/flores'
+import { NUBE_ENTRADA_VALLE, nieblaEn } from '../utils/nubesDestino'
 import { crearTerreno } from '../utils/terreno'
 import { type UniformesValle, VidaDelValle } from './VidaDelValle'
-
-/**
- * Interpolación cúbica monótona (Fritsch-Carlson) con pendiente nula en los extremos: pasa por los
- * puntos sin pasarse de ninguno ni detenerse en los intermedios.
- */
-const interpolarMonotono = (x: number, xs: readonly number[], ys: readonly number[]): number => {
-  const n = xs.length
-  if (x <= xs[0]) return ys[0]
-  if (x >= xs[n - 1]) return ys[n - 1]
-  const pendientes = xs.map((_, i) => {
-    if (i === 0 || i === n - 1) return 0
-    const antes = (ys[i] - ys[i - 1]) / (xs[i] - xs[i - 1])
-    const despues = (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i])
-    if (antes * despues <= 0) return 0
-    return (2 * antes * despues) / (antes + despues)
-  })
-  let i = 0
-  while (x > xs[i + 1]) i += 1
-  const h = xs[i + 1] - xs[i]
-  const t = (x - xs[i]) / h
-  const t2 = t * t
-  const t3 = t2 * t
-  return (
-    (2 * t3 - 3 * t2 + 1) * ys[i] +
-    (t3 - 2 * t2 + t) * h * pendientes[i] +
-    (-2 * t3 + 3 * t2) * ys[i + 1] +
-    (t3 - t2) * h * pendientes[i + 1]
-  )
-}
 
 /**
  * Recorrido de la cámara por el valle (`CAMARA_VALLE`): la distancia a la pose final se interpola
@@ -77,11 +51,16 @@ const poseEn = (progreso: number, posicion: THREE.Vector3, mira: THREE.Vector3):
 
 const ARRIBA = new THREE.Vector3(0, 1, 0)
 
+/** Bolas de la nube de entrada (centro y radio) y la altura de su base, para la niebla. */
+const BOLAS_ENTRADA = new Float32Array(NUBE_ENTRADA_VALLE.flatMap(([x, y, z, radio]) => [x, y, z, radio]))
+const BASE_ENTRADA = NUBE_ENTRADA_VALLE[0][4]
+
 /**
  * El valle de Cochabamba al final del viaje (ver `constantes/valle.ts`). Va dentro del marco del
  * agujero de gusano, como el sistema solar: "mover la cámara" es colocar el valle para que la
- * cámara lo vea desde la pose del recorrido. Aparece bajo las nubes (`NubesDeEntrada`), cuando la
- * Tierra se va, y mientras se ve la cámara usa planos de recorte de valle (de 30 cm a 60 km).
+ * cámara lo vea desde la pose del recorrido. Toma el relevo de la Tierra dentro de la nube del
+ * corazón (la cámara sale por su base) y mientras se ve la cámara usa planos de recorte de valle
+ * (de 30 cm a 60 km).
  */
 /** Las tres mallas de las flores: cabezas, tallos y hojas (ver `utils/flores.ts`). */
 interface MallasFlores {
@@ -94,7 +73,7 @@ const crearMallasFlores = (): MallasFlores => {
   const datos = generarFlores()
   return {
     cabezas: crearQuadInstanciado({ aBase: [datos.cabezaBase, 4], aForma: [datos.cabezaForma, 4], aCara: [datos.cabezaCara, 2] }, datos.cabezas),
-    tallos: crearQuadInstanciado({ aBase: [datos.talloBase, 4], aForma: [datos.talloForma, 2] }, datos.cabezas),
+    tallos: crearQuadInstanciado({ aBase: [datos.talloBase, 4], aForma: [datos.talloForma, 3] }, datos.cabezas),
     hojas: crearQuadInstanciado({ aBase: [datos.hojaBase, 4], aForma: [datos.hojaForma, 4] }, datos.hojas),
   }
 }
@@ -188,6 +167,7 @@ export function EscenaCochabamba() {
     const visible = progreso >= VIAJE.valleInicio && terreno !== null
     nodo.visible = visible
     VALLE_EN_ESCENA.dia = visible ? 1 : 0
+    if (!visible) NIEBLA.valle = 0
 
     // Planos de recorte: los del valle mientras se ve; si no, los del viaje por el espacio (con el
     // cercano que pida la bajada hacia la Tierra).
@@ -204,6 +184,8 @@ export function EscenaCochabamba() {
 
     const { posicion, mira, matriz, orientacion, inversa, mundo, rotacion } = auxiliares.current
     poseEn(progreso, posicion, mira)
+    // Dentro de la nube de entrada, niebla (el pase la pinta).
+    NIEBLA.valle = nieblaEn(posicion, BOLAS_ENTRADA, (punto) => punto.y, BASE_ENTRADA, -220, 30)
     matriz.lookAt(posicion, mira, ARRIBA)
     orientacion.setFromRotationMatrix(matriz)
     inversa.copy(orientacion).invert()

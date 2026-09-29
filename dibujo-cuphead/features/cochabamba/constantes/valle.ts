@@ -46,13 +46,15 @@ export const LAGUNA = { centro: [8600, 4300], semiejes: [720, 430] } as const
 export const CERRO_SAN_PEDRO = { centro: [9800, 3600], altura: 290, radio: 520 } as const
 
 /**
- * Recorrido de la cámara por el valle, en vh del carril (ver `constantes/viajeScroll.ts`): sale de
- * debajo de las nubes, alto al sureste del corazón (que se ve derecho, con los lóbulos arriba), baja
- * hacia él y se posa a la altura de las flores, 8 m dentro desde su punta (donde ya mide unos 16 m
- * de ancho), mirando a lo largo del corazón, que se abre hacia el Tunari.
+ * Recorrido de la cámara por el valle, en vh del carril (ver `constantes/viajeScroll.ts`): empieza
+ * dentro de la nube del corazón (a 4 km, ver `utils/nubesDestino.ts`), sale por su base alto al
+ * sureste del corazón de flores (que se ve derecho, con los lóbulos arriba, como la nube desde el
+ * espacio), baja hacia él y se posa a la altura de las flores, 8 m dentro desde su punta (donde ya
+ * mide unos 16 m de ancho), mirando a lo largo del corazón, que se abre hacia el Tunari.
  */
 export const CAMARA_VALLE: readonly { readonly vh: number; readonly posicion: readonly [number, number, number]; readonly mira: readonly [number, number, number] }[] = [
-  { vh: 1445, posicion: [1300, 2400, 1300], mira: [0, 0, 0] },
+  { vh: 1445, posicion: [2150, 4000, 2150], mira: [0, 0, 0] },
+  { vh: 1495, posicion: [1300, 2400, 1300], mira: [0, 0, 0] },
   { vh: 1560, posicion: [380, 800, 380], mira: [0, 0, 0] },
   { vh: 1650, posicion: [62, 115, 62], mira: [0, 0, 0] },
   { vh: 1722, posicion: [20, 8, 20], mira: [-24, 0, -24] },

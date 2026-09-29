@@ -67,15 +67,21 @@ flores como las de un ramo (gerberas, rosas, lirios, clavelinas, bocas de dragó
 
 - **La entrada** (`features/agujero-negro/components/EscenaSistemaSolar.tsx`): tras acercarse a la
   Tierra en línea recta, la cámara planea hasta la vertical de Cochabamba (la Tierra gira para que
-  allí amanezca, a las 7:15) y baja derecha hacia el destino, en escala logarítmica y sin frenar.
-  El mapa de la Tierra (`features/sistema-solar/shaders/sistemaSolar.ts`, `DESTINO_GLSL`) dibuja
-  los Andes como una cadena de picos (ladera del este al Sol, nieve en algunas cumbres), el
-  Altiplano, el lago Titicaca, el salar de Uyuni, el valle verde de Cochabamba y en él un corazón
-  rosado con ribete blanco, derecho en pantalla, que asoma al acercarse. Mientras la cámara baja,
-  el plano cercano baja con ella (`RECORTE_ENTRADA`).
-- **Las nubes** (`features/cochabamba/components/NubesDeEntrada.tsx`): capas de pantalla completa
-  que dejan un claro en el centro: rodean el corazón del mapa, se cierran sobre él y, al abrirse
-  desde el centro, ya está debajo el valle con el corazón de flores.
+  allí amanezca, a las 7:15) y baja derecha en escala logarítmica, sin frenar (`BAJADA_KM`): al
+  terminar el planeo, a 1600 km, se ve Bolivia con el norte arriba; ya cerca de las nubes gira hasta
+  tener el noroeste arriba, como en el valle. El plano cercano baja con ella (`RECORTE_ENTRADA`).
+- **El mapa** (`features/sistema-solar/shaders/sistemaSolar.ts`, `DESTINO_GLSL`): Bolivia con su
+  frontera a trazos y un tinte cálido, los Andes como una cadena de picos con cumbres nevadas, el
+  Altiplano, el Titicaca, el Poopó, el salar de Uyuni, los grandes ríos (Amazonas, Madeira, Mamoré,
+  Beni, Paraguay, Pilcomayo), las ciudades como puntitos, el valle de Cochabamba y las sombras de
+  las nubes de la llegada, alargadas hacia el oeste por el Sol bajo.
+- **Las nubes de verdad** (`features/cochabamba/shaders/nubesBolas.ts`, `utils/nubesDestino.ts`):
+  racimos de bolas en el espacio, trazadas por píxel sobre carteles (cada píxel busca dónde entra
+  su rayo en la bola, escribe esa profundidad y se ilumina con el Sol de la mañana; base plana y
+  una línea fina en el contorno de cada lóbulo). Sobre Cochabamba flota una nube rosada con forma
+  de corazón, alrededor hay cúmulos sueltos y en el valle otros pasan junto a la cámara al bajar.
+  La cámara entra en la nube del corazón: dentro, el pase pinta la niebla (`NIEBLA`), con volutas
+  que se cierran al entrar y se abren desde el centro al salir por la base, sobre el valle.
 - **El valle** (`features/cochabamba`): relieve calculado en la CPU (`utils/terreno.ts`: el Tunari
   al norte, serranías, el cerro de San Pedro) y pintado por píxel (`shaders/valle.ts`: parcelas
   en franjas con caminos y lindes, la ciudad, la laguna Alalay, laderas con bosquecillos, nieve,
@@ -88,6 +94,9 @@ flores como las de un ramo (gerberas, rosas, lirios, clavelinas, bocas de dragó
 - **La vida** (`utils/vida.ts`, `shaders/vida.ts`, `components/VidaDelValle.tsx`): hileras de
   eucaliptos con claros, nubes de la mañana (unas agarradas a las faldas del Tunari, otras en el
   cielo del oeste), mariposas que aletean y a ratos planean, y pétalos que lleva la brisa.
+- **Las rosas**: pétalos en tres vueltas (de fuera adentro y de atrás adelante), cada uno oscuro en
+  su base y claro en el borde enrollado, sépalos verdes y el capullo en espiral; los tallos se mecen
+  con su flor y quedan siempre detrás de ella.
 - **El pase en el valle** (`VALLE_EN_ESCENA`): cielo de mañana en vez del nocturno (con el
   cinturón de Venus rosado frente al Sol), sin estrellas, y la tinta de profundidad sólo en las
   siluetas contra el cielo, algo más fina. Las nubes lejanas escriben la profundidad del cielo para
@@ -112,7 +121,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.6-viaje-completo`, `dibujo-v0.7-agujero-caricatura`, `dibujo-v0.8-estrellas`,
 `dibujo-v0.9-sistema-solar`, `dibujo-v0.10-remolino`, `dibujo-v0.11-pulido`,
 `dibujo-v0.12-sistema-solar-fisico`, `dibujo-v0.13-entrada-tierra`, `dibujo-v0.14-valle`,
-`dibujo-v0.15-flores`, `dibujo-v0.16-vida-y-destino`.
+`dibujo-v0.15-flores`, `dibujo-v0.16-vida-y-destino`, `dibujo-v0.17-nubes-de-verdad`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

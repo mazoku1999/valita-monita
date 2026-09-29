@@ -342,15 +342,21 @@ void main() {
 `
 
 /**
- * El destino en el mapa de la Tierra, para la bajada final: los Andes (la cordillera occidental a lo
- * largo del continente y, en Bolivia, la oriental, con el Altiplano entre ambas), el lago Titicaca,
- * el salar de Uyuni, el valle verde de Cochabamba y en él un corazón rosado, derecho en pantalla
- * (su eje sigue el "arriba" de la cámara), que sólo asoma cuando ya mide decenas de píxeles.
- * Distancias en km sobre el plano tangente en cada punto.
+ * El destino en el mapa de la Tierra, para la bajada final: Bolivia con su frontera a trazos y un
+ * tinte cálido (Cochabamba queda en su centro), los Andes (la cordillera occidental a lo largo del
+ * continente y, en Bolivia, la oriental, con el Altiplano entre ambas), el lago Titicaca, el Poopó,
+ * el salar de Uyuni, los grandes ríos (Amazonas, Madeira, Mamoré, Beni, Paraguay y Pilcomayo), las
+ * ciudades bolivianas como puntitos, el valle verde de Cochabamba y las sombras de las nubes de la
+ * llegada (las de bolas, ver `NUBE_BOLA_FRAG`): alargadas hacia el oeste por el Sol bajo de la
+ * mañana, la del corazón con su forma. Distancias en km sobre el plano tangente en cada punto.
  */
 const DESTINO_GLSL = /* glsl */ `
 uniform vec2 uDestino;
-uniform vec3 uArribaCamara;
+uniform vec3 uSolLocal;
+uniform vec4 uSombras[46];
+// La nube del corazón: rumbo de su eje (rad), km por unidad de la curva, altura media (km) y el
+// radio de la Tierra (km).
+uniform vec4 uNubeCorazon;
 
 const float KM_POR_GRADO = 111.2;
 
@@ -363,6 +369,37 @@ const vec2 OCCIDENTAL[23] = vec2[](
 const vec2 ORIENTAL[8] = vec2[](
   vec2(-69.6, -14.6), vec2(-68.2, -16.0), vec2(-67.2, -16.9), vec2(-66.4, -17.2), vec2(-65.8, -18.4), vec2(-65.6, -19.8),
   vec2(-65.4, -21.5), vec2(-65.7, -23.4)
+);
+// Frontera de Bolivia (longitud, latitud), cerrada.
+const vec2 BOLIVIA[64] = vec2[](
+  vec2(-69.57, -10.95), vec2(-68.75, -11.02), vec2(-68.30, -10.95), vec2(-67.70, -10.40), vec2(-66.60, -9.90), vec2(-65.40, -9.70),
+  vec2(-65.30, -10.30), vec2(-65.35, -10.85), vec2(-65.25, -11.50), vec2(-64.95, -12.00), vec2(-64.20, -12.45), vec2(-63.30, -12.70),
+  vec2(-62.70, -13.00), vec2(-62.05, -13.20), vec2(-61.45, -13.50), vec2(-60.85, -13.70), vec2(-60.40, -14.00), vec2(-60.25, -14.70),
+  vec2(-60.30, -15.20), vec2(-59.30, -15.80), vec2(-58.35, -16.30), vec2(-58.40, -17.20), vec2(-57.75, -17.55), vec2(-57.60, -18.10),
+  vec2(-57.55, -18.90), vec2(-57.80, -19.35), vec2(-58.15, -19.85), vec2(-58.16, -20.17), vec2(-59.10, -19.30), vec2(-60.00, -19.40),
+  vec2(-61.75, -19.65), vec2(-62.27, -20.55), vec2(-62.50, -21.30), vec2(-62.65, -22.20), vec2(-63.30, -22.00), vec2(-63.95, -22.00),
+  vec2(-64.35, -22.80), vec2(-64.60, -22.50), vec2(-65.10, -22.10), vec2(-65.65, -22.10), vec2(-66.25, -21.80), vec2(-66.80, -22.30),
+  vec2(-67.18, -22.82), vec2(-67.85, -22.85), vec2(-68.20, -21.60), vec2(-68.45, -20.90), vec2(-68.75, -20.40), vec2(-68.60, -19.70),
+  vec2(-68.95, -19.35), vec2(-69.10, -18.85), vec2(-69.30, -18.30), vec2(-69.48, -17.50), vec2(-69.65, -17.25), vec2(-69.10, -16.75),
+  vec2(-69.00, -16.50), vec2(-68.85, -16.30), vec2(-69.20, -15.90), vec2(-69.55, -15.35), vec2(-69.30, -14.80), vec2(-68.95, -14.25),
+  vec2(-68.85, -13.30), vec2(-68.75, -12.60), vec2(-69.30, -11.80), vec2(-69.57, -10.95)
+);
+// Ríos: cada uno empieza con (999, su ancho en km).
+const vec2 RIOS[60] = vec2[](
+  vec2(999.00, 8.00), vec2(-73.50, -4.40), vec2(-71.00, -4.40), vec2(-69.50, -4.10), vec2(-67.50, -3.40), vec2(-65.50, -3.30),
+  vec2(-63.50, -3.60), vec2(-61.50, -3.40), vec2(-60.00, -3.15), vec2(-58.50, -3.20), vec2(-56.50, -2.60), vec2(-54.50, -2.40),
+  vec2(-52.30, -1.60), vec2(-50.80, -0.60), vec2(-50.00, 0.00), vec2(999.00, 3.00), vec2(-65.35, -9.70), vec2(-64.60, -9.10),
+  vec2(-63.90, -8.75), vec2(-62.80, -8.00), vec2(-61.80, -7.00), vec2(-60.90, -6.00), vec2(-59.90, -4.90), vec2(-59.00, -3.60),
+  vec2(999.00, 1.60), vec2(-65.25, -17.00), vec2(-65.00, -16.20), vec2(-64.90, -15.30), vec2(-64.95, -14.60), vec2(-65.15, -13.60),
+  vec2(-65.35, -12.60), vec2(-65.10, -11.90), vec2(-65.30, -10.80), vec2(-65.35, -9.70), vec2(999.00, 1.60), vec2(-67.60, -15.40),
+  vec2(-67.45, -14.40), vec2(-67.10, -13.30), vec2(-66.70, -12.30), vec2(-66.10, -11.00), vec2(-65.60, -10.50), vec2(-65.35, -10.00),
+  vec2(999.00, 1.60), vec2(-57.70, -16.10), vec2(-57.70, -17.30), vec2(-57.75, -18.40), vec2(-57.90, -19.60), vec2(-58.00, -20.80),
+  vec2(-57.90, -22.20), vec2(-57.60, -23.60), vec2(-57.60, -25.30), vec2(-58.40, -27.30), vec2(999.00, 1.20), vec2(-65.30, -19.50),
+  vec2(-64.60, -20.60), vec2(-63.70, -21.20), vec2(-62.70, -22.10), vec2(-61.00, -23.30), vec2(-59.30, -24.40), vec2(-57.70, -25.30)
+);
+// La Paz, Santa Cruz, Sucre, Oruro, Potosí y Tarija.
+const vec2 CIUDADES[6] = vec2[](
+  vec2(-68.15, -16.50), vec2(-63.18, -17.78), vec2(-65.26, -19.04), vec2(-67.11, -17.97), vec2(-65.75, -19.58), vec2(-64.73, -21.53)
 );
 
 // Del punto (longitud, latitud) en grados a km en el plano tangente en 'origen'.
@@ -421,11 +458,41 @@ float corazonMapa(vec2 p) {
   return sqrt(min(dot(p - vec2(0.0, 1.0), p - vec2(0.0, 1.0)), dot(p - 0.5 * max(p.x + p.y, 0.0), p - 0.5 * max(p.x + p.y, 0.0)))) * sign(p.x - p.y);
 }
 
+// Sombra (0..1) de las nubes de la llegada en el punto p del suelo (unitario, marco de la Tierra):
+// los racimos, como bolas, y la nube del corazón, con su forma a su altura media.
+float sombraDeNubes(vec3 p) {
+  float sombra = 0.0;
+  vec3 sol = uSolLocal;
+  if (dot(sol, p) < 0.02) return 0.0;
+  for (int i = 0; i < 46; i++) {
+    vec3 v = uSombras[i].xyz - p;
+    float t = dot(v, sol);
+    if (t <= 0.0) continue;
+    float w = uSombras[i].w;
+    float d = length(v - t * sol);
+    sombra = max(sombra, 1.0 - smoothstep(0.7 * w, 1.05 * w, d));
+  }
+  // La nube del corazón: el rayo hacia el Sol a su altura media, en km desde el destino.
+  float radioKm = uNubeCorazon.w;
+  vec3 x = p + sol * (uNubeCorazon.z / radioKm) / max(dot(sol, p), 0.05);
+  vec3 destino = vec3(cos(radians(uDestino.y)) * cos(radians(uDestino.x)), sin(radians(uDestino.y)), -cos(radians(uDestino.y)) * sin(radians(uDestino.x)));
+  vec3 norte = vec3(-sin(radians(uDestino.y)) * cos(radians(uDestino.x)), cos(radians(uDestino.y)), sin(radians(uDestino.y)) * sin(radians(uDestino.x)));
+  vec3 este = vec3(-sin(radians(uDestino.x)), 0.0, -cos(radians(uDestino.x)));
+  vec2 enKm = vec2(dot(x - destino, este), dot(x - destino, norte)) * radioKm;
+  vec2 eje = vec2(sin(uNubeCorazon.x), cos(uNubeCorazon.x));
+  vec2 q = vec2(dot(enKm, vec2(eje.y, -eje.x)), dot(enKm, eje)) / uNubeCorazon.y + vec2(0.0, 0.6);
+  float dCorazon = corazonMapa(q) * uNubeCorazon.y;
+  sombra = max(sombra, 1.0 - smoothstep(-1.5, 1.5, dCorazon));
+  return sombra;
+}
+
 // Pinta el destino sobre el color del suelo (tierra: 1 en tierra firme). Devuelve cuánto hay que
-// despejar las nubes (1 junto a Cochabamba).
+// despejar las nubes del mapa (1 junto a Cochabamba: allí están las nubes de bolas).
 float pintarDestino(vec2 lonLat, vec3 p, float tierra, inout vec3 color) {
-  if (lonLat.x < -84.0 || lonLat.x > -55.0 || lonLat.y < -52.0 || lonLat.y > 12.0) return 0.0;
+  if (lonLat.x < -84.0 || lonLat.x > -48.0 || lonLat.y < -52.0 || lonLat.y > 12.0) return 0.0;
   float ondas = 16.0 * (fbm3(p * 60.0) - 0.5);
+  // Km por píxel aquí (para que los trazos finos no se pierdan de lejos).
+  float kmPorPixel = max(length(fwidth(p)) * uNubeCorazon.w, 1e-3);
 
   // El Altiplano, pardo claro, entre las dos cordilleras.
   float lado;
@@ -446,14 +513,18 @@ float pintarDestino(vec2 lonLat, vec3 p, float tierra, inout vec3 color) {
   float fase = fract(largo / PERIODO);
   float cresta = (abs(fase - 0.5) * 2.0 - 0.5) * 0.5 * semiancho;
   vec3 ladera = mix(vec3(0.62, 0.46, 0.36), vec3(0.84, 0.68, 0.45), zona(cruzado - cresta, 0.0));
-  // Lomos entre picos: una línea fina del pico hacia cada lado, en diagonal.
   float lomo = abs(fract(largo / PERIODO + 0.5) - 0.5) * PERIODO - 0.35 * abs(cruzado - cresta);
   ladera = mix(ladera, ladera * 0.86, trazo(lomo, 1.0) * step(abs(cruzado - cresta), semiancho * 0.8));
   suelo = mix(suelo, ladera, monte);
+  // Nieve en algunas cumbres: una mancha dentada en el vértice del zigzag, con el lado del oeste
+  // (el de la sombra) azulado.
   float pico = floor(largo / PERIODO + 0.5);
   vec2 aCumbre = vec2((fract(largo / PERIODO + 0.5) - 0.5) * PERIODO, cruzado - 0.25 * semiancho);
-  float nieve = (1.0 - zona(length(aCumbre * vec2(1.0, 1.4)) + 0.6 * ondas, 30.0 * ancho)) * step(0.35, fract(sin(pico * 12.9898) * 43758.5453));
-  suelo = mix(suelo, vec3(0.98, 0.98, 1.0), nieve * monte);
+  float anguloCumbre = atan(aCumbre.y, aCumbre.x);
+  float radioNieve = 17.0 * ancho * (1.0 + 0.32 * cos(5.0 * anguloCumbre + pico * 2.1) + 0.12 * cos(11.0 * anguloCumbre + pico));
+  float nieve = (1.0 - zona(length(aCumbre) - radioNieve, 0.0)) * step(0.45, fract(sin(pico * 12.9898) * 43758.5453));
+  vec3 colorNieve = mix(vec3(0.8, 0.84, 0.96), vec3(0.99, 0.98, 1.0), zona(aCumbre.y + 2.0, 0.0));
+  suelo = mix(suelo, colorNieve, nieve * monte);
   suelo = mix(suelo, vec3(0.45, 0.33, 0.27), trazo(abs(cruzado) + 2.5 * ondas - semiancho, 1.0) * 0.5);
 
   // El salar de Uyuni.
@@ -462,39 +533,75 @@ float pintarDestino(vec2 lonLat, vec3 p, float tierra, inout vec3 color) {
   suelo = mix(suelo, vec3(0.96, 0.95, 0.98), 1.0 - zona(dUyuni, 0.0));
   suelo = mix(suelo, vec3(0.7, 0.66, 0.78), trazo(dUyuni, 1.0));
 
-  // El valle de Cochabamba, verde entre los montes.
-  vec2 valle = -aKm(uDestino + vec2(0.1, -0.05), lonLat) / vec2(95.0, 42.0);
-  float dValle = (length(valle) - 1.0) * 42.0 + 0.8 * ondas;
+  // El valle de Cochabamba, verde entre los montes (unos 60 km de este a oeste).
+  vec2 valle = -aKm(vec2(-66.24, -17.43), lonLat) / vec2(32.0, 11.0);
+  float dValle = (length(valle) - 1.0) * 11.0 + 0.3 * ondas;
   suelo = mix(suelo, vec3(0.52, 0.77, 0.33), 1.0 - zona(dValle, 0.0));
   suelo = mix(suelo, vec3(0.3, 0.48, 0.24), trazo(dValle, 1.0) * 0.6);
 
+  // Bolivia: dentro, un tinte cálido; su frontera, a trazos de tinta rojiza.
+  float dentro = 0.0;
+  float dFrontera = 1e5;
+  float largoFrontera = 0.0;
+  float acumulado = 0.0;
+  for (int i = 0; i < 63; i++) {
+    vec2 a = aKm(BOLIVIA[i], lonLat);
+    vec2 b = aKm(BOLIVIA[i + 1], lonLat);
+    // Regla del rayo hacia +x: cuántas veces cruza la frontera.
+    if ((a.y > 0.0) != (b.y > 0.0) && a.x + (b.x - a.x) * (-a.y) / (b.y - a.y) > 0.0) dentro = 1.0 - dentro;
+    float d = aSegmento(a, b, lado, h);
+    if (d < dFrontera) {
+      dFrontera = d;
+      largoFrontera = acumulado + h * length(b - a);
+    }
+    acumulado += length(b - a);
+  }
+  // (Bolivia se reconoce en el mapa: sus tierras algo más cálidas y claras.)
+  suelo = mix(suelo, mix(suelo, vec3(0.98, 0.84, 0.5), 0.22) * 1.04, dentro);
+  float anchoTrazo = max(2.2, 1.6 * kmPorPixel);
+  float guion = step(0.42, fract(largoFrontera / max(18.0, 9.0 * kmPorPixel)));
+  suelo = mix(suelo, vec3(0.55, 0.16, 0.14), (1.0 - smoothstep(anchoTrazo * 0.5, anchoTrazo * 0.5 + kmPorPixel, dFrontera)) * guion * 0.85);
+
+  // Los ríos: azules, con un mínimo de un píxel y medio de ancho.
+  float anchoRio = 1.0;
+  float dRio = 1e5;
+  for (int i = 0; i < 59; i++) {
+    vec2 a = RIOS[i];
+    vec2 b = RIOS[i + 1];
+    if (a.x > 900.0) {
+      anchoRio = a.y;
+      continue;
+    }
+    if (b.x > 900.0) continue;
+    float d = aSegmento(aKm(a, lonLat), aKm(b, lonLat), lado, h) - 0.5 * max(anchoRio, 1.5 * kmPorPixel);
+    dRio = min(dRio, d);
+  }
+  suelo = mix(suelo, vec3(0.3, 0.56, 0.86), 1.0 - smoothstep(-0.5 * kmPorPixel, 0.5 * kmPorPixel, dRio + 0.4 * ondas * step(40.0, kmPorPixel)));
+
+  // Las ciudades: puntitos oscuros con aro blanco.
+  float dCiudad = 1e5;
+  for (int i = 0; i < 6; i++) dCiudad = min(dCiudad, length(aKm(CIUDADES[i], lonLat)));
+  float radioCiudad = max(5.0, 3.0 * kmPorPixel);
+  suelo = mix(suelo, vec3(1.0, 0.97, 0.9), 1.0 - smoothstep(radioCiudad * 1.5, radioCiudad * 1.5 + kmPorPixel, dCiudad));
+  suelo = mix(suelo, vec3(0.3, 0.16, 0.14), 1.0 - smoothstep(radioCiudad, radioCiudad + kmPorPixel, dCiudad));
+
   color = mix(color, suelo, tierra);
 
-  // El lago Titicaca (con el Wiñaymarka al sureste), como el mar: orilla clara y su tinta.
+  // El lago Titicaca (con el Wiñaymarka al sureste) y el Poopó, como el mar: orilla clara y tinta.
   vec2 t = -aKm(vec2(-69.35, -15.85), lonLat);
   float c = cos(0.94);
   float s = sin(0.94);
   t = vec2(c * t.x - s * t.y, s * t.x + c * t.y);
-  float dLago = min((length(t / vec2(88.0, 34.0)) - 1.0) * 34.0, length(-aKm(vec2(-68.85, -16.42), lonLat)) - 20.0) + 0.5 * ondas;
+  float dLago = min((length(t / vec2(88.0, 34.0)) - 1.0) * 34.0, length(-aKm(vec2(-68.85, -16.42), lonLat)) - 20.0);
+  dLago = min(dLago, (length(-aKm(vec2(-67.05, -18.75), lonLat) / vec2(16.0, 28.0)) - 1.0) * 16.0) + 0.5 * ondas;
   color = mix(color, mix(vec3(0.2, 0.47, 0.82), vec3(0.38, 0.68, 0.9), zona(dLago, -9.0)), 1.0 - zona(dLago, 0.0));
   color = mix(color, vec3(0.12, 0.16, 0.26), trazo(dLago, 1.2));
 
-  // El corazón del destino, derecho en pantalla, con su ribete blanco y su tinta.
-  vec2 enDestino = -aKm(uDestino, lonLat);
-  vec3 norte = vec3(-sin(radians(uDestino.y)) * cos(radians(uDestino.x)), cos(radians(uDestino.y)), sin(radians(uDestino.y)) * sin(radians(uDestino.x)));
-  vec3 este = vec3(-sin(radians(uDestino.x)), 0.0, -cos(radians(uDestino.x)));
-  vec2 eje = normalize(vec2(dot(uArribaCamara, este), dot(uArribaCamara, norte)) + vec2(0.0, 1e-4));
-  const float ESCALA = 120.0;
-  vec2 q = vec2(dot(enDestino, vec2(eje.y, -eje.x)), dot(enDestino, eje)) / ESCALA + vec2(0.0, 0.6);
-  float dCorazon = corazonMapa(q) * ESCALA;
-  float kmPorPixel = max(length(fwidth(enDestino)), 1e-3);
-  float asoma = smoothstep(18.0, 40.0, 1.25 * ESCALA / kmPorPixel);
-  vec3 corazon = mix(vec3(0.97, 0.42, 0.62), vec3(1.0, 0.97, 0.98), zona(dCorazon, -0.09 * ESCALA));
-  corazon = mix(corazon, vec3(1.0, 0.7, 0.82), (1.0 - smoothstep(0.0, 0.22, length(q - vec2(-0.3, 0.85)))) * 0.8);
-  color = mix(color, corazon, (1.0 - zona(dCorazon, 0.0)) * asoma);
-  color = mix(color, vec3(0.12, 0.16, 0.26), trazo(dCorazon, 1.4) * asoma);
+  // Las sombras de las nubes: azuladas, como las de un dibujo.
+  color = mix(color, color * vec3(0.7, 0.72, 0.86), sombraDeNubes(p) * 0.85);
 
-  return 1.0 - smoothstep(180.0, 420.0, length(enDestino));
+  // Sin las nubes del mapa sobre Bolivia (allí están las de bolas), para que se vea entera.
+  return 1.0 - smoothstep(650.0, 1050.0, length(aKm(uDestino, lonLat)));
 }
 `
 

@@ -375,6 +375,12 @@ uniform float uCroma;
 uniform vec3 uTinta;
 uniform float uAPantalla;
 uniform float uSoloTinta;
+// Dentro de una nube (0..1) y cuánto ha avanzado la cámara por ella (mueve las volutas).
+uniform float uNiebla;
+uniform float uNieblaAvance;
+// 1 al salir de la nube (se abre desde el centro, lo que se ve hacia abajo), −1 al entrar (se
+// cierra primero en el centro).
+uniform float uNieblaSentido;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -383,6 +389,7 @@ ${OKLAB_GLSL}
 ${TONO_GLSL}
 ${PALETA_EPOCA_GLSL}
 ${PAPEL_GLSL}
+${RUIDO3_GLSL}
 
 vec4 texturaBicubica(sampler2D t, vec2 uv) {
   vec2 tamano = vec2(textureSize(t, 0));
@@ -465,6 +472,30 @@ void main() {
   vec2 lineas = texture(uContornos, vUv).rg;
   c = mix(c, c * 0.5, smoothstep(0.12, 0.4, lineas.g) * 0.8);
   c = mix(c, uTinta, smoothstep(0.08, 0.3, lineas.r));
+
+  // Dentro de una nube: niebla de dibujo, crema rosada con volutas lilas que se abren hacia los
+  // bordes al avanzar (la cámara las atraviesa). Al entrar, las volutas cierran desde los bordes;
+  // al salir, se abren desde el centro. Tapa también la tinta.
+  if (uNiebla > 0.001) {
+    vec2 q = (vUv - 0.5) * vec2(uResolucion.x / uResolucion.y, 1.0);
+    float r = length(q);
+    vec2 d = q / max(r, 1e-4);
+    float lejos = log(r + 0.06);
+    float v = fbm3(vec3(d * 2.2, lejos * 2.4 - uNieblaAvance));
+    v += 0.3 * (fbm3(vec3(d * 5.0 + 7.0, lejos * 4.5 - 2.0 * uNieblaAvance)) - 0.5);
+    // Dentro, casi todo claro y rosado (la nube del corazón), con volutas suaves algo más lilas.
+    vec3 claro = vec3(1.0, 0.93, 0.94);
+    vec3 voluta = vec3(0.94, 0.83, 0.92);
+    vec3 niebla = mix(voluta, claro, smoothstep(0.3, 0.56, v));
+    niebla = mix(niebla, vec3(1.0, 0.97, 0.95), smoothstep(0.62, 0.76, v) * 0.6);
+    niebla = mix(claro, niebla, smoothstep(0.02, 0.5, r));
+    float umbral = 1.0 - uNiebla * 1.3;
+    float frente = v + 0.35 * r * uNieblaSentido + max(-uNieblaSentido, 0.0) * 0.2 - umbral;
+    float cubre = smoothstep(-0.015, 0.015, frente);
+    c = mix(c, niebla, cubre);
+    // El frente de la niebla, como el borde de una nube de dibujo.
+    c = mix(c, voluta * 0.9, (1.0 - smoothstep(0.0, 0.03, abs(frente))) * 0.5 * step(uNiebla, 0.98));
+  }
   fragColor = vec4(uAPantalla > 0.5 ? c : linealDesdeSRGB(c), 1.0);
 }
 `

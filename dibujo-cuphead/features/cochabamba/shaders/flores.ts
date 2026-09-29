@@ -95,6 +95,7 @@ void main() {
     ejeX = derechaCam;
     ejeY = arribaCam;
     vLuz = 0.3;
+    centro += normalize(uCamara - centro) * tamano * 0.4;
   }
   vSolEnFlor = vec2(dot(uSol, ejeX), dot(uSol, ejeY));
   vLocal = position.xy;
@@ -229,26 +230,79 @@ vec4 lirio(vec2 p) {
   return lienzo;
 }
 
+// Pétalo de rosa: un abanico redondeado desde el centro c hacia el ángulo 'a', de largo 'largo' y
+// medio ancho angular 'abre' (rad), con la punta redonda y algo ondulada. Distancia aproximada con
+// signo; en 't', lo lejos del centro (0..1) y en 'lado', la posición a lo ancho (-1..1).
+float petaloRosa(vec2 p, vec2 c, float a, float largo, float abre, out float t, out float lado) {
+  vec2 q = p - c;
+  float r = length(q);
+  float angulo = atan(q.y, q.x) - a;
+  angulo = mod(angulo + PI, 2.0 * PI) - PI;
+  lado = angulo / abre;
+  float borde = largo * (1.0 - 0.2 * lado * lado) * (1.0 + 0.035 * sin(lado * 4.0 + a * 3.0));
+  t = r / largo;
+  return max(r - borde, (abs(angulo) - abre) * max(r, 0.05));
+}
+
 vec4 rosa(vec2 p) {
   vec4 lienzo = vec4(0.0);
-  // Rosa vista de frente: tres vueltas de pétalos festoneados (la de fuera más oscura, la de dentro
-  // más clara) y el corazón enrollado en espiral, como las del ramo: fucsia o rosa claro.
-  vec3 color = vVariante < 0.5 ? vec3(0.93, 0.22, 0.55) : vec3(0.99, 0.62, 0.74);
-  vec3 oscuro = color * vec3(0.8, 0.66, 0.76);
-  vec3 claro = mix(color, vec3(1.0, 0.95, 0.97), 0.3);
-  vec3 linea = color * vec3(0.62, 0.45, 0.55);
-  vec2 q = p - vec2(0.0, -0.04);
-  float r = length(q);
-  float a = atan(q.y, q.x) + vVariante * 6.2831853;
-  capa(lienzo, r - (0.9 + 0.07 * cos(5.0 * a)), oscuro, 1.1);
-  capaConLinea(lienzo, r - (0.66 + 0.06 * cos(5.0 * a + PI)), color, linea, 0.9);
-  capaConLinea(lienzo, r - (0.42 + 0.05 * cos(4.0 * a + 1.0)), claro, linea, 0.9);
-  float espiral = abs(fract(r * 7.5 - a / (2.0 * PI)) - 0.5) * 2.0;
-  lienzo.rgb = mix(lienzo.rgb, linea, (1.0 - smoothstep(0.1, 0.24, espiral)) * step(r, 0.36) * vDetalle);
-  // Brillo del lado del Sol.
+  // Como las rosas del ramo: fucsia, rosa claro o melocotón. Sépalos verdes por detrás, tres
+  // vueltas de pétalos (de fuera adentro y, en cada una, de atrás adelante), cada pétalo oscuro en
+  // su base y claro hacia el borde enrollado, y el capullo apretado en espiral en el centro.
+  vec3 color = vVariante < 0.45 ? vec3(0.9, 0.2, 0.5) : vVariante < 0.85 ? vec3(0.99, 0.62, 0.74) : vec3(1.0, 0.7, 0.64);
+  vec3 oscuro = color * vec3(0.62, 0.46, 0.58);
+  vec3 claro = mix(color, vec3(1.0, 0.95, 0.96), 0.45);
+  vec3 linea = color * vec3(0.48, 0.34, 0.44);
   vec2 sol = normalize(vSolEnFlor + 1e-4);
-  float brillo = (1.0 - smoothstep(0.07, 0.14, length(q - sol * 0.5))) * step(r, 0.62);
-  lienzo.rgb = mix(lienzo.rgb, mix(color, vec3(1.0), 0.55), brillo * 0.7 * vDetalle);
+  float giro = vVariante * 6.2831853;
+
+  // Sépalos: cinco puntas verdes que asoman entre los pétalos de fuera.
+  float r = length(p);
+  float angulo = atan(p.y, p.x) - giro * 0.3 + 0.6;
+  float sector = 1.2566371;
+  float delta = (angulo - floor(angulo / sector + 0.5) * sector) * r;
+  capaConLinea(lienzo, max(abs(delta) - 0.1 * (1.0 - r), r - 1.0), vec3(0.38, 0.58, 0.3), vec3(0.22, 0.36, 0.18), 0.8);
+
+  for (int vuelta = 0; vuelta < 3; vuelta++) {
+    float fv = float(vuelta);
+    int n = vuelta == 0 ? 5 : vuelta == 1 ? 4 : 3;
+    float largo = mix(0.9, 0.44, fv * 0.5);
+    float abre = PI / float(n) * mix(1.3, 1.5, fv * 0.5);
+    vec2 c = vec2(0.0, -0.05 + 0.055 * fv);
+    for (int k = 0; k < 5; k++) {
+      if (k >= n) break;
+      // De atrás (arriba) adelante (abajo): arriba, y luego a un lado y a otro bajando.
+      float paso = ceil(float(k) * 0.5) * (mod(float(k), 2.0) < 0.5 ? 1.0 : -1.0);
+      float a = 1.5708 + giro * 0.2 + fv * 0.7 + paso * 6.2831853 / float(n);
+      float t;
+      float lado;
+      float d = petaloRosa(p, c, a, largo, abre, t, lado);
+      vec3 relleno = mix(oscuro, color, smoothstep(0.12, 0.72, t));
+      relleno = mix(relleno, color * 0.86, smoothstep(0.55, 1.0, abs(lado)) * 0.5);
+      relleno *= 0.9 + 0.16 * dot(vec2(cos(a), sin(a)), sol);
+      capaConLinea(lienzo, d, relleno, linea, 0.9);
+      // El borde enrollado: una franja clara junto a la punta, con su sombra por dentro.
+      float dentro = step(d, 0.0);
+      float enBorde = (1.0 - smoothstep(0.035, 0.07, -d)) * smoothstep(0.55, 0.8, t) * dentro;
+      lienzo.rgb = mix(lienzo.rgb, claro, enBorde * mix(0.5, 0.9, vDetalle));
+      float sombraBorde = (1.0 - smoothstep(0.02, 0.05, abs(-d - 0.085))) * smoothstep(0.6, 0.85, t) * dentro;
+      lienzo.rgb = mix(lienzo.rgb, oscuro, sombraBorde * 0.45 * vDetalle);
+    }
+  }
+
+  // El capullo: pétalos apretados en espiral, más oscuro hacia dentro.
+  vec2 q = p - vec2(0.0, 0.1);
+  float rc = length(q);
+  float ac = atan(q.y, q.x) + giro;
+  vec3 capullo = mix(oscuro, mix(color, claro, 0.25), smoothstep(0.02, 0.26, rc));
+  capaConLinea(lienzo, rc - 0.25 - 0.02 * sin(ac * 3.0), capullo, linea, 0.9);
+  float espiral = abs(fract(rc * 9.0 - ac / (2.0 * PI)) - 0.5) * 2.0;
+  float vueltaEspiral = (1.0 - smoothstep(0.12, 0.28, espiral)) * step(rc, 0.24) * smoothstep(0.02, 0.05, rc);
+  lienzo.rgb = mix(lienzo.rgb, linea, vueltaEspiral * vDetalle);
+  lienzo.rgb = mix(lienzo.rgb, claro, (1.0 - smoothstep(0.12, 0.3, abs(fract(rc * 9.0 - ac / (2.0 * PI) + 0.35) - 0.5) * 2.0)) * step(rc, 0.22) * 0.5 * vDetalle);
+  // Brillo del lado del Sol, en el borde del capullo.
+  float brillo = (1.0 - smoothstep(0.05, 0.1, length(q - sol * 0.2))) * step(rc, 0.26);
+  lienzo.rgb = mix(lienzo.rgb, mix(color, vec3(1.0), 0.65), brillo * 0.8 * vDetalle);
   return lienzo;
 }
 
@@ -348,7 +402,7 @@ void main() {
 /** Tallos: tiras verticales que giran hacia la cámara, con la brisa arriba. */
 export const TALLO_VERT = /* glsl */ `
 attribute vec4 aBase;
-attribute vec2 aForma;
+attribute vec3 aForma;
 
 uniform vec3 uCamara;
 uniform float uPixelesPorRadian;
@@ -372,12 +426,15 @@ void main() {
   }
   // Como la flor, el tallo crece al aparecer.
   altura *= smoothstep(0.35, 1.0, pixeles);
+  // La misma brisa que su flor (con otra fase, el tallo se salía por delante de la cabeza), y acaba
+  // justo debajo de ella.
   float mecida = tipo < 0.5 ? 0.018 : 0.035;
   float t = position.y * 0.5 + 0.5;
-  vec2 empuje = brisa(base.xz) * mecida * altura * t * t;
+  vec2 empuje = brisa(base.xz + aForma.z * 3.0) * mecida * altura;
   vec3 aCamara = uCamara - base;
   vec3 ejeX = normalize(vec3(-aCamara.z, 0.0, aCamara.x));
-  vec3 punto = base + ejeX * position.x * grosor * mix(1.0, 0.7, t) + vec3(empuje.x, altura * t, empuje.y);
+  float caida = 0.25 * dot(empuje, empuje) / max(altura, 0.1);
+  vec3 punto = base + ejeX * position.x * grosor * mix(1.0, 0.7, t) + vec3(empuje.x * t * t, (altura * 0.97 - caida) * t, empuje.y * t * t);
   vLocal = position.xy;
   vTipo = tipo;
   vAnchoPx = pixeles;

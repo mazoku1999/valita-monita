@@ -28,6 +28,10 @@ import {
   SOL_VERT,
   TIERRA_FRAG,
 } from '../shaders/sistemaSolar'
+import { DESTINO, NUBE_CORAZON, RADIO_TIERRA_KM } from '@/features/cochabamba/constantes/destino'
+import { NUBE_BOLA_FRAG, NUBE_BOLA_VERT } from '@/features/cochabamba/shaders/nubesBolas'
+import { crearBolasInstanciadas, esteNorte, generarNubesTierra, nieblaEn } from '@/features/cochabamba/utils/nubesDestino'
+import { NIEBLA } from '@/features/dibujo/store/niebla'
 import { SOL_EN_ESCENA } from '../store/solEnEscena'
 import { crearTexturasTierra, type TexturasTierra } from '../utils/texturaTierra'
 
@@ -71,6 +75,13 @@ export interface SistemaSolarProps {
   alineacionTierra?: { readonly current: number }
   /** Recibe la vertical de Cochabamba (vector unitario en el marco del sistema). */
   cochabamba?: { current: THREE.Vector3 }
+  /**
+   * Recibe el noroeste en Cochabamba (unitario, marco del sistema): la cámara lo pone arriba al
+   * bajar, como en el valle, donde el corazón de flores y la nube apuntan hacia allí.
+   */
+  noroeste?: { current: THREE.Vector3 }
+  /** Recibe el norte en Cochabamba (unitario, marco del sistema). */
+  norte?: { current: THREE.Vector3 }
 }
 
 /** Estado de un fotograma del sistema. */
@@ -87,8 +98,6 @@ interface EstadoFotograma {
   /** Posición de la cámara en el mundo y tangente de la mitad de su campo vertical. */
   camara: THREE.Vector3
   tanMitadFov: number
-  /** Hacia dónde tiene la cámara su "arriba", en el mundo (el corazón del mapa se pinta derecho). */
-  arribaCamara: THREE.Vector3
   guias: number
   luna: number
 }
@@ -108,11 +117,8 @@ const SOL = { radio: 3.0, medioLado: 1.75, topePx: 34 } as const
  */
 const TOPE_PLANETAS_PX = 22
 
-/**
- * Cochabamba (Bolivia): latitud y longitud (°) y la hora solar a la que llega la cámara: el
- * amanecer dorado, con el Sol a unos 18° sobre el horizonte, por el este.
- */
-const COCHABAMBA = { latitud: -17.39, longitud: -66.16, hora: 7.25 } as const
+/** Cochabamba (Bolivia) y la hora solar a la que llega la cámara (ver `DESTINO`). */
+const COCHABAMBA = DESTINO
 
 /** Ángulo llevado a (−π, π]. */
 const envolver = (angulo: number): number => angulo - 2 * Math.PI * Math.round(angulo / (2 * Math.PI))
@@ -216,7 +222,16 @@ function crearSistema(fecha: Date) {
         ...(esTierra
           ? {
               uDestino: { value: new THREE.Vector2(COCHABAMBA.longitud, COCHABAMBA.latitud) },
-              uArribaCamara: { value: new THREE.Vector3(0, 1, 0) },
+              uSolLocal: { value: new THREE.Vector3(1, 0, 0) },
+              uSombras: { value: [] as THREE.Vector4[] },
+              uNubeCorazon: {
+                value: new THREE.Vector4(
+                  THREE.MathUtils.degToRad(NUBE_CORAZON.rumbo),
+                  NUBE_CORAZON.escala,
+                  (NUBE_CORAZON.base + NUBE_CORAZON.cima) / 2,
+                  RADIO_TIERRA_KM,
+                ),
+              },
             }
           : {}),
       },
@@ -292,6 +307,33 @@ function crearSistema(fecha: Date) {
   tierra?.malla.add(atmosfera)
   liberables.push(materialAtmosfera)
 
+  // Las nubes de la llegada (la del corazón sobre Cochabamba y cúmulos alrededor), de bolas en el
+  // espacio, hijas de la Tierra: giran con ella, y sus sombras se pintan en su mapa.
+  const nubesTierra = generarNubesTierra()
+  const geometriaNubes = crearBolasInstanciadas(nubesTierra)
+  const materialNubes = new THREE.ShaderMaterial({
+    vertexShader: NUBE_BOLA_VERT,
+    fragmentShader: NUBE_BOLA_FRAG,
+    uniforms: {
+      uCamara: { value: new THREE.Vector3() },
+      uSol: { value: new THREE.Vector3(1, 0, 0) },
+      uEscalaVista: { value: 1 },
+      uPixelesPorRadian: { value: 800 },
+      uBruma: { value: new THREE.Vector2(1, 0) },
+    },
+    // El cartel mira hacia fuera de la cámara: se dibujan las dos caras.
+    side: THREE.DoubleSide,
+  })
+  const nubes = new THREE.Mesh(geometriaNubes, materialNubes)
+  nubes.frustumCulled = false
+  tierra?.malla.add(nubes)
+  liberables.push(geometriaNubes, materialNubes)
+  if (tierra) {
+    const sombras: THREE.Vector4[] = []
+    for (let i = 0; i < nubesTierra.sombras.length; i += 4) sombras.push(new THREE.Vector4().fromArray(nubesTierra.sombras, i))
+    tierra.material.uniforms.uSombras.value = sombras
+  }
+
   // La Luna: mares y cráteres (aspecto 8).
   const materialLuna = new THREE.ShaderMaterial({
     vertexShader: PLANETA_VERT,
@@ -350,6 +392,13 @@ function crearSistema(fecha: Date) {
     -Math.cos(latitudCochabamba) * Math.sin(longitudCochabamba),
   )
   const verticalCochabamba = new THREE.Vector3()
+  const { este: esteCochabamba, norte: norteCochabamba } = esteNorte(COCHABAMBA.latitud, COCHABAMBA.longitud)
+  const noroesteLocal = norteCochabamba.clone().sub(esteCochabamba).normalize()
+  const noroesteCochabamba = new THREE.Vector3()
+  const norteDestino = new THREE.Vector3()
+  const centroTierra = new THREE.Vector3()
+  const solLocal = new THREE.Vector3()
+  const camaraLocal = new THREE.Vector3()
   const giroMundo = new THREE.Quaternion()
   const inclinacionInversa = new THREE.Quaternion()
   const solDesdeTierra = new THREE.Vector3()
@@ -371,7 +420,6 @@ function crearSistema(fecha: Date) {
     altoPixeles,
     camara,
     tanMitadFov,
-    arribaCamara,
     guias,
     luna: visibilidadLuna,
   }: EstadoFotograma): void => {
@@ -421,9 +469,22 @@ function crearSistema(fecha: Date) {
       planeta.malla.quaternion.copy(planeta.inclinacion).multiply(giro)
       if (planeta.id === 'tierra') {
         verticalCochabamba.copy(puntoCochabamba).applyQuaternion(planeta.malla.quaternion)
+        noroesteCochabamba.copy(noroesteLocal).applyQuaternion(planeta.malla.quaternion)
+        norteDestino.copy(norteCochabamba).applyQuaternion(planeta.malla.quaternion)
+        // El Sol y la cámara en el marco de la Tierra: las nubes y sus sombras se calculan ahí.
         planeta.malla.updateWorldMatrix(true, false)
         planeta.malla.getWorldQuaternion(giroMundo).invert()
-        planeta.material.uniforms.uArribaCamara.value.copy(arribaCamara).applyQuaternion(giroMundo)
+        planeta.malla.getWorldPosition(centroTierra)
+        solLocal.copy(posicionSol).sub(centroTierra).normalize().applyQuaternion(giroMundo)
+        planeta.malla.worldToLocal(camaraLocal.copy(camara))
+        planeta.material.uniforms.uSolLocal.value.copy(solLocal)
+        materialNubes.uniforms.uCamara.value.copy(camaraLocal)
+        materialNubes.uniforms.uSol.value.copy(solLocal)
+        materialNubes.uniforms.uEscalaVista.value = planeta.malla.matrixWorld.getMaxScaleOnAxis()
+        materialNubes.uniforms.uPixelesPorRadian.value = pixelesPorRadian
+        // Dentro de la nube del corazón, niebla (el pase la pinta).
+        const km = 1 / RADIO_TIERRA_KM
+        NIEBLA.globo = nieblaEn(camaraLocal, nubesTierra.corazon, (punto) => punto.length() - 1, NUBE_CORAZON.base * km, -2.2 * km, 0.4 * km)
       }
       const uniformes = planeta.material.uniforms
       uniformes.uSol.value.copy(posicionSol)
@@ -469,6 +530,8 @@ function crearSistema(fecha: Date) {
     raiz,
     tierra: tierra?.malla ?? null,
     verticalCochabamba,
+    noroesteCochabamba,
+    norteDestino,
     actualizar,
     cargarMapasTierra,
     liberar: () => {
@@ -489,11 +552,12 @@ export function SistemaSolar({
   tierra,
   alineacionTierra,
   cochabamba,
+  noroeste,
+  norte,
 }: SistemaSolarProps) {
   const sistema = useMemo(() => crearSistema(fecha ?? new Date()), [fecha])
   const relojes = useRef({ orbitas: 0, giros: 0, segundos: 0 })
   const posicionCamara = useRef(new THREE.Vector3())
-  const arribaCamara = useRef(new THREE.Vector3())
 
   useEffect(() => () => sistema.liberar(), [sistema])
 
@@ -506,15 +570,24 @@ export function SistemaSolar({
   useEffect(() => {
     if (tierra) tierra.current = sistema.tierra
     if (cochabamba) cochabamba.current = sistema.verticalCochabamba
-  }, [sistema, tierra, cochabamba])
+    if (noroeste) noroeste.current = sistema.noroesteCochabamba
+    if (norte) norte.current = sistema.norteDestino
+  }, [sistema, tierra, cochabamba, noroeste, norte])
 
-  useEffect(() => () => void (SOL_EN_ESCENA.visible = 0), [])
+  useEffect(
+    () => () => {
+      SOL_EN_ESCENA.visible = 0
+      NIEBLA.globo = 0
+    },
+    [],
+  )
 
   useFrame(({ gl, camera }, delta) => {
     const valor = aparicion?.current ?? 1
     sistema.raiz.visible = valor > 0.002
     if (!sistema.raiz.visible) {
       SOL_EN_ESCENA.visible = 0
+      NIEBLA.globo = 0
       return
     }
     // Los relojes sólo corren mientras se ve: al aparecer, los planetas están donde están hoy. Con
@@ -537,7 +610,6 @@ export function SistemaSolar({
       altoPixeles: gl.domElement.height,
       camara: camera.getWorldPosition(posicionCamara.current),
       tanMitadFov: Math.tan(THREE.MathUtils.degToRad((camera instanceof THREE.PerspectiveCamera ? camera.fov : 45) / 2)),
-      arribaCamara: arribaCamara.current.setFromMatrixColumn(camera.matrixWorld, 1).normalize(),
       guias: guias?.current ?? 1,
       luna: luna?.current ?? 1,
     })

@@ -6,8 +6,10 @@ import * as THREE from 'three'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { SistemaSolar } from '@/features/sistema-solar/components/SistemaSolar'
 import { direccionEcliptica } from '@/features/sistema-solar/datos/planetas'
+import { NUBE_CORAZON, RADIO_TIERRA_KM } from '@/features/cochabamba/constantes/destino'
 import { RECORTE_ENTRADA } from '@/features/cochabamba/store/valle'
-import { VIAJE } from '../constantes/viajeScroll'
+import { CARRIL_VH, VIAJE } from '../constantes/viajeScroll'
+import { interpolarMonotono } from '../utils/interpolarMonotono'
 
 /**
  * Llegada a casa: al salir por la boca del agujero de gusano, delante está nuestro sistema solar,
@@ -21,8 +23,9 @@ import { VIAJE } from '../constantes/viajeScroll'
  * sólo lo justo para centrar la Tierra (unos grados) y avanza hacia ella. Antes se orientaba hacia
  * un punto de vista fijo de la Tierra y la vista se iba hacia arriba: no respetaba de dónde venía.
  * Al llegar, la Tierra gira hasta que en Cochabamba amanece y la cámara planea sobre ella hasta
- * quedar encima de Bolivia; baja entonces hacia el corazón que marca el destino en el mapa, las
- * nubes (`NubesDeEntrada`) lo rodean y lo tapan, y al abrirse ya está el valle.
+ * quedar encima de Bolivia; baja entonces derecha hacia la nube con forma de corazón que flota
+ * sobre Cochabamba (nubes de verdad, en el espacio: ver `shaders/nubesBolas.ts`) y entra en ella;
+ * en la niebla, el valle toma el relevo y la cámara sale por la base de la nube.
  *
  * Va dentro del marco del agujero de gusano (`TunelAgujeroGusano`), que sigue a la cámara con
  * retraso: el sistema no se mueve respecto al cielo del otro lado (la Vía Láctea que se ve al
@@ -58,11 +61,29 @@ const OCUPACION_TIERRA = 0.72
 const VIAJE_TIERRA = { centrar: [0, 0.35], avance: [0.1, 1], alineacion: [0.35, 0.9] } as const
 
 /**
- * Entrada en la Tierra: altura sobre Cochabamba cuando las nubes la tapan (en radios de la Tierra;
- * el corazón del mapa llena entonces media pantalla), cuánto mira la cámara por delante de su
- * camino mientras planea y el plano cercano, en fracción de la altura.
+ * Entrada en la Tierra: cuánto mira la cámara por delante de su camino mientras planea y el plano
+ * cercano, en fracción de la distancia a la nube más cercana (la cima de la nube del corazón).
  */
-const ENTRADA = { alturaFinal: 0.045, adelanto: 0.3, cerca: 0.25 } as const
+const ENTRADA = { adelanto: 0.3, cerca: 0.2 } as const
+
+/**
+ * La bajada hacia Cochabamba: altura sobre el suelo (km) en cada vh del carril, interpolada en
+ * escala logarítmica (el suelo crece a ritmo parejo). Empieza donde acaba el acercamiento (la
+ * Tierra a media pantalla); al terminar el planeo está a unos 1600 km (se ve Bolivia entera, con los
+ * Andes y el Titicaca) y baja derecha hasta la nube del corazón (su cima a 12 km) y dentro de ella,
+ * adonde llega sin frenar.
+ */
+const BAJADA_KM: readonly (readonly [number, number])[] = [
+  [1395, 1600],
+  [1414, 330],
+  [1427, 75],
+  [1437, 20],
+  [1445, 6.5],
+]
+const BAJADA_VH = [1240, ...BAJADA_KM.map(([vh]) => vh)]
+/** Tramo (vh) en el que la cámara pasa de tener el norte arriba a tener el noroeste. */
+const GIRO_NOROESTE = [1414, 1436] as const
+const BAJADA_LOG_KM = BAJADA_KM.map(([, km]) => Math.log(km))
 
 const suavizar = (borde0: number, borde1: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - borde0) / (borde1 - borde0)))
@@ -96,6 +117,8 @@ export function EscenaSistemaSolar() {
   const alineacionTierra = useRef(0)
   const tierra = useRef<THREE.Object3D | null>(null)
   const cochabamba = useRef(new THREE.Vector3(0, 1, 0))
+  const noroeste = useRef(new THREE.Vector3(1, 0, 0))
+  const norte = useRef(new THREE.Vector3(0, 1, 0))
   const [movimientoReducido, setMovimientoReducido] = useState(false)
   const auxiliares = useRef({
     matriz: new THREE.Matrix4(),
@@ -109,6 +132,7 @@ export function EscenaSistemaSolar() {
     objetivo: new THREE.Vector3(),
     origen: new THREE.Vector3(),
     arriba: new THREE.Vector3(0, 1, 0),
+    arribaCamara: new THREE.Vector3(0, 1, 0),
   })
 
   useEffect(() => {
@@ -141,11 +165,11 @@ export function EscenaSistemaSolar() {
       objetivo,
       origen,
       arriba,
+      arribaCamara,
     } = auxiliares.current
     const avance = suavizar(VIAJE.sistemaInicio, VIAJE.sistemaEntero, progreso)
     const tramoTierra = Math.min(1, Math.max(0, (progreso - VIAJE.tierraInicio) / (VIAJE.tierraFin - VIAJE.tierraInicio)))
     const tramoPlaneo = Math.min(1, Math.max(0, (progreso - VIAJE.tierraFin) / (VIAJE.planeoFin - VIAJE.tierraFin)))
-    const tramoBajada = Math.min(1, Math.max(0, (progreso - VIAJE.tierraFin) / (VIAJE.nubesPleno - VIAJE.tierraFin)))
     // Camino de la Tierra: la cámara la centra y avanza hacia ella; las órbitas se apagan, la Luna
     // aparece, el reloj de las órbitas casi se detiene y la Tierra gira hasta que en Cochabamba
     // amanece.
@@ -192,18 +216,21 @@ export function EscenaSistemaSolar() {
       const recorrido = Math.exp(Math.log(lejos) + (Math.log(cerca) - Math.log(lejos)) * acercar)
       camaraSistema.copy(malla.position).addScaledVector(haciaCamara, recorrido)
       objetivo.copy(malla.position).multiplyScalar(centrar)
-      if (tramoBajada > 0) {
+      if (tramoPlaneo > 0) {
         // Entrada: la cámara planea sobre la Tierra desde donde llegó hasta la vertical de
-        // Cochabamba y pasa de mirar al centro de la Tierra a mirar el suelo por delante; después
-        // sigue bajando derecha hacia el corazón del mapa. La bajada (en escala logarítmica)
-        // arranca despacio y llega a las nubes todavía bajando, sin frenar.
+        // Cochabamba y pasa de mirar al centro de la Tierra a mirar el suelo; después sigue bajando
+        // derecha hacia la nube del corazón y entra en ella. Mientras planea gira hasta tener el
+        // norte arriba (Bolivia se ve como en un mapa) y, ya cerca de la nube, el noroeste, como en
+        // el valle: el corazón queda derecho.
         const e = suavizar(0, 1, tramoPlaneo)
-        const b = tramoBajada * tramoBajada * (2 - tramoBajada)
         interpolarDireccion(haciaCamara, cochabamba.current, e, direccionEntrada)
-        const alturaInicial = cerca - radioTierra
-        const alturaFinal = ENTRADA.alturaFinal * radioTierra
-        const altura = Math.exp(Math.log(alturaInicial) + (Math.log(alturaFinal) - Math.log(alturaInicial)) * b)
-        RECORTE_ENTRADA.cerca = ENTRADA.cerca * altura
+        const kmAMundo = radioTierra / RADIO_TIERRA_KM
+        const logAltura = [Math.log(cerca - radioTierra), ...BAJADA_LOG_KM.map((ln) => ln + Math.log(kmAMundo))]
+        const altura = Math.exp(interpolarMonotono(progreso * CARRIL_VH, BAJADA_VH, logAltura, true))
+        RECORTE_ENTRADA.cerca = ENTRADA.cerca * Math.max(altura - NUBE_CORAZON.cima * kmAMundo, 0.05 * kmAMundo)
+        const giroFinal = suavizar(GIRO_NOROESTE[0], GIRO_NOROESTE[1], progreso * CARRIL_VH)
+        arribaCamara.copy(norte.current).lerp(noroeste.current, giroFinal).normalize()
+        arribaCamara.lerp(arriba, 1 - e).normalize()
         camaraSistema.copy(malla.position).addScaledVector(direccionEntrada, radioTierra + altura)
         interpolarDireccion(direccionEntrada, cochabamba.current, ENTRADA.adelanto * (1 - e), direccionMirada)
         objetivo.copy(malla.position).addScaledVector(direccionMirada, radioTierra * e)
@@ -215,7 +242,7 @@ export function EscenaSistemaSolar() {
 
     // El sistema se gira para que la cámara lo vea desde `vista` con el norte de la eclíptica
     // hacia arriba, y se coloca para que el objetivo quede en el eje, delante, a `distancia`.
-    matriz.lookAt(vista, origen, arriba)
+    matriz.lookAt(vista, origen, tramoPlaneo > 0 ? arribaCamara : arriba)
     grupo.quaternion.setFromRotationMatrix(matriz).invert()
     grupo.position.copy(objetivo).applyQuaternion(grupo.quaternion).multiplyScalar(-1)
     grupo.position.z -= distancia
@@ -232,6 +259,8 @@ export function EscenaSistemaSolar() {
         tierra={tierra}
         alineacionTierra={alineacionTierra}
         cochabamba={cochabamba}
+        noroeste={noroeste}
+        norte={norte}
       />
     </group>
   )

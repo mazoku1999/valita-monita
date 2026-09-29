@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
+import { NUBE_BOLA_FRAG, NUBE_BOLA_VERT } from '../shaders/nubesBolas'
 import { ARBOL_FRAG, ARBOL_VERT, MARIPOSA_FRAG, MARIPOSA_VERT, NUBE_VALLE_FRAG, NUBE_VALLE_VERT, PETALO_FRAG, PETALO_VERT } from '../shaders/vida'
 import { crearQuadInstanciado } from '../utils/flores'
+import { crearBolasInstanciadas, generarNubesValle } from '../utils/nubesDestino'
 import { CAJA_PETALOS, MARCO_FINAL, crearAlasInstanciadas, generarVida } from '../utils/vida'
 
 /** Uniformes que comparte con las flores (los actualiza `EscenaCochabamba` en cada fotograma). */
@@ -22,6 +24,7 @@ interface MallasVida {
   petalos: THREE.InstancedBufferGeometry
   nubes: THREE.InstancedBufferGeometry
   arboles: THREE.InstancedBufferGeometry
+  nubesEntrada: THREE.InstancedBufferGeometry
 }
 
 const crearMallasVida = (): MallasVida => {
@@ -31,12 +34,14 @@ const crearMallasVida = (): MallasVida => {
     petalos: crearQuadInstanciado({ aAzar: [datos.petaloAzar, 4], aAzar2: [datos.petaloAzar2, 4] }, datos.petalos),
     nubes: crearQuadInstanciado({ aCentro: [datos.nubeCentro, 4], aAzar: [datos.nubeAzar, 4] }, datos.nubes),
     arboles: crearQuadInstanciado({ aBase: [datos.arbolBase, 4], aAzar: [datos.arbolAzar, 4] }, datos.arboles),
+    nubesEntrada: crearBolasInstanciadas(generarNubesValle()),
   }
 }
 
 /**
  * La vida del valle al final del viaje (ver `utils/vida.ts`): eucaliptos, nubes de la mañana,
- * mariposas y pétalos al viento. Va dentro del grupo del valle, en sus coordenadas.
+ * mariposas y pétalos al viento, y las nubes de bolas de la llegada (ver `utils/nubesDestino.ts`).
+ * Va dentro del grupo del valle, en sus coordenadas.
  */
 export function VidaDelValle({ uniformes }: { uniformes: UniformesValle }) {
   const [mallas, setMallas] = useState<MallasVida | null>(null)
@@ -63,6 +68,14 @@ export function VidaDelValle({ uniformes }: { uniformes: UniformesValle }) {
       }),
       nubes: new THREE.ShaderMaterial({ vertexShader: NUBE_VALLE_VERT, fragmentShader: NUBE_VALLE_FRAG, uniforms: uniformes, side: THREE.DoubleSide }),
       arboles: new THREE.ShaderMaterial({ vertexShader: ARBOL_VERT, fragmentShader: ARBOL_FRAG, uniforms: uniformes, side: THREE.DoubleSide }),
+      // La nube de entrada (la base de la del corazón) y cúmulos junto al camino: bolas en el
+      // espacio, con la bruma del valle.
+      nubesEntrada: new THREE.ShaderMaterial({
+        vertexShader: NUBE_BOLA_VERT,
+        fragmentShader: NUBE_BOLA_FRAG,
+        uniforms: { ...uniformes, uEscalaVista: { value: 1 }, uBruma: { value: new THREE.Vector2(17000, 0.9) } },
+        side: THREE.DoubleSide,
+      }),
     }
   }, [uniformes])
 
@@ -87,6 +100,7 @@ export function VidaDelValle({ uniformes }: { uniformes: UniformesValle }) {
   return (
     <>
       <mesh geometry={mallas.arboles} material={materiales.arboles} frustumCulled={false} />
+      <mesh geometry={mallas.nubesEntrada} material={materiales.nubesEntrada} frustumCulled={false} />
       {/* Después del suelo, en su orden (las del cielo comparten profundidad). */}
       <mesh geometry={mallas.nubes} material={materiales.nubes} frustumCulled={false} renderOrder={1} />
       <mesh geometry={mallas.mariposas} material={materiales.mariposas} frustumCulled={false} renderOrder={2} />

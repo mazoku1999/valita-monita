@@ -53,10 +53,11 @@ export const VIAJE = {
    * pintado en el mapa, que las nubes van rodeando hasta taparlo (`nubesPleno`).
    */
   planeoFin: enProgreso(1395),
-  /** Paso por las nubes: cubren la pantalla en `nubesPleno`, cuando la Tierra da paso al valle. */
-  nubesInicio: enProgreso(1385),
+  /**
+   * La cámara está dentro de la nube del corazón (niebla plena): la Tierra da paso al valle, donde
+   * la cámara sale por la base de la nube.
+   */
   nubesPleno: enProgreso(1445),
-  nubesFin: enProgreso(1510),
   /** El valle de Cochabamba: la bajada hasta el corazón de flores y el aterrizaje entre ellas. */
   valleInicio: enProgreso(1445),
   aterrizajeFin: enProgreso(1780),
