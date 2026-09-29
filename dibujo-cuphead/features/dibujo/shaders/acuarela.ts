@@ -143,6 +143,35 @@ vec3 cieloAcuarela(vec3 dir) {
 }
 `
 
+/**
+ * Cielo de la mañana en acuarela, para el valle de Cochabamba (necesita CIELO_ACUARELA_GLSL): azul
+ * limpio arriba y claro hacia el horizonte; hacia el Sol, un resplandor dorado bajo; al lado
+ * contrario, la franja rosada del cinturón de Venus sobre la sombra azulada de la Tierra, como en
+ * los amaneceres de verdad; nubecillas de aguada con su orilla y el grano del pigmento. La dirección
+ * y el Sol van en coordenadas del valle (y hacia arriba).
+ */
+export const CIELO_MANANA_GLSL = /* glsl */ `
+vec3 cieloManana(vec3 d, vec3 sol) {
+  float y = clamp(d.y, -0.1, 1.0);
+  vec3 c = mix(vec3(0.84, 0.88, 0.96), vec3(0.45, 0.62, 0.88), smoothstep(0.0, 0.75, y));
+  float haciaSol = 0.5 + 0.5 * dot(normalize(d.xz + 1e-5), normalize(sol.xz + 1e-5));
+  float bajo = 1.0 - smoothstep(0.0, 0.4, y);
+  c = mix(c, vec3(1.0, 0.86, 0.68), pow(haciaSol, 4.0) * bajo * 0.85);
+  float contrario = 1.0 - haciaSol;
+  float cinturon = smoothstep(0.015, 0.06, y) * (1.0 - smoothstep(0.1, 0.22, y));
+  c = mix(c, vec3(0.98, 0.79, 0.85), cinturon * pow(contrario, 1.3) * 0.8);
+  float sombraTierra = 1.0 - smoothstep(-0.01, 0.035, y);
+  c = mix(c, vec3(0.7, 0.73, 0.88), sombraTierra * pow(contrario, 1.3) * 0.65);
+  // Nubecillas de aguada, más en lo alto, con la orilla donde se secó el agua.
+  float campo = fbm3(d * vec3(2.2, 5.5, 2.2) + vec3(3.0, 0.0, 1.0));
+  float alto = smoothstep(0.03, 0.25, y);
+  c = mix(c, vec3(1.0, 0.97, 0.97), 0.45 * aguada(campo, 0.6, 0.015) * alto);
+  c *= 1.0 - 0.08 * orilla(campo, 0.6, 0.02) * alto;
+  c *= 0.97 + 0.05 * ruido3(d * 19.0);
+  return c;
+}
+`
+
 /** Papel de acuarela (en píxeles de pantalla): grano de prensado en frío a dos escalas. */
 export const PAPEL_GLSL = /* glsl */ `
 float hash21p(vec2 p) {

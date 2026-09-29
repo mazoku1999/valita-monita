@@ -1,6 +1,7 @@
 import { Pass } from 'postprocessing'
 import * as THREE from 'three'
 import { refBufferGas } from '@/features/agujero-negro/store/mallaGas'
+import { VALLE_EN_ESCENA } from '@/features/cochabamba/store/valle'
 import { SOL_EN_ESCENA } from '@/features/sistema-solar/store/solEnEscena'
 import { ACUARELA, COLORES_PLANOS, HERVOR, PELICULA, TINTA } from '../constantes/dibujo'
 import {
@@ -149,6 +150,9 @@ export class PasoDibujo extends Pass {
       uAspecto: { value: 1 },
       uTiempo: { value: 0 },
       uLatido: { value: 0 },
+      uDia: { value: 0 },
+      uRotacionValle: { value: VALLE_EN_ESCENA.rotacion },
+      uSolValle: { value: VALLE_EN_ESCENA.sol },
       ...this.uCamara,
     })
     this.matContorno = material(CONTORNO_FRAG, {
@@ -362,6 +366,7 @@ export class PasoDibujo extends Pass {
     uc.uCieloPintado.value = uc.uProfundidad.value ? this.cieloPintado : 0
     uc.uTiempo.value = this.tiempo
     uc.uLatido.value = this.latido
+    uc.uDia.value = VALLE_EN_ESCENA.dia
     this.dibujar(renderer, this.matCielo, this.cielo)
 
     // 3. Contornos.
@@ -392,7 +397,8 @@ export class PasoDibujo extends Pass {
       ud.uPulsaciones.value = this.pulsaciones
       ud.uGasColor.value = gas ? gas.textures[0] : null
       ud.uGasVisible.value = gasVisible
-      ud.uEstrellasVisibles.value = uc.uCieloPintado.value
+      // De día no hay estrellas.
+      ud.uEstrellasVisibles.value = uc.uCieloPintado.value * (1 - VALLE_EN_ESCENA.dia)
       ud.uBandaVisible.value = ud.uProfundidad.value ? this.bandaVisible * suavizar(0, 1, gasVisible) : 0
       renderer.setRenderTarget(this.dibujo)
       renderer.render(this.escenaDestellos, this.camaraQuad)

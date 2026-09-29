@@ -5,7 +5,7 @@
  * lineal sólo si detrás hay otro pase.
  */
 
-import { CIELO_ACUARELA_GLSL, PALETA_EPOCA_GLSL, PAPEL_GLSL, RUIDO3_GLSL } from './acuarela'
+import { CIELO_ACUARELA_GLSL, CIELO_MANANA_GLSL, PALETA_EPOCA_GLSL, PAPEL_GLSL, RUIDO3_GLSL } from './acuarela'
 
 export const OKLAB_GLSL = /* glsl */ `
 vec3 linealDesdeSRGB(vec3 c) {
@@ -172,12 +172,18 @@ uniform vec4 uSol;
 uniform float uAspecto;
 uniform float uTiempo;
 uniform float uLatido;
+// De día (el valle de Cochabamba): cuánto (0 el cielo nocturno del espacio, 1 el de la mañana), la
+// rotación de las direcciones del mundo a las del valle y hacia dónde está el Sol en el valle.
+uniform float uDia;
+uniform mat3 uRotacionValle;
+uniform vec3 uSolValle;
 
 in vec2 vUv;
 out vec4 fragColor;
 
 ${RUIDO3_GLSL}
 ${CIELO_ACUARELA_GLSL}
+${CIELO_MANANA_GLSL}
 ${TONO_GLSL}
 
 vec3 resplandorDelSol(vec2 uv, vec3 cielo) {
@@ -219,7 +225,9 @@ void main() {
   cielo += cieloAbierto(vUv + uTexelEntrada * vec2(1.0, -1.0));
   cielo += cieloAbierto(vUv + uTexelEntrada * vec2(-1.0, 1.0));
   cielo += cieloAbierto(vUv + uTexelEntrada * vec2(1.0, 1.0));
-  vec3 c = cieloAcuarela(direccionMundo(vUv));
+  vec3 direccion = direccionMundo(vUv);
+  vec3 c = uDia < 0.999 ? cieloAcuarela(direccion) : vec3(0.0);
+  if (uDia > 0.001) c = mix(c, cieloManana(uRotacionValle * direccion, uSolValle), uDia);
   if (uAgujero.w > 0.0) c = rayosDeSol(vUv, c);
   if (uSol.w > 0.0) c = resplandorDelSol(vUv, c);
   fragColor = vec4(c, 0.25 * cielo * uCieloPintado);
@@ -262,9 +270,9 @@ float objetoEn(vec2 uv, out float banda) {
   return floor(id.r * 5.0 + 0.5);
 }
 
-float zEn(vec2 uv) {
-  vec2 t = vec2(textureSize(uProfundidad, 0));
-  float d = texelFetch(uProfundidad, ivec2(clamp(uv, 0.0, 0.9999) * t), 0).r;
+float zEnPixel(ivec2 p) {
+  ivec2 t = textureSize(uProfundidad, 0);
+  float d = texelFetch(uProfundidad, clamp(p, ivec2(0), t - 1), 0).r;
   return d >= 0.99999 ? 1e6 : profundidadLineal(d);
 }
 
@@ -280,13 +288,38 @@ void main() {
   bool conGas = uGasVisible > 0.5;
   float banda0;
   float objeto0 = objetoEn(uv, banda0);
-  float z0 = zEn(uv);
   float tinta = 0.0;
   float bandas = 0.0;
+  if (!conGas) {
+    // Sin el agujero en pantalla, la tinta sale de los saltos de profundidad: seis parejas de
+    // muestras opuestas, a desplazamientos de píxel exactamente simétricos. El píxel lejano junto a
+    // algo más cercano lleva tinta (queda fuera de la silueta), pero sólo en un corte de verdad: en
+    // una superficie plana la inversa de la profundidad cambia en línea recta por la pantalla, y la
+    // pareja lo comprueba (si no, un suelo visto de refilón se llenaba de tinta; con desplazamientos
+    // redondeados sin simetría, la prueba fallaba cerca del horizonte).
+    ivec2 centro = ivec2(uv * vec2(textureSize(uProfundidad, 0)));
+    float z0 = zEnPixel(centro);
+    float w0 = 1.0 / z0;
+    // Entre dos superficies lejanas (un cerro delante de otro) la tinta se apaga: al ras del suelo,
+    // lo que está a más de ~200 m cabe en unos pocos píxeles bajo el horizonte y los contornos de cada
+    // loma se apilaban en una franja negra. Las siluetas contra el cielo se quedan.
+    float lejania = z0 > 1e5 ? 0.0 : smoothstep(150.0, 900.0, z0);
+    for (int k = 0; k < 6; k++) {
+      float a = 3.14159265 * float(k) / 6.0;
+      ivec2 o = ivec2(round(vec2(cos(a), sin(a)) * grosor * 1.5));
+      float zA = zEnPixel(centro + o);
+      float zB = zEnPixel(centro - o);
+      float wA = 1.0 / zA;
+      float wB = 1.0 / zB;
+      if (abs(wA + wB - 2.0 * w0) < 0.04 * max(max(wA, wB), w0)) continue;
+      if (z0 - zA > 0.06 * zA) tinta += 1.0 - lejania;
+      if (z0 - zB > 0.06 * zB) tinta += 1.0 - lejania;
+    }
+  }
   for (int k = 0; k < 12; k++) {
     float a = 6.2831853 * float(k) / 12.0;
     vec2 direccion = vec2(cos(a), sin(a));
-    vec2 q = uv + direccion * grosor * (conGas ? 1.0 : 1.5) / uResolucion;
+    vec2 q = uv + direccion * grosor / uResolucion;
     if (conGas) {
       float banda;
       float objeto = objetoEn(q, banda);
@@ -298,10 +331,6 @@ void main() {
         float objetoCerca = objetoEn(uv + direccion * 0.55 * grosor / uResolucion, bandaCerca);
         if (objetoCerca == 1.0 && bandaCerca != banda0) bandas += 1.0;
       }
-    } else {
-      // El píxel lejano junto a algo más cercano: la tinta queda fuera de la silueta.
-      float z = zEn(q);
-      if (z0 - z > 0.06 * z) tinta += 1.0;
     }
   }
   fragColor = vec4(tinta / 12.0, bandas / 6.0, 0.0, 1.0);

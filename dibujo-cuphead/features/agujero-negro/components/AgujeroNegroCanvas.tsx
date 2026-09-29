@@ -1,6 +1,8 @@
 'use client'
 
 import { Canvas } from '@react-three/fiber'
+import { EscenaCochabamba } from '@/features/cochabamba/components/EscenaCochabamba'
+import { NubesDeEntrada } from '@/features/cochabamba/components/NubesDeEntrada'
 import { CAMARA_AGUJERO } from '../constantes/parametrosAgujero'
 import { CamaraNarrativa } from './CamaraNarrativa'
 import { EfectosPost } from './EfectosPost'
@@ -35,7 +37,9 @@ export function AgujeroNegroCanvas({ onListo }: AgujeroNegroCanvasProps) {
       <CamaraNarrativa />
       <TunelAgujeroGusano>
         <EscenaSistemaSolar />
+        <EscenaCochabamba />
       </TunelAgujeroGusano>
+      <NubesDeEntrada />
       <EfectosPost />
     </Canvas>
   )
