@@ -3,7 +3,6 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { pulsaciones } from '@/features/dibujo/store/ritmoDibujo'
 import {
   ANILLOS_SATURNO,
   PLANETAS,
@@ -34,14 +33,15 @@ import { crearTexturasTierra, type TexturasTierra } from '../utils/texturaTierra
 
 /**
  * Nuestro sistema solar dibujado como un dibujo animado de los años 30, todo generado por código
- * (sin imágenes): el Sol con cara, sonriente y cantando al compás, rodeado de rayos; los ocho
+ * (sin imágenes): el Sol como un disco dorado rodeado de rayos que giran despacio; los ocho
  * planetas en sus órbitas reales (elementos de JPL, posiciones del día de hoy) girando con sus
  * periodos de Kepler acelerados, sus ejes y días reales, con colores planos, sombra de color y
  * brillo de barniz; los anillos de Saturno entintados con la sombra del planeta, y cada órbita como
  * un camino de puntitos. La Tierra lleva su mapa real (continentes, desiertos, hielo) con las
  * costas entintadas, nubes en borreguitos, atmósfera en un aro y las luces de las ciudades, para
- * verla de cerca; la Luna, dormilona, la acompaña. Distancias y tamaños comprimidos para que se vea
- * (ver `datos/planetas.ts`). Todo sale ya dibujado (ver `shaders/sistemaSolar.ts`).
+ * verla de cerca; la Luna la acompaña en su órbita. Distancias y tamaños comprimidos para que se vea
+ * (ver `datos/planetas.ts`), pero con la perspectiva de una cámara real: nada cambia de tamaño al
+ * acercarse salvo por la distancia. Todo sale ya dibujado (ver `shaders/sistemaSolar.ts`).
  *
  * Marco local: el Sol en el origen, la eclíptica en el plano XZ y el norte eclíptico en +Y.
  * Uso: `<SistemaSolar />` dentro de un `<Canvas>`; no necesita luces de la escena (cada material
@@ -56,11 +56,6 @@ export interface SistemaSolarProps {
   fecha?: Date
   /** Detiene el movimiento (movimiento reducido). */
   quieto?: boolean
-  /**
-   * Factor de tamaño de los planetas (1 = el de `radioVisible`), leído en cada fotograma. Desde
-   * muy lejos conviene reducirlo: a escala real los planetas no serían más que puntos.
-   */
-  escalaPlanetas?: { readonly current: number }
   /** Multiplicador del reloj de las órbitas (1 = `segundosPorAnio`); los giros bajan menos. */
   ritmo?: { readonly current: number }
   /** Visibilidad de las guías (las órbitas), 0..1. */
@@ -69,12 +64,6 @@ export interface SistemaSolarProps {
   luna?: { readonly current: number }
   /** Recibe la malla de la Tierra (su `position` está en el marco del sistema) para seguirla. */
   tierra?: { current: THREE.Object3D | null }
-  /**
-   * Tamaño de los demás planetas respecto al suyo (1) al acercarse a la Tierra (0): con las
-   * distancias comprimidas, Venus, Saturno o Neptuno quedarían enormes junto a la cámara; vistos
-   * desde cerca de la Tierra son puntos de luz, como en la realidad.
-   */
-  lejanos?: { readonly current: number }
 }
 
 /** Estado de un fotograma del sistema. */
@@ -82,41 +71,37 @@ interface EstadoFotograma {
   anios: number
   segundos: number
   segundosGiro: number
-  pulsaciones: number
   aparicion: number
   /** Alto del lienzo en píxeles de dispositivo (los puntos de las órbitas crecen con él). */
   altoPixeles: number
-  /** Posición y orientación de la cámara en el mundo y tangente de la mitad de su campo vertical. */
+  /** Posición de la cámara en el mundo y tangente de la mitad de su campo vertical. */
   camara: THREE.Vector3
-  orientacionCamara: THREE.Quaternion
   tanMitadFov: number
-  escala: number
   guias: number
   luna: number
-  lejanos: number
 }
 
 /**
- * El Sol de caricatura: su radio (mayor que el del original), el medio lado del cartel con sus
- * rayos (en radios) y el radio mínimo en pantalla (px a 720 de alto): de lejos se dibuja algo más
- * grande de lo que tocaría para que su cara se siga leyendo, como el protagonista que es. Al
- * acercarse a la Tierra se encoge como los demás planetas (si no, sus rayos llenaban la pantalla).
+ * El Sol de caricatura: radio fijo en el mundo, medio lado del cartel con sus rayos (en radios) y
+ * tope de su radio en pantalla (px a 720 de alto).
  */
-const SOL = { radio: 3.4, medioLado: 1.9, minimoPx: 24, cerca: 0.35 } as const
+const SOL = { radio: 3.0, medioLado: 1.75, topePx: 34 } as const
 
 /**
- * La Luna: radio real relativo a la Tierra y órbita comprimida (a escala serían 60 radios). Al
- * final, cuando aparece junto a la Tierra, deja su órbita y "posa": se queda arriba a la derecha de
- * la Tierra vista desde la cámara, algo detrás de ella (`pose`: derecha, arriba y hacia el fondo),
- * para que se vea su cara. Con su órbita real quedaba detrás de la Tierra o fuera de cuadro.
+ * Tope del radio en pantalla de los planetas lejanos (px a 720 de alto; la Tierra y la Luna no lo
+ * tienen). Las distancias están comprimidas: a escala real, ir de la vista del sistema entero hasta
+ * la Tierra apenas cambiaría la distancia al Sol o a Júpiter, y su tamaño aparente casi no variaría.
+ * Comprimidas, el Sol y los planetas que quedan cerca del camino se hinchaban al pasar. Con el tope
+ * se comportan como lo que son, astros lejanos; con el sistema entero a la vista ninguno llega a él.
  */
+const TOPE_PLANETAS_PX = 22
+
+/** La Luna: radio real relativo a la Tierra y órbita comprimida (a escala serían 60 radios). */
 const LUNA = {
   radio: 0.273,
   distancia: 4.5,
   periodoAnios: 27.32 / 365.25,
   inclinacion: (5.1 * Math.PI) / 180,
-  pose: [0.62, 0.3, 0.72] as const,
-  aumentoPose: 1.2,
 } as const
 
 /** Color de los puntitos de cada órbita (sRGB): crema teñido del color del planeta. */
@@ -129,12 +114,6 @@ const TINTE_ORBITA: Readonly<Record<IdPlaneta, readonly [number, number, number]
   saturno: [1.0, 0.92, 0.72],
   urano: [0.74, 0.96, 0.96],
   neptuno: [0.7, 0.8, 1.0],
-}
-
-/** Pulso del compás (1 en cada pulsación, cae enseguida), como `latido` en el ritmo del dibujo. */
-const pulso = (n: number): number => {
-  const onda = 0.5 + 0.5 * Math.cos(2 * Math.PI * n)
-  return onda * onda * onda
 }
 
 /** Separación entre los puntitos de una órbita (unidades del sistema) y tamaño del punto (px a 720 de alto). */
@@ -155,14 +134,13 @@ function crearSistema(fecha: Date) {
   const liberables: { dispose: () => void }[] = []
   const siglosIniciales = siglosDesdeJ2000(fecha)
 
-  // Sol: un cartel de cara a la cámara con la cara y los rayos dibujados.
+  // Sol: un cartel de cara a la cámara con el disco y los rayos dibujados.
   const materialSol = new THREE.ShaderMaterial({
     vertexShader: SOL_VERT,
     fragmentShader: SOL_FRAG,
     uniforms: {
       uAparicion: { value: 0 },
       uTiempo: { value: 0 },
-      uPulsaciones: { value: 0 },
       uTamano: { value: SOL.radio * SOL.medioLado },
       uMedioLado: { value: SOL.medioLado },
     },
@@ -214,7 +192,6 @@ function crearSistema(fecha: Date) {
         uTiempo: { value: 0 },
         uMapa: { value: vacia },
         uPoblacion: { value: vacia },
-        uRebote: { value: 0 },
       },
     })
     const malla = new THREE.Mesh(esTierra ? geometriaTierra : geometriaPlaneta, material)
@@ -281,7 +258,6 @@ function crearSistema(fecha: Date) {
       uCentro: { value: new THREE.Vector3() },
       uRadio: { value: 1 },
       uAparicion: { value: 0 },
-      uRebote: { value: 0 },
     },
   })
   const atmosfera = new THREE.Mesh(geometriaTierra, materialAtmosfera)
@@ -289,7 +265,7 @@ function crearSistema(fecha: Date) {
   tierra?.malla.add(atmosfera)
   liberables.push(materialAtmosfera)
 
-  // La Luna: mares, cráteres y una cara dormilona que mira a la cámara (aspecto 8).
+  // La Luna: mares y cráteres (aspecto 8).
   const materialLuna = new THREE.ShaderMaterial({
     vertexShader: PLANETA_VERT,
     fragmentShader: PLANETA_FRAG,
@@ -298,7 +274,6 @@ function crearSistema(fecha: Date) {
       uSol: { value: new THREE.Vector3() },
       uAparicion: { value: 0 },
       uTiempo: { value: 0 },
-      uRebote: { value: 0 },
     },
   })
   const luna = new THREE.Mesh(geometriaPlaneta, materialLuna)
@@ -325,7 +300,6 @@ function crearSistema(fecha: Date) {
       uCentroPlaneta: { value: new THREE.Vector3() },
       uRadioPlaneta: { value: 1 },
       uAparicion: { value: 0 },
-      uRebote: { value: 0 },
     },
     side: THREE.DoubleSide,
   })
@@ -338,47 +312,51 @@ function crearSistema(fecha: Date) {
   const giro = new THREE.Quaternion()
 
   const direccionLuna = new THREE.Vector3()
-  const poseLuna = new THREE.Vector3()
-  const giroRaiz = new THREE.Quaternion()
+  const posicionPlaneta = new THREE.Vector3()
 
-  /** Coloca todo en `anios` de simulación desde la fecha de partida y aplica el fundido. */
+  /**
+   * Coloca todo en `anios` de simulación desde la fecha de partida. Al aparecer, todo crece desde
+   * nada (en caricatura no se funde desde el negro: salía una mancha oscura); después, cada cosa
+   * tiene su tamaño fijo en el mundo.
+   */
   const actualizar = ({
     anios,
     segundos,
     segundosGiro,
-    pulsaciones: pulsos,
     aparicion,
     altoPixeles,
     camara,
-    orientacionCamara,
     tanMitadFov,
-    escala,
     guias,
     luna: visibilidadLuna,
-    lejanos,
   }: EstadoFotograma): void => {
     const siglos = siglosIniciales + anios / 100
-    // En caricatura nada se funde desde el negro (salía una mancha oscura): todo aparece creciendo.
     const crecer = aparicion * aparicion * (3 - 2 * aparicion)
+    const pixelesPorRadian = altoPixeles / 2 / tanMitadFov
     raiz.updateWorldMatrix(true, false)
     sol.getWorldPosition(posicionSol)
     materialSol.uniforms.uAparicion.value = 1
     materialSol.uniforms.uTiempo.value = segundos
-    materialSol.uniforms.uPulsaciones.value = pulsos
-    const radioSolPx = (SOL.radio / Math.max(camara.distanceTo(posicionSol), 1e-3)) * (altoPixeles / 2 / tanMitadFov)
-    const escalaSol =
-      Math.max(1, (SOL.minimoPx * (altoPixeles / 720)) / Math.max(radioSolPx, 1e-3)) * (SOL.cerca + (1 - SOL.cerca) * lejanos) * crecer
-    materialSol.uniforms.uTamano.value = SOL.radio * SOL.medioLado * escalaSol
+    let radioSol = SOL.radio * crecer
+    const radioSolPx = (radioSol / Math.max(camara.distanceTo(posicionSol), 1e-3)) * pixelesPorRadian
+    const topeSol = SOL.topePx * (altoPixeles / 720)
+    if (radioSolPx > topeSol) radioSol *= topeSol / radioSolPx
+    materialSol.uniforms.uTamano.value = radioSol * SOL.medioLado
     SOL_EN_ESCENA.posicion.copy(posicionSol)
-    SOL_EN_ESCENA.radio = SOL.radio * escalaSol
+    SOL_EN_ESCENA.radio = radioSol
     SOL_EN_ESCENA.visible = aparicion
     const tamanoPuntito = PUNTITOS_ORBITA.tamano * (altoPixeles / 720) * guias
+    const tope = TOPE_PLANETAS_PX * (altoPixeles / 720)
 
-    planetas.forEach((planeta, indice) => {
+    for (const planeta of planetas) {
       aEscalaVisible(posicionHeliocentrica(planeta.datos, siglos, planeta.malla.position))
-      const esTierra = planeta.id === 'tierra'
-      const alejamiento = esTierra ? 1 : 0.12 + 0.88 * lejanos
-      planeta.malla.scale.setScalar(radioVisible(planeta.datos.radio) * escala * alejamiento * crecer)
+      let radio = radioVisible(planeta.datos.radio) * crecer
+      if (planeta.id !== 'tierra') {
+        posicionPlaneta.copy(planeta.malla.position).applyMatrix4(raiz.matrixWorld)
+        const radioPx = (radio / Math.max(camara.distanceTo(posicionPlaneta), 1e-3)) * pixelesPorRadian
+        if (radioPx > tope) radio *= tope / radioPx
+      }
+      planeta.malla.scale.setScalar(radio)
       const periodo = ROTACION[planeta.id].periodo
       giro.setFromAxisAngle(arriba, ((2 * Math.PI * segundosGiro) / periodo) % (2 * Math.PI))
       planeta.malla.quaternion.copy(planeta.inclinacion).multiply(giro)
@@ -390,41 +368,24 @@ function crearSistema(fecha: Date) {
       planeta.materialOrbita.uniforms.uTamano.value = tamanoPuntito * Math.min(1, aparicion * 1.5)
       planeta.materialOrbita.uniforms.uAltoPx.value = altoPixeles
       planeta.orbita.visible = tamanoPuntito * aparicion > 0.5
-      // Rebote al compás: los planetas pares en el pulso y los impares a contratiempo.
-      uniformes.uRebote.value = pulso(pulsos + 0.5 * (indice % 2))
-    })
+    }
 
     if (tierra) {
       materialAtmosfera.uniforms.uSol.value.copy(posicionSol)
       materialAtmosfera.uniforms.uAparicion.value = 1
-      materialAtmosfera.uniforms.uRebote.value = tierra.material.uniforms.uRebote.value
       tierra.malla.getWorldPosition(materialAtmosfera.uniforms.uCentro.value)
       materialAtmosfera.uniforms.uRadio.value = tierra.malla.scale.x
-      // La Luna gira alrededor de la Tierra en su plano (5.1° sobre la eclíptica).
+      // La Luna gira alrededor de la Tierra en su plano (5.1° sobre la eclíptica). Sólo se muestra
+      // con el tiempo frenado (a ritmo normal da una vuelta cada tres segundos) y aparece creciendo
+      // mientras aún es un puntito.
       const angulo = (2 * Math.PI * anios) / LUNA.periodoAnios + 1.1
       direccionLuna.set(Math.cos(angulo), Math.sin(angulo) * Math.sin(LUNA.inclinacion), -Math.sin(angulo) * Math.cos(LUNA.inclinacion))
-      if (visibilidadLuna > 0) {
-        // La pose, en el marco del sistema: ejes de la cámara (derecha, arriba, hacia delante)
-        // llevados al marco local de la raíz.
-        raiz.getWorldQuaternion(giroRaiz).invert()
-        const [derecha, arriba, fondo] = LUNA.pose
-        poseLuna
-          .set(derecha, arriba, -fondo)
-          .applyQuaternion(orientacionCamara)
-          .applyQuaternion(giroRaiz)
-          .normalize()
-        direccionLuna.lerp(poseLuna, visibilidadLuna).normalize()
-      }
-      luna.position.copy(tierra.malla.position).addScaledVector(direccionLuna, LUNA.distancia * escala)
-      luna.scale.setScalar(radioVisible(1) * LUNA.radio * escala * crecer)
+      luna.position.copy(tierra.malla.position).addScaledVector(direccionLuna, LUNA.distancia)
+      luna.scale.setScalar(radioVisible(1) * LUNA.radio * crecer * visibilidadLuna)
       luna.visible = visibilidadLuna > 0.002
       materialLuna.uniforms.uSol.value.copy(posicionSol)
       materialLuna.uniforms.uAparicion.value = 1
       materialLuna.uniforms.uTiempo.value = segundos
-      materialLuna.uniforms.uRebote.value = pulso(pulsos + 0.25)
-      // Aparece creciendo (en caricatura no se funde: se infla) y posa algo más grande de lo que
-      // tocaría, para que su cara se lea.
-      luna.scale.multiplyScalar(Math.min(1, visibilidadLuna * 1.2) * (1 + LUNA.aumentoPose * visibilidadLuna))
     }
 
     if (saturno) {
@@ -435,12 +396,8 @@ function crearSistema(fecha: Date) {
       saturno.malla.getWorldPosition(materialAnillos.uniforms.uCentroPlaneta.value)
       materialAnillos.uniforms.uRadioPlaneta.value = saturno.malla.scale.x
       materialAnillos.uniforms.uSol.value.copy(posicionSol)
-      // Reducidos a unos píxeles, sus bandas y su tinta serían una mancha: se quitan antes que el planeta.
       materialAnillos.uniforms.uAparicion.value = 1
-      materialAnillos.uniforms.uRebote.value = saturno.material.uniforms.uRebote.value
-      anillos.visible = lejanos > 0.3
     }
-
   }
 
   return {
@@ -460,17 +417,14 @@ export function SistemaSolar({
   segundosPorAnio = 40,
   fecha,
   quieto = false,
-  escalaPlanetas,
   ritmo,
   guias,
   luna,
   tierra,
-  lejanos,
 }: SistemaSolarProps) {
   const sistema = useMemo(() => crearSistema(fecha ?? new Date()), [fecha])
   const relojes = useRef({ orbitas: 0, giros: 0, segundos: 0 })
   const posicionCamara = useRef(new THREE.Vector3())
-  const orientacionCamara = useRef(new THREE.Quaternion())
 
   useEffect(() => () => sistema.liberar(), [sistema])
 
@@ -486,7 +440,7 @@ export function SistemaSolar({
 
   useEffect(() => () => void (SOL_EN_ESCENA.visible = 0), [])
 
-  useFrame(({ gl, clock, camera }, delta) => {
+  useFrame(({ gl, camera }, delta) => {
     const valor = aparicion?.current ?? 1
     sistema.raiz.visible = valor > 0.002
     if (!sistema.raiz.visible) {
@@ -507,16 +461,12 @@ export function SistemaSolar({
       anios: relojes.current.orbitas / segundosPorAnio,
       segundos: relojes.current.segundos,
       segundosGiro: relojes.current.giros,
-      pulsaciones: pulsaciones(clock.getElapsedTime()),
       aparicion: valor,
       altoPixeles: gl.domElement.height,
       camara: camera.getWorldPosition(posicionCamara.current),
-      orientacionCamara: camera.getWorldQuaternion(orientacionCamara.current),
       tanMitadFov: Math.tan(THREE.MathUtils.degToRad((camera instanceof THREE.PerspectiveCamera ? camera.fov : 45) / 2)),
-      escala: escalaPlanetas?.current ?? 1,
       guias: guias?.current ?? 1,
       luna: luna?.current ?? 1,
-      lejanos: lejanos?.current ?? 1,
     })
   })
 

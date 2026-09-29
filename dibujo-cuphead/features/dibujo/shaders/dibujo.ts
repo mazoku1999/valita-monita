@@ -182,13 +182,14 @@ ${TONO_GLSL}
 
 vec3 resplandorDelSol(vec2 uv, vec3 cielo) {
   vec2 q = (uv - uSol.xy) * vec2(uAspecto, 1.0);
-  // Distancia en radios del disco del Sol, desde su borde.
-  float d = max(length(q) / max(uSol.z, 1e-4) - 1.0, 0.0);
+  // Distancia desde el borde del disco, en unidades de un alcance que crece con el Sol en pantalla
+  // pero no tanto como él: de cerca, el resplandor no llena el cielo entero.
+  float d = max(length(q) - uSol.z, 0.0) / (0.12 + 0.5 * uSol.z);
   float angulo = atan(q.y, q.x);
-  float rayo = smoothstep(-0.3, 0.3, cos(angulo * 12.0 - uTiempo * 0.1));
+  float rayo = smoothstep(-0.3, 0.3, cos(angulo * 12.0 - uTiempo * 0.05));
   vec3 c = mix(cielo, vec3(0.96, 0.56, 0.42), 0.6);
-  c = mix(c, vec3(1.0, 0.84, 0.5), exp(-d * 0.8));
-  float mezcla = uSol.w * exp(-d * 0.3) * (0.5 + 0.5 * rayo) * (0.9 + 0.1 * uLatido);
+  c = mix(c, vec3(1.0, 0.84, 0.5), exp(-d * 2.4));
+  float mezcla = uSol.w * exp(-d) * (0.55 + 0.45 * rayo);
   return mix(cielo, c, clamp(mezcla, 0.0, 1.0));
 }
 
@@ -586,10 +587,9 @@ void main() {
  * (`uPulsaciones`, ver `store/ritmoDibujo.ts`), la mitad en el pulso y la otra mitad a
  * contratiempo:
  *
- * - Las estrellas de cinco puntas bailan al estilo rubber hose: se aplastan en cada pulso y se
- *   balancean a un lado y a otro.
- * - Los puntos y destellos titilan a mano (cambian con cada dibujo), laten con el pulso, a veces
- *   parpadean y a veces se encienden en un destello grande que se apaga antes del pulso siguiente.
+ * - Las estrellas de cinco puntas se mecen despacio a un lado y a otro.
+ * - Los puntos y destellos titilan a mano (cambian con cada dibujo), a veces parpadean y a veces se
+ *   encienden en un destello grande que se apaga antes del pulso siguiente.
  * - Los destellos de la banda se abren unas pulsaciones de cada tanto y vuelven a ser puntos.
  * - Cada 16 pulsaciones puede pasar una estrella fugaz (empieza en un pulso y dura algo más de
  *   dos): cabeza de estrella que gira y se estira con la velocidad, estela entintada que se afina
@@ -633,12 +633,6 @@ float hash11(float p) {
   p *= p + 33.33;
   p *= p + p;
   return fract(p);
-}
-
-// Pulso del compás: 1 en cada pulsación y cae enseguida (como \`latido\` en ritmoDibujo.ts).
-float pulso(float n) {
-  float onda = 0.5 + 0.5 * cos(2.0 * PI * n);
-  return onda * onda * onda;
 }
 
 float luzDeCielo(vec2 uv) {
@@ -736,21 +730,20 @@ void main() {
   float tipo = aForma.w;
   float semilla = aForma.y;
   float azar = hash11(semilla * 7.31 + 1.7);
-  // La mitad baila en el pulso y la otra mitad a contratiempo.
+  // La mitad va con el pulso y la otra mitad a contratiempo.
   float n = uPulsaciones + 0.5 * step(0.5, hash11(semilla * 3.17 + 0.3));
-  float p = pulso(n);
   vec2 escala;
   float giro;
   if (tipo > 1.5) {
-    // Estrella de cinco puntas: se aplasta en el pulso (más ancha y más baja) y se balancea a un
-    // lado y a otro, una pulsación hacia cada lado; cada una con su inclinación.
-    escala = vec2(1.0 + 0.17 * p, 1.0 - 0.11 * p);
-    giro = 0.22 * sin(PI * n) + 0.5 * (azar - 0.5);
+    // Estrella de cinco puntas: se mece despacio a un lado y a otro (dos pulsaciones hacia cada
+    // lado), cada una con su inclinación. Sin latir: aplastarse en cada pulso parecía un latido.
+    escala = vec2(1.0);
+    giro = 0.14 * sin(0.5 * PI * n) + 0.5 * (azar - 0.5);
   } else {
-    // Titileo a mano (cambia con cada dibujo), latido y algún parpadeo.
+    // Titileo a mano (cambia con cada dibujo) y algún parpadeo.
     float titileo = 0.85 + 0.22 * sin(uDibujo * 0.45 * aForma.z + semilla);
     float parpadeo = step(0.94, hash11(floor(uDibujo / 3.0) * 1.37 + semilla * 17.0));
-    escala = vec2(titileo * mix(1.0, 0.45, parpadeo) * (1.0 + 0.22 * p));
+    escala = vec2(titileo * mix(1.0, 0.45, parpadeo));
     giro = tipo > 0.5 ? 0.12 * sin(uDibujo * 0.3 * aForma.z + semilla * 3.0) : 0.0;
     if (esBanda) {
       if (tipo > 0.5) {

@@ -121,42 +121,21 @@ vec3 luzCaricatura(vec3 albedo, vec3 n, vec3 l, vec3 v, float brillo, out float 
 }
 `
 
-/**
- * Rebote de rubber hose: en cada pulso del compás el cuerpo se aplasta un poco en pantalla (más
- * ancho y más bajo) alrededor de su centro; la luz se calcula con la esfera sin deformar.
- */
-const REBOTE_GLSL = /* glsl */ `
-uniform float uRebote;
-
-vec4 conRebote(vec4 vista, vec3 centroVista) {
-  vec3 d = vista.xyz - centroVista;
-  d.x *= 1.0 + 0.03 * uRebote;
-  d.y *= 1.0 - 0.03 * uRebote;
-  return vec4(centroVista + d, vista.w);
-}
-`
-
 export const PLANETA_VERT = /* glsl */ `
 varying vec3 vNormalMundo;
 varying vec3 vPosMundo;
 varying vec3 vLocal;
-
-${REBOTE_GLSL}
 
 void main() {
   vLocal = normalize(position);
   vec4 mundo = modelMatrix * vec4(position, 1.0);
   vPosMundo = mundo.xyz;
   vNormalMundo = normalize(mat3(modelMatrix) * normal);
-  vec3 centroVista = (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-  gl_Position = projectionMatrix * conRebote(viewMatrix * mundo, centroVista);
+  gl_Position = projectionMatrix * viewMatrix * mundo;
 }
 `
 
-/**
- * Planetas y Luna de caricatura: cada uno con su dibujo de zonas planas. La Luna (aspecto 8) lleva
- * además una cara dormilona que siempre mira a la cámara.
- */
+/** Planetas y Luna de caricatura: cada uno con su dibujo de zonas planas. */
 export const PLANETA_FRAG = /* glsl */ `
 uniform float uAspecto;
 uniform vec3 uSol;
@@ -233,9 +212,9 @@ vec3 albedoPlaneta(vec3 p, int tipo) {
     return mix(vec3(0.56, 0.87, 0.88), vec3(0.72, 0.94, 0.93), 1.0 - zona(abs(lat - 0.2), 0.12));
   }
   if (tipo == 8) {
-    // La Luna: crema grisácea con mares y unos pocos cráteres.
-    vec3 col = mix(vec3(0.92, 0.90, 0.82), vec3(0.78, 0.77, 0.73), zona(fbm3(p * 1.8 + 11.0), 0.58));
-    return crateres(p, col, 3.0, 0.3);
+    // La Luna: crema grisácea con mares y cráteres.
+    vec3 col = mix(vec3(0.92, 0.90, 0.82), vec3(0.76, 0.75, 0.71), zona(fbm3(p * 1.8 + 11.0), 0.56));
+    return crateres(p, col, 3.2, 0.4);
   }
   // Neptuno: azul con una franja más oscura y la mancha oscura entintada.
   vec3 colN = mix(vec3(0.30, 0.47, 0.95), vec3(0.22, 0.36, 0.82), 1.0 - zona(abs(lat + 0.1), 0.1));
@@ -245,26 +224,6 @@ vec3 albedoPlaneta(vec3 p, int tipo) {
   return mix(colN, TINTA, trazo(manchaN - 0.15, 1.2));
 }
 
-// Arco de tinta (ojo cerrado, ceja, sonrisa): parábola y = y0 + curva·(x − x0)² de media anchura w.
-float arco(vec2 q, vec2 centro, float curva, float w, float grosorPx) {
-  vec2 d = q - centro;
-  float dentro = 1.0 - step(w, abs(d.x));
-  return trazo(d.y - curva * d.x * d.x, grosorPx) * dentro;
-}
-
-// Cara dormilona de la Luna, en coordenadas de la cara (disco unidad visto de frente).
-vec3 caraLuna(vec2 q, vec3 color, float detalle) {
-  // Mejillas sonrosadas.
-  float mejillas = 1.0 - smoothstep(0.1, 0.2, min(length((q - vec2(-0.42, -0.12)) * vec2(1.0, 1.4)), length((q - vec2(0.42, -0.12)) * vec2(1.0, 1.4))));
-  color = mix(color, vec3(1.0, 0.62, 0.58), 0.55 * mejillas * detalle);
-  // Ojos cerrados (arcos hacia abajo, como dormida) y cejas.
-  float tinta = arco(q, vec2(-0.26, 0.14), 2.6, 0.13, 2.0) + arco(q, vec2(0.26, 0.14), 2.6, 0.13, 2.0);
-  tinta += arco(q, vec2(-0.27, 0.38), -1.8, 0.1, 1.6) + arco(q, vec2(0.27, 0.38), -1.8, 0.1, 1.6);
-  // Sonrisa pequeña.
-  tinta += arco(q, vec2(0.0, -0.3), 2.2, 0.17, 2.0);
-  return mix(color, TINTA, clamp(tinta, 0.0, 1.0) * detalle);
-}
-
 void main() {
   int tipo = int(uAspecto + 0.5);
   vec3 p = normalize(vLocal);
@@ -272,18 +231,6 @@ void main() {
   vec3 n = normalize(vNormalMundo);
   vec3 l = normalize(uSol - vPosMundo);
   vec3 v = normalize(cameraPosition - vPosMundo);
-  if (tipo == 8) {
-    // La cara siempre mira a la cámara: sus coordenadas son la normal proyectada en la pantalla.
-    vec3 derecha = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
-    vec3 arriba = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
-    vec2 q = vec2(dot(n, derecha), dot(n, arriba));
-    // Sólo con la Luna grande en pantalla (a pocos píxeles la cara sería una mancha); los cráteres
-    // y mares se apartan del centro de la cara.
-    float detalle = 1.0 - smoothstep(0.03, 0.06, fwidth(q.x));
-    vec3 liso = vec3(0.92, 0.90, 0.82);
-    albedo = mix(albedo, liso, detalle * (1.0 - smoothstep(0.45, 0.8, length(q))));
-    albedo = caraLuna(q, albedo, detalle);
-  }
   float lado;
   vec3 color = luzCaricatura(albedo, n, l, v, tipo >= 4 && tipo <= 7 ? 0.7 : 0.85, lado);
   gl_FragColor = salidaCaricatura(color * uAparicion);
@@ -291,10 +238,10 @@ void main() {
 `
 
 /**
- * El Sol de caricatura, como el de los dibujos de los años 30: una cara redonda y sonriente (ojos
- * con el corte de "pastel", mejillas, nariz y una boca abierta que canta al compás) rodeada de
- * rayos puntiagudos de dos tonos que giran despacio y laten con cada pulso. Es un cartel siempre de
- * cara a la cámara, en el plano del centro del Sol.
+ * El Sol de caricatura, como los soles dibujados de los carteles de los años 30: un disco dorado con
+ * aerógrafo naranja hacia el borde, un aro interior de color y un brillo, rodeado de rayos
+ * puntiagudos de dos tonos que giran muy despacio. Sin cara y sin latir: tranquilo, como una
+ * estrella. Es un cartel siempre de cara a la cámara, en el plano del centro del Sol.
  */
 export const SOL_VERT = /* glsl */ `
 uniform float uTamano;
@@ -312,7 +259,6 @@ void main() {
 export const SOL_FRAG = /* glsl */ `
 uniform float uAparicion;
 uniform float uTiempo;
-uniform float uPulsaciones;
 // Medio lado del cartel en radios del Sol.
 uniform float uMedioLado;
 
@@ -323,23 +269,8 @@ ${SALIDA_CARICATURA}
 const float PI = 3.14159265359;
 const float RAYOS = 24.0;
 
-float pulso(float n) {
-  float onda = 0.5 + 0.5 * cos(2.0 * PI * n);
-  return onda * onda * onda;
-}
-
-float elipse(vec2 q, vec2 centro, vec2 radios) {
-  return length((q - centro) / radios) - 1.0;
-}
-
-float arco(vec2 q, vec2 centro, float curva, float w, float grosorPx) {
-  vec2 d = q - centro;
-  float dentro = 1.0 - step(w, abs(d.x));
-  return trazo(d.y - curva * d.x * d.x, grosorPx) * dentro;
-}
-
-// Relleno (1 dentro) y contorno de tinta de una forma dada por su función de distancia aproximada
-// (en unidades de la cara), con el trazo en píxeles; w es lo que mide un píxel en esas unidades.
+// Relleno (1 dentro) y contorno de tinta de una forma dada por su distancia aproximada (en radios
+// del Sol), con el trazo en píxeles; w es lo que mide un píxel en esas unidades.
 vec2 formaConPaso(float d, float grosorPx, float w) {
   w = max(w, 1e-5);
   float relleno = 1.0 - smoothstep(-w, w, d);
@@ -347,83 +278,44 @@ vec2 formaConPaso(float d, float grosorPx, float w) {
   return vec2(relleno, borde);
 }
 
-vec2 forma(float d, float grosorPx) {
-  return formaConPaso(d, grosorPx, fwidth(d));
-}
-
 void main() {
   vec2 q = vLocal * uMedioLado;
   float r = length(q);
-  float p = pulso(uPulsaciones);
-  // Con el Sol pequeño en pantalla no se dibuja la cara (a pocos píxeles sería una mancha).
-  float detalle = 1.0 - smoothstep(0.055, 0.09, fwidth(q.x));
+  // Lo que mide un píxel en radios del Sol (el radio no salta: sirve también para los rayos, cuyo
+  // largo sí salta de uno a otro).
+  float w = max(fwidth(r), 1e-5);
+  // Los detalles del disco sólo con el Sol grande en pantalla, y la tinta sólo si no es un puntito
+  // (a unos pocos píxeles se lo comía entero y el Sol salía negro).
+  float detalle = 1.0 - smoothstep(0.05, 0.1, w);
+  float conTinta = 1.0 - smoothstep(0.12, 0.3, w);
 
-  // Rayos: 24 picos alternos, largos y cortos, que giran despacio y se estiran en cada pulso.
-  float angulo = atan(q.y, q.x) - uTiempo * 0.18;
+  // Rayos: 24 picos alternos, largos y cortos, de dos tonos, que giran muy despacio.
+  float angulo = atan(q.y, q.x) - uTiempo * 0.06;
   float a = angulo * RAYOS / (2.0 * PI);
   float k = floor(a + 0.5);
   float f = a - k;
-  float largo = mod(k, 2.0) < 0.5 ? 0.74 : 0.44;
-  largo *= 1.0 + 0.12 * p;
+  bool rayoLargo = mod(k, 2.0) < 0.5;
+  float largo = rayoLargo ? 0.62 : 0.36;
   float pico = 1.0 - 2.0 * abs(f);
-  float perfil = 1.03 + largo * pow(pico, 1.3);
-  // Distancia aproximada al borde del rayo (con la pendiente del perfil).
-  float pendiente = largo * 1.3 * pow(max(pico, 1e-3), 0.3) * 2.0 * RAYOS / (2.0 * PI);
+  float perfil = 1.04 + largo * pow(pico, 1.4);
+  float pendiente = largo * 1.4 * pow(max(pico, 1e-3), 0.4) * 2.0 * RAYOS / (2.0 * PI);
   float dRayo = (r - perfil) / sqrt(1.0 + pow(pendiente / max(r, 0.2), 2.0));
-  // El largo de los rayos salta de uno a otro (en los valles): el paso del píxel se toma del radio.
-  vec2 rayo = formaConPaso(dRayo, 1.4, fwidth(r));
-  vec3 colorRayo = mod(k, 2.0) < 0.5 ? vec3(1.0, 0.80, 0.26) : vec3(1.0, 0.60, 0.20);
-  colorRayo = mix(colorRayo * vec3(1.0, 1.02, 1.1), colorRayo, smoothstep(1.0, 1.5, r));
+  vec2 rayo = formaConPaso(dRayo, 1.3, w);
+  rayo.y *= conTinta;
+  vec3 colorRayo = rayoLargo ? vec3(1.0, 0.8, 0.3) : vec3(1.0, 0.62, 0.22);
+  // Aerógrafo: más claros junto al disco.
+  colorRayo = mix(vec3(1.0, 0.93, 0.62), colorRayo, smoothstep(1.0, 1.35, r));
 
-  // Disco de la cara: amarillo con aerógrafo naranja hacia el borde y un brillo arriba a la izquierda.
-  float respira = 1.0 + 0.025 * p;
-  float dDisco = r / respira - 1.0;
-  vec2 disco = forma(dDisco, 1.6);
-  vec3 cara = mix(vec3(1.0, 0.90, 0.40), vec3(1.0, 0.68, 0.22), smoothstep(0.35, 1.0, r));
-  cara = mix(cara, vec3(1.0, 0.97, 0.78), 0.8 * (1.0 - smoothstep(0.12, 0.3, length((q - vec2(-0.5, 0.55)) * vec2(1.0, 1.6)))));
-
-  // La cara se balancea un poco con el compás, una pulsación hacia cada lado.
-  vec2 c = q / respira - vec2(0.04 * sin(PI * uPulsaciones), 0.0);
-  float tinta = 0.0;
-  // Mejillas.
-  float mejillas = 1.0 - smoothstep(0.1, 0.2, min(length((c - vec2(-0.55, -0.1)) * vec2(1.0, 1.5)), length((c - vec2(0.55, -0.1)) * vec2(1.0, 1.5))));
-  cara = mix(cara, vec3(1.0, 0.5, 0.36), 0.6 * mejillas * detalle);
-  // Ojos: blancos con la pupila negra "de pastel" (con su muesca); de vez en cuando parpadean.
-  float parpadeo = step(0.93, fract(sin(floor(uTiempo * 1.4) * 12.9898) * 43758.5453)) * step(fract(uTiempo * 1.4), 0.3);
-  for (int i = 0; i < 2; i++) {
-    float lado = i == 0 ? -1.0 : 1.0;
-    vec2 centroOjo = vec2(0.28 * lado, 0.2);
-    if (parpadeo > 0.5) {
-      tinta += arco(c, centroOjo + vec2(0.0, -0.02), -3.0, 0.15, 2.2);
-    } else {
-      vec2 blanco = forma(elipse(c, centroOjo, vec2(0.16, 0.23)), 1.3);
-      cara = mix(cara, vec3(1.0, 0.99, 0.95), blanco.x * detalle);
-      tinta += blanco.y;
-      vec2 centroPupila = centroOjo + vec2(0.03, -0.04);
-      vec2 pupila = forma(elipse(c, centroPupila, vec2(0.085, 0.14)), 0.0);
-      vec2 dp = c - centroPupila;
-      float anguloPupila = atan(dp.y, dp.x);
-      float muesca = step(0.35, anguloPupila) * step(anguloPupila, 1.15);
-      cara = mix(cara, TINTA, pupila.x * (1.0 - muesca) * detalle);
-    }
-    // Cejas.
-    tinta += arco(c, vec2(0.28 * lado, 0.5), -2.2, 0.12, 1.8);
-  }
-  // Nariz redonda.
-  vec2 nariz = forma(elipse(c, vec2(0.0, 0.0), vec2(0.075, 0.065)), 1.2);
-  cara = mix(cara, vec3(1.0, 0.62, 0.26), nariz.x * detalle);
-  tinta += nariz.y;
-  // Boca abierta de oreja a oreja, con dientes arriba y la lengua; se abre más en cada pulso.
-  float apertura = 0.36 + 0.07 * p;
-  float dBoca = max(length((c - vec2(0.0, -0.14)) / vec2(0.46, apertura)) - 1.0, c.y + 0.14);
-  vec2 boca = forma(dBoca, 1.4);
-  vec3 interior = vec3(0.50, 0.10, 0.12);
-  interior = mix(interior, vec3(1.0, 0.99, 0.95), 1.0 - zona(-c.y, 0.22));
-  float lengua = 1.0 - zona(length((c - vec2(0.02, -0.14 - apertura * 0.95)) / vec2(0.24, 0.14)), 1.0);
-  interior = mix(interior, vec3(0.96, 0.42, 0.45), lengua);
-  cara = mix(cara, interior, boca.x * detalle);
-  tinta += boca.y;
-  cara = mix(cara, TINTA, clamp(tinta, 0.0, 1.0) * detalle);
+  // Disco.
+  vec2 disco = formaConPaso(r - 1.0, 1.5, w);
+  disco.y *= conTinta;
+  vec3 cara = mix(vec3(1.0, 0.94, 0.6), vec3(1.0, 0.72, 0.26), smoothstep(0.15, 1.0, r));
+  // Aro interior de color (no de tinta), como en los soles dibujados de la época.
+  float aro = 1.0 - smoothstep(0.8 * w, 1.8 * w, abs(r - 0.8));
+  cara = mix(cara, vec3(0.97, 0.56, 0.2), 0.65 * aro * detalle);
+  // Brillo de barniz arriba a la izquierda.
+  float brillo = 1.0 - smoothstep(0.1, 0.26, length((q - vec2(-0.42, 0.44)) * vec2(1.0, 1.7)));
+  cara = mix(cara, vec3(1.0, 0.99, 0.9), 0.85 * brillo * detalle);
 
   // Composición: rayos detrás, el disco delante, cada uno con su tinta.
   vec3 color = colorRayo;
@@ -442,17 +334,13 @@ varying vec3 vPosMundo;
 varying float vRadio;
 varying vec3 vNormalMundo;
 
-${REBOTE_GLSL}
-
 void main() {
-  // La geometría del anillo se genera en radios del planeta (1 = su ecuador); su origen es el
-  // centro de Saturno, así que rebota con él.
+  // La geometría del anillo se genera en radios del planeta (1 = su ecuador).
   vRadio = length(position.xy);
   vec4 mundo = modelMatrix * vec4(position, 1.0);
   vPosMundo = mundo.xyz;
   vNormalMundo = normalize(mat3(modelMatrix) * vec3(0.0, 0.0, 1.0));
-  vec3 centroVista = (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-  gl_Position = projectionMatrix * conRebote(viewMatrix * mundo, centroVista);
+  gl_Position = projectionMatrix * viewMatrix * mundo;
 }
 `
 

@@ -29,12 +29,14 @@ giran (cálidas las que llegan al otro lado, moradas las que vuelven) con tinta 
 boca de salida como una ventana al cielo que crece hasta rodearnos.
 
 El sistema solar también sale ya dibujado de la escena (`features/sistema-solar/shaders/sistemaSolar.ts`):
-el Sol con cara (ojos de "pastel" que parpadean, mejillas, una boca que canta al compás) y rayos
-que giran; planetas de colores planos con sombra de color, brillo de barniz y tinta en el borde;
-los anillos de Saturno entintados; las órbitas como caminos de puntitos; la Tierra con las costas
-entintadas, nubes en borreguitos, una raya dorada en el terminador, las luces de las ciudades y
-la atmósfera en un aro; y la Luna, dormilona, que al final posa junto a la Tierra. Todo lo que ya
-está dibujado sale con alfa 0.5: el pase lo toma tal cual, sin tono ni colores planos.
+el Sol como un disco dorado con rayos que giran muy despacio; planetas de colores planos con sombra
+de color, brillo de barniz y tinta en el borde; los anillos de Saturno entintados; las órbitas como
+caminos de puntitos; la Tierra con las costas entintadas, nubes en borreguitos, una raya dorada en
+el terminador, las luces de las ciudades y la atmósfera en un aro; y la Luna en su órbita. La
+cámara se mueve como una de verdad (los tamaños sólo cambian con la distancia, con un tope para el
+Sol y los planetas lejanos, que a escala real apenas cambiarían): se acerca al sistema, gira hacia
+la Tierra y avanza en línea recta hasta ella. Todo lo que ya está dibujado sale con alfa 0.5: el
+pase lo toma tal cual, sin tono ni colores planos.
 
 El dibujo es un pase al final del posproceso (`features/agujero-negro/components/EfectosPost.tsx` →
 `features/dibujo`):
@@ -49,13 +51,12 @@ El dibujo es un pase al final del posproceso (`features/agujero-negro/components
 - `shaders/acuarela.ts`: paleta de época, cielo nocturno en acuarela y papel.
 - `constantes/dibujo.ts`: grosor de la tinta, bandas de color, aguadas, película, hervor.
 - `store/ritmoDibujo.ts`: el ritmo de 24 dibujos por segundo (entre dibujos la pantalla no cambia y
-  no se calcula nada) y el compás (112 pulsaciones por minuto) con el que todo baila, al estilo
-  rubber hose: late el disco del agujero, bailan las estrellas, canta el Sol y los planetas se
-  aplastan un poco en cada pulso, unos en el pulso y otros a contratiempo.
+  no se calcula nada) y el compás (112 pulsaciones por minuto): con él late el disco del agujero y
+  se mecen las estrellas; el sistema solar va sin latidos.
 - La película antigua lleva también el iris de la época: se cierra sobre la sombra al cruzar el
   horizonte y se abre sobre el remolino (tramos en `constantes/viajeScroll.ts`).
 - `utils/destellos.ts`: estrellas del cielo (puntos, destellos de cuatro puntas y estrellas de
-  cinco puntas que bailan al compás), destellos de la banda de polvo que se abren a tiempo con el
+  cinco puntas que se mecen despacio), destellos de la banda de polvo que se abren a tiempo con el
   compás y una estrella fugaz que cruza el cielo de vez en cuando.
 
 ## Claves de desarrollo (sólo con `next dev`)
@@ -74,7 +75,8 @@ Además de las del original (`?vista=canto|anillo|elevada|elevadaCercana|inferio
 Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta`,
 `dibujo-v0.3-acuarela`, `dibujo-v0.4-pelicula`, `dibujo-v0.5-animacion`,
 `dibujo-v0.6-viaje-completo`, `dibujo-v0.7-agujero-caricatura`, `dibujo-v0.8-estrellas`,
-`dibujo-v0.9-sistema-solar`, `dibujo-v0.10-remolino`, `dibujo-v0.11-pulido`.
+`dibujo-v0.9-sistema-solar`, `dibujo-v0.10-remolino`, `dibujo-v0.11-pulido`,
+`dibujo-v0.12-sistema-solar-fisico`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

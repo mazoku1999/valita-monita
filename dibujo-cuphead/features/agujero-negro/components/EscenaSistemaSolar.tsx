@@ -15,6 +15,12 @@ import { VIAJE } from '../constantes/viajeScroll'
  * desde arriba, y al final busca la Tierra y se acerca a ella hasta que llena media pantalla,
  * iluminada de lado por el Sol, con la Luna cerca, mientras el tiempo se frena.
  *
+ * Es el movimiento de una cámara real: los tamaños sólo cambian con la distancia. Para ir a la
+ * Tierra, primero gira (desde lejos, con el sistema entero a la vista, hasta tener la Tierra en el
+ * centro) y después avanza en línea recta hacia ella: el Sol, a un lado, crece un poco y sale de
+ * cuadro. Si girara y avanzara a la vez, el camino se curvaba por dentro del sistema y el Sol se
+ * echaba encima.
+ *
  * Va dentro del marco del agujero de gusano (`TunelAgujeroGusano`), que sigue a la cámara con
  * retraso: el sistema no se mueve respecto al cielo del otro lado (la Vía Láctea que se ve al
  * salir). "Mover la cámara" es colocar el sistema: el punto al que se mira (el Sol y luego la
@@ -30,11 +36,6 @@ const ENCUADRE = {
   distanciaMinima: 85,
   /** Al aparecer, el sistema está este múltiplo de veces más lejos que al verlo entero. */
   alejamiento: 4,
-  /**
-   * Tamaño de los planetas al aparecer (fracción del final): desde tan lejos, a escala real, no
-   * serían más que puntos; crecen hasta su tamaño visible mientras la cámara se acerca.
-   */
-  planetasDeLejos: 0.45,
   /** Elevación sobre la eclíptica (°): casi de canto al llegar, más desde arriba al final. */
   elevacion: { desde: 14, hasta: 30 },
   /**
@@ -51,6 +52,12 @@ const ENCUADRE = {
  * de la Tierra ocupa el 72 % de media pantalla.
  */
 const PLANO_TIERRA = { fase: (65 * Math.PI) / 180, elevacion: (20 * Math.PI) / 180, ocupacion: 0.72 } as const
+
+/**
+ * Tramos del viaje a la Tierra (fracciones de su parte del scroll): el giro hacia ella desde lejos
+ * y el avance en línea recta, que empieza cuando el giro casi ha terminado.
+ */
+const VIAJE_TIERRA = { giro: [0, 0.45], avance: [0.3, 1] } as const
 
 const suavizar = (borde0: number, borde1: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - borde0) / (borde1 - borde0)))
@@ -71,11 +78,9 @@ const interpolarDireccion = (a: THREE.Vector3, b: THREE.Vector3, t: number, dest
 export function EscenaSistemaSolar() {
   const colocacion = useRef<THREE.Group>(null)
   const aparicion = useRef(0)
-  const escalaPlanetas = useRef<number>(ENCUADRE.planetasDeLejos)
   const ritmo = useRef(1)
   const guias = useRef(1)
   const luna = useRef(0)
-  const lejanos = useRef(1)
   const tierra = useRef<THREE.Object3D | null>(null)
   const [movimientoReducido, setMovimientoReducido] = useState(false)
   const auxiliares = useRef({
@@ -109,15 +114,13 @@ export function EscenaSistemaSolar() {
     const { matriz, vista, vistaSistema, vistaTierra, haciaSol, avanceOrbital, objetivo, origen, arriba } = auxiliares.current
     const avance = suavizar(VIAJE.sistemaInicio, VIAJE.sistemaEntero, progreso)
     const tramoTierra = Math.min(1, Math.max(0, (progreso - VIAJE.tierraInicio) / (VIAJE.tierraFin - VIAJE.tierraInicio)))
-    // La cámara primero se vuelve hacia la Tierra y después se acerca; las órbitas y los
-    // cinturones se apagan, la Luna aparece y el reloj de las órbitas casi se detiene.
-    const apuntar = suavizar(0, 0.55, tramoTierra)
-    const acercar = suavizar(0.1, 1, tramoTierra)
+    // La cámara primero se vuelve hacia la Tierra y después avanza hacia ella; las órbitas se
+    // apagan, la Luna aparece y el reloj de las órbitas casi se detiene.
+    const apuntar = suavizar(VIAJE_TIERRA.giro[0], VIAJE_TIERRA.giro[1], tramoTierra)
+    const acercar = suavizar(VIAJE_TIERRA.avance[0], VIAJE_TIERRA.avance[1], tramoTierra)
     ritmo.current = 1 - 0.97 * suavizar(0, 0.6, tramoTierra)
     guias.current = 1 - suavizar(0.05, 0.5, tramoTierra)
     luna.current = suavizar(0.35, 0.8, tramoTierra)
-    lejanos.current = 1 - suavizar(0.08, 0.6, tramoTierra)
-    escalaPlanetas.current = ENCUADRE.planetasDeLejos + (1 - ENCUADRE.planetasDeLejos) * avance
 
     const elevacion = ENCUADRE.elevacion.desde + (ENCUADRE.elevacion.hasta - ENCUADRE.elevacion.desde) * avance
     const azimut = ENCUADRE.azimut.desde + (ENCUADRE.azimut.hasta - ENCUADRE.azimut.desde) * avance
@@ -172,16 +175,7 @@ export function EscenaSistemaSolar() {
 
   return (
     <group ref={colocacion} visible={false}>
-      <SistemaSolar
-        aparicion={aparicion}
-        escalaPlanetas={escalaPlanetas}
-        quieto={movimientoReducido}
-        ritmo={ritmo}
-        guias={guias}
-        luna={luna}
-        tierra={tierra}
-        lejanos={lejanos}
-      />
+      <SistemaSolar aparicion={aparicion} quieto={movimientoReducido} ritmo={ritmo} guias={guias} luna={luna} tierra={tierra} />
     </group>
   )
 }
