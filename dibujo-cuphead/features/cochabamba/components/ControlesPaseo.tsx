@@ -4,28 +4,43 @@ import { type ReactNode, useEffect, useRef, useSyncExternalStore } from 'react'
 import { PASEO, paseoActivo, paseoMirado, suscribirPaseo } from '../store/paseo'
 
 /**
- * Los mandos a la vista del paseo por el corazón (ver `store/paseo.ts`), como en los juegos de
- * móvil y sin textos: la palanca abajo a la izquierda (en pantallas táctiles sale donde se apoya el
- * pulgar, en la mitad izquierda; con ratón se arrastra su botón) y, arriba a la derecha, volver a
- * donde se posó (la casa) y volver al viaje (la flecha: sube la página). Con ratón, además, un
- * dibujo de las flechas del teclado. Abajo a la derecha, hasta que se mira alrededor por primera
- * vez, la pista de deslizar para mirar (un dedo que va y viene). De papel crema con tinta, como el
- * resto del dibujo; aparecen al posarse la cámara.
+ * Los mandos a la vista del paseo por el corazón (ver `store/paseo.ts`), como en los juegos y sin
+ * textos. En pantallas táctiles, la palanca abajo a la izquierda (sale donde se apoya el pulgar, en
+ * la mitad izquierda); con teclado y ratón, como en los juegos de ordenador, no hay palanca (se
+ * anda con las teclas): en su sitio, el dibujo de las flechas. Arriba a la derecha, volver a donde
+ * se posó (la casa) y volver al viaje (la flecha: sube la página). Abajo a la derecha, hasta que se
+ * mira alrededor por primera vez, la pista de arrastrar o deslizar para mirar (un dedo que va y
+ * viene). De papel crema con tinta, como el resto del dibujo; aparecen al posarse la cámara.
  */
 
 const TINTA = 'rgb(19 15 12)'
 const PAPEL = 'rgb(248 238 219)'
 
+/**
+ * Pantalla táctil: la del puntero principal (un móvil, una tableta) o, en un portátil con pantalla
+ * táctil, desde que se la toca (entonces sale también la palanca).
+ */
+let tocada = false
 const suscribirTactil = (aviso: () => void): (() => void) => {
   const consulta = window.matchMedia('(pointer: coarse)')
+  const alTocar = (evento: PointerEvent): void => {
+    if (evento.pointerType !== 'touch' || tocada) return
+    tocada = true
+    aviso()
+  }
   consulta.addEventListener('change', aviso)
-  return () => consulta.removeEventListener('change', aviso)
+  window.addEventListener('pointerdown', alTocar, { passive: true })
+  return () => {
+    consulta.removeEventListener('change', aviso)
+    window.removeEventListener('pointerdown', alTocar)
+  }
 }
-const esTactil = (): boolean => window.matchMedia('(pointer: coarse)').matches
+const esTactil = (): boolean => tocada || window.matchMedia('(pointer: coarse)').matches
 
 const acotar = (valor: number, minimo: number, maximo: number): number => Math.min(maximo, Math.max(minimo, valor))
 
-function Palanca({ tactil }: { tactil: boolean }) {
+/** La palanca de las pantallas táctiles: flotante, sale bajo el pulgar en la mitad izquierda de abajo. */
+function Palanca() {
   const zona = useRef<HTMLDivElement>(null)
   const base = useRef<HTMLDivElement>(null)
   const pomo = useRef<HTMLDivElement>(null)
@@ -66,19 +81,12 @@ function Palanca({ tactil }: { tactil: boolean }) {
       evento.preventDefault()
       puntero = evento.pointerId
       areaZona.setPointerCapture(evento.pointerId)
+      // La palanca salta bajo el pulgar (sin salirse de la pantalla).
       const caja = circulo.getBoundingClientRect()
       const mitad = caja.width / 2
-      const reposoX = caja.left + mitad
-      const reposoY = caja.top + mitad
-      if (tactil) {
-        // Flotante: la palanca salta bajo el pulgar (sin salirse de la pantalla).
-        centroX = acotar(evento.clientX, mitad + 6, window.innerWidth - mitad - 6)
-        centroY = acotar(evento.clientY, mitad + 6, window.innerHeight - mitad - 6)
-        circulo.style.transform = `translate(${centroX - reposoX}px, ${centroY - reposoY}px)`
-      } else {
-        centroX = reposoX
-        centroY = reposoY
-      }
+      centroX = acotar(evento.clientX, mitad + 6, window.innerWidth - mitad - 6)
+      centroY = acotar(evento.clientY, mitad + 6, window.innerHeight - mitad - 6)
+      circulo.style.transform = `translate(${centroX - caja.left - mitad}px, ${centroY - caja.top - mitad}px)`
       circulo.dataset.activa = '1'
       mover(evento)
     }
@@ -98,28 +106,19 @@ function Palanca({ tactil }: { tactil: boolean }) {
       window.removeEventListener('blur', soltar)
       soltar()
     }
-  }, [tactil])
+  }, [])
 
-  // En pantallas táctiles la zona es la mitad izquierda de abajo; con ratón, la palanca misma.
-  const lado = tactil ? 'clamp(96px, 29vw, 128px)' : '118px'
+  const lado = 'clamp(96px, 29vw, 128px)'
   return (
-    <div
-      ref={zona}
-      className="pointer-events-auto fixed"
-      style={
-        tactil
-          ? { left: 0, bottom: 0, width: '48vw', height: '56vh', touchAction: 'none' }
-          : { left: 'calc(28px + env(safe-area-inset-left))', bottom: 'calc(30px + env(safe-area-inset-bottom))', width: lado, height: lado, touchAction: 'none', cursor: 'grab' }
-      }
-    >
+    <div ref={zona} className="pointer-events-auto fixed" style={{ left: 0, bottom: 0, width: '48vw', height: '56vh', touchAction: 'none' }}>
       <div
         ref={base}
         className="palanca-paseo absolute rounded-full"
         style={{
           width: lado,
           height: lado,
-          left: tactil ? 'calc(24px + env(safe-area-inset-left))' : 0,
-          bottom: tactil ? 'calc(28px + env(safe-area-inset-bottom))' : 0,
+          left: 'calc(24px + env(safe-area-inset-left))',
+          bottom: 'calc(28px + env(safe-area-inset-bottom))',
           border: `3px solid ${TINTA}`,
           background: 'radial-gradient(circle, rgb(248 238 219 / 0.16) 0 58%, rgb(248 238 219 / 0.4) 60% 100%)',
           boxShadow: '0 3px 0 rgb(19 15 12 / 0.35), inset 0 0 0 7px rgb(248 238 219 / 0.25)',
@@ -165,7 +164,10 @@ function Boton({ etiqueta, alPulsar, children }: { etiqueta: string; alPulsar: (
   )
 }
 
-/** Las flechas del teclado, dibujadas (sólo con ratón): también se anda con ellas o con WASD. */
+/**
+ * Las flechas del teclado, dibujadas (con teclado y ratón, en el sitio de la palanca): ↑/↓ andan y
+ * ←/→ giran; también WASD, como en los juegos.
+ */
 function Teclas() {
   const tecla = (x: number, y: number, giro: number) => (
     <g key={`${x}-${y}`} transform={`translate(${x} ${y})`}>
@@ -176,11 +178,11 @@ function Teclas() {
   return (
     <svg
       viewBox="0 0 74 50"
-      width="74"
-      height="50"
+      width="104"
+      height="70"
       aria-hidden="true"
-      className="pointer-events-none fixed opacity-80"
-      style={{ left: 'calc(162px + env(safe-area-inset-left))', bottom: 'calc(34px + env(safe-area-inset-bottom))' }}
+      className="pointer-events-none fixed"
+      style={{ left: 'calc(28px + env(safe-area-inset-left))', bottom: 'calc(30px + env(safe-area-inset-bottom))', opacity: 0.88, filter: 'drop-shadow(0 3px 0 rgb(19 15 12 / 0.35))' }}
     >
       {tecla(25, 0, 0)}
       {tecla(0, 25, 270)}
@@ -241,8 +243,7 @@ export function ControlesPaseo() {
         transition: activo ? 'opacity 0.8s ease 0.3s' : 'opacity 0.4s ease, visibility 0s linear 0.4s',
       }}
     >
-      <Palanca tactil={tactil} />
-      {!tactil && <Teclas />}
+      {tactil ? <Palanca /> : <Teclas />}
       <PistaMirar visible={!mirado} />
       <div
         className="fixed flex flex-col gap-3"

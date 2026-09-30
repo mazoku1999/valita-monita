@@ -26,7 +26,7 @@ export function AgujeroNegroExperiencia() {
       <p className="sr-only">
         Simulación interactiva de un agujero negro con disco de acreción y lente gravitacional. Desplázate para
         recorrer la historia y arrastra para orbitar alrededor. Al final, en el corazón de flores, se pasea con
-        las flechas o WASD, o con la palanca en pantalla.
+        las flechas o WASD o, en pantallas táctiles, con la palanca.
       </p>
       <NarrativaOverlay />
       {/* Al final, posada la cámara en el corazón de flores: la palanca y los botones del paseo. */}

@@ -131,10 +131,12 @@ flores como las de un ramo (gerberas, rosas, lirios, clavelinas, bocas de dragó
   llega con el tamaño. Los tallos tienen su grosor de verdad (al menos un píxel): gruesos, eran un
   bosque de palos.
 - **El paseo por el corazón**, con los mandos de un juego (`store/paseo.ts`, `hooks/usePaseo.ts`,
-  `components/ControlesPaseo.tsx`): posada la cámara aparecen, de papel y tinta, una palanca abajo
-  a la izquierda (en el móvil sale bajo el pulgar, en la mitad izquierda; a fondo, se corre), una
-  pista de deslizar para mirar abajo a la derecha (se va la primera vez que se mira) y dos botones
-  arriba a la derecha: volver al ramo (la casa) y volver al viaje (la flecha). Mirar es arrastrar en
+  `components/ControlesPaseo.tsx`): posada la cámara aparecen, de papel y tinta, en pantallas
+  táctiles una palanca abajo a la izquierda (sale bajo el pulgar, en la mitad izquierda; a fondo, se
+  corre) y, con teclado y ratón, en su sitio el dibujo de las flechas (como en los juegos de
+  ordenador, sin palanca); una pista de deslizar para mirar abajo a la derecha (se va la primera vez
+  que se mira) y dos botones arriba a la derecha: volver al ramo (la casa) y volver al viaje (la
+  flecha). En un portátil con pantalla táctil, la palanca sale al tocarla. Mirar es arrastrar en
   el resto de la pantalla, como en los juegos (a la derecha, se gira a la derecha), sin inercia;
   con teclado, W/S o ↑/↓ andan, A/D se apartan de lado, ←/→ giran y Mayúsculas corre. El corazón es
   el área de juego: contra su borde uno se desliza sin quedarse pegado. Al echar a andar, la cámara
@@ -189,8 +191,8 @@ Además de las del original (`?vista=canto|anillo|elevada|elevadaCercana|inferio
 | `dibujoGrosor` | grosor de la tinta (radio en px a 720 de alto; la línea mide el doble) |
 
 Con el ratón: arrastrar orbita (o, en el valle, gira la cabeza), Ctrl + rueda o pellizcar acerca,
-doble clic vuelve al camino. Al final, en el corazón: la palanca o W/S, ↑/↓ (andar), A/D (de lado),
-←/→ (girar) y Mayúsculas (correr); arrastrar mira alrededor.
+doble clic vuelve al camino. Al final, en el corazón: W/S o ↑/↓ (andar), A/D (de lado), ←/→
+(girar) y Mayúsculas (correr); arrastrar mira alrededor. En pantallas táctiles, la palanca.
 
 ## Versiones
 
