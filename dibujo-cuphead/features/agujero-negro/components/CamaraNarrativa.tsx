@@ -8,6 +8,7 @@ import { VIAJE } from '../constantes/viajeScroll'
 import { DISTANCIA_LIBRE, VISTAS_CAMARA, type VistaCamara } from '../constantes/vistasCamara'
 import { useArrastreOrbital } from '../hooks/useArrastreOrbital'
 import { useSeguirCursor } from '../hooks/useSeguirCursor'
+import { MIRADA_ESPACIO, reiniciarMirada } from '../store/miradaEspacio'
 import { ajuste, consumirZoomPendiente, obtenerVersionVista, obtenerVista } from '../store/vistaCamaraStore'
 import { interpolarFotograma } from '../utils/fotogramasCamara'
 
@@ -164,6 +165,9 @@ const azimutConCaida = (vista: VistaCamara, progreso: number, azimutFotograma: n
 
 const objetivoDeVista = (vista: VistaCamara, progreso: number): EstadoCompleto => {
   const fotograma = interpolarFotograma(progreso, vista.fotogramas)
+  // Dentro del agujero el campo de visión se queda en el del final de la caída: seguía el de los
+  // fotogramas del agujero negro y el sistema solar y el valle "respiraban" con el scroll.
+  if (progreso > VIAJE.caidaFin) fotograma.fov = interpolarFotograma(VIAJE.caidaFin, vista.fotogramas).fov
   // La caída parte de la distancia del encuadre al terminar el acercamiento (la misma con la que
   // `utils/observadorCaida.ts` suelta al observador), no de la del fotograma actual.
   const distanciaEncuadre =
@@ -193,6 +197,8 @@ export function CamaraNarrativa() {
   const versionVista = useRef(obtenerVersionVista())
   const giroAcumulado = useRef(0)
   const primerFotograma = useRef(true)
+  /** Desplazamientos del arrastre al entrar en el agujero: dentro se quedan quietos. */
+  const arrastreCongelado = useRef({ azimut: 0, polar: 0, zoom: 0 })
   const [movimientoReducido, setMovimientoReducido] = useState(false)
 
   useEffect(() => {
@@ -205,7 +211,11 @@ export function CamaraNarrativa() {
 
   useFrame((_, delta) => {
     const paso = Math.min(delta, PASO_MAXIMO)
-    const objetivo = objetivoDeVista(VISTAS_CAMARA[obtenerVista()], obtenerProgreso())
+    const progreso = obtenerProgreso()
+    const objetivo = objetivoDeVista(VISTAS_CAMARA[obtenerVista()], progreso)
+    // Dentro del agujero (túnel, sistema solar, la Tierra, el valle) la cámara del agujero negro se
+    // queda quieta: el arrastre, el zoom y el cursor pasan a la mirada del espacio.
+    const interior = progreso >= VIAJE.caidaFin
     const actual = estadoActual.current
     const kAzimut = 1 - Math.exp(-paso * RITMO_AZIMUT)
     const kVista = 1 - Math.exp(-paso * RITMO_VISTA)
@@ -233,15 +243,43 @@ export function CamaraNarrativa() {
     actual.encuadreX += (objetivo.encuadreX - actual.encuadreX) * kVista
     actual.encuadreY += (objetivo.encuadreY - actual.encuadreY) * kVista
 
+    // Dentro, la vuelta al encuadre no se aplica (la mirada del espacio vuelve por su cuenta).
+    if (interior) arrastre.current.volviendo = false
     actualizarArrastre(paso)
-    if (!movimientoReducido) giroAcumulado.current += paso * VELOCIDAD_AUTOGIRO
+    const desplazado = arrastre.current
+    const congelado = arrastreCongelado.current
+    if (interior) {
+      // Lo que el arrastre (y su inercia) y el zoom sumaron en este fotograma va a la mirada del
+      // espacio (con el sistema solar o el valle a la vista; en el túnel no hace nada); los de la
+      // cámara del agujero negro no cambian.
+      if (progreso >= VIAJE.sistemaInicio) {
+        MIRADA_ESPACIO.azimut += desplazado.azimut - congelado.azimut
+        MIRADA_ESPACIO.elevacion -= desplazado.polar - congelado.polar
+        MIRADA_ESPACIO.zoom += desplazado.zoom - congelado.zoom
+      } else {
+        reiniciarMirada()
+      }
+      desplazado.azimut = congelado.azimut
+      desplazado.polar = congelado.polar
+      desplazado.zoom = congelado.zoom
+    } else {
+      congelado.azimut = desplazado.azimut
+      congelado.polar = desplazado.polar
+      congelado.zoom = desplazado.zoom
+      reiniciarMirada()
+    }
+    MIRADA_ESPACIO.arrastrando = interior && desplazado.arrastrando
+    if (!movimientoReducido && !interior) giroAcumulado.current += paso * VELOCIDAD_AUTOGIRO
 
     // La cámara orbita ligeramente siguiendo al cursor (ver ORBITA_CURSOR), con retraso; vuelve
     // al ángulo del encuadre cuando el ratón sale de la ventana y se queda quieta mientras se
     // arrastra para orbitar de verdad.
     const puntero = cursor.current
+    MIRADA_ESPACIO.cursorX = puntero.x
+    MIRADA_ESPACIO.cursorY = puntero.y
+    MIRADA_ESPACIO.cursorActivo = puntero.activo && !movimientoReducido
     if (!arrastre.current.arrastrando) {
-      const seguir = puntero.activo && !movimientoReducido
+      const seguir = puntero.activo && !movimientoReducido && !interior
       const objetivoAzimut = seguir ? -puntero.x * ORBITA_CURSOR.azimut : 0
       const objetivoPolar = seguir ? puntero.y * ORBITA_CURSOR.polar : 0
       const kCursor = 1 - Math.exp(-paso * RITMO_CURSOR)

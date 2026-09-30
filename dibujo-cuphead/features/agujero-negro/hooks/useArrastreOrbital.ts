@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef } from 'react'
+import { MIRADA_ESPACIO } from '../store/miradaEspacio'
 import { marcarModoLibre } from '../store/vistaCamaraStore'
 
 /**
@@ -125,6 +126,15 @@ export function useArrastreOrbital(elemento: HTMLElement | null) {
       tocar()
     }
 
+    // Doble clic o doble toque: la vista vuelve a su sitio (el encuadre y, dentro del agujero, el
+    // camino del viaje).
+    const alDobleClic = (): void => {
+      estado.current.volviendo = true
+      estado.current.velocidadAzimut = 0
+      estado.current.velocidadPolar = 0
+      MIRADA_ESPACIO.volver = true
+    }
+
     const alTecla = (evento: KeyboardEvent): void => {
       if (evento.metaKey || evento.ctrlKey || evento.altKey) return
       if (evento.key === '+' || evento.key === '=') estado.current.zoom += ZOOM_POR_TECLA
@@ -140,6 +150,7 @@ export function useArrastreOrbital(elemento: HTMLElement | null) {
     elemento.addEventListener('pointerup', alSoltar)
     elemento.addEventListener('pointercancel', alSoltar)
     elemento.addEventListener('wheel', alRueda, { passive: false })
+    elemento.addEventListener('dblclick', alDobleClic)
     window.addEventListener('keydown', alTecla)
 
     return () => {
@@ -148,6 +159,7 @@ export function useArrastreOrbital(elemento: HTMLElement | null) {
       elemento.removeEventListener('pointerup', alSoltar)
       elemento.removeEventListener('pointercancel', alSoltar)
       elemento.removeEventListener('wheel', alRueda)
+      elemento.removeEventListener('dblclick', alDobleClic)
       window.removeEventListener('keydown', alTecla)
     }
   }, [elemento])

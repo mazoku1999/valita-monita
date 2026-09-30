@@ -32,7 +32,9 @@ import { DESTINO, NUBE_CORAZON, RADIO_TIERRA_KM } from '@/features/cochabamba/co
 import { NUBE_BOLA_FRAG, NUBE_BOLA_VERT } from '@/features/cochabamba/shaders/nubesBolas'
 import { crearBolasInstanciadas, esteNorte, generarNubesTierra, nieblaEn } from '@/features/cochabamba/utils/nubesDestino'
 import { NIEBLA } from '@/features/dibujo/store/niebla'
+import { ROTULOS } from '@/features/dibujo/store/rotulos'
 import { SOL_EN_ESCENA } from '../store/solEnEscena'
+import { NOMBRES_PLANETAS, PRIORIDAD_PLANETAS, crearTexturaNombre } from '../utils/rotulos'
 import { crearTexturasTierra, type TexturasTierra } from '../utils/texturaTierra'
 
 /**
@@ -529,6 +531,7 @@ function crearSistema(fecha: Date) {
   return {
     raiz,
     tierra: tierra?.malla ?? null,
+    planetas: planetas.map((planeta) => ({ id: planeta.id, malla: planeta.malla })),
     verticalCochabamba,
     noroesteCochabamba,
     norteDestino,
@@ -565,6 +568,21 @@ export function SistemaSolar({
   useEffect(() => {
     const espera = window.setTimeout(() => sistema.cargarMapasTierra(), 1500)
     return () => window.clearTimeout(espera)
+  }, [sistema])
+
+  // Los nombres de los planetas, que el pase de dibujo pone bajo cada uno (ver `store/rotulos.ts`).
+  useEffect(() => {
+    const rotulos = sistema.planetas.map(({ id, malla }) => {
+      const destino = id === 'tierra'
+      const { textura, aspecto } = crearTexturaNombre(NOMBRES_PLANETAS[id], destino)
+      return { objeto: malla, textura, aspecto, prioridad: PRIORIDAD_PLANETAS[id], destino, opacidad: 0, opacidadMarca: 0 }
+    })
+    rotulos.sort((a, b) => a.prioridad - b.prioridad)
+    ROTULOS.planetas = rotulos
+    return () => {
+      ROTULOS.planetas = []
+      rotulos.forEach((rotulo) => rotulo.textura.dispose())
+    }
   }, [sistema])
 
   useEffect(() => {

@@ -688,6 +688,8 @@ out vec3 vRelleno;
 // giro y estiramiento de la cabeza.
 out vec4 vMedidas;
 out vec2 vFugaz;
+// 1: estrella del cielo (se tapa por píxel con lo que haya delante); 0: destello de la banda.
+out float vDelCielo;
 
 const float PI = 3.14159265359;
 
@@ -740,6 +742,7 @@ void estrellaFugaz() {
   vLocal = position.xy;
   vTipo = 3.0;
   vFondoClaro = 0.0;
+  vDelCielo = 1.0;
   vRelleno = vec3(1.0, 0.94, 0.68);
   vMedidas = vec4(semiLargo, semiAncho, largo, radio);
   // Gira hacia donde va y se estira con la velocidad (rubber hose).
@@ -749,11 +752,13 @@ void estrellaFugaz() {
 void main() {
   vMedidas = vec4(1.0);
   vFugaz = vec2(0.0, 1.0);
+  vDelCielo = 1.0;
   if (aPosicion.w > 1.5) {
     estrellaFugaz();
     return;
   }
   bool esBanda = aPosicion.w > 0.5;
+  vDelCielo = esBanda ? 0.0 : 1.0;
   vec3 mundo;
   if (esBanda) {
     // Órbita lenta alrededor del agujero, más rápida cerca (kepleriana, muy ralentizada).
@@ -851,6 +856,8 @@ void main() {
 
 export const DESTELLO_FRAG = /* glsl */ `
 uniform vec3 uTinta;
+uniform sampler2D uCielo;
+uniform vec2 uResolucion;
 
 in vec2 vLocal;
 in float vTipo;
@@ -858,7 +865,15 @@ in float vFondoClaro;
 in vec3 vRelleno;
 in vec4 vMedidas;
 in vec2 vFugaz;
+in float vDelCielo;
 out vec4 fragColor;
+
+// Lo del cielo, detrás de todo: sólo donde el cielo está abierto en ese píxel (antes bastaba con
+// el centro de la estrella y una junto a un planeta se dibujaba encima de él).
+float cieloEnPixel() {
+  if (vDelCielo < 0.5) return 1.0;
+  return smoothstep(0.35, 0.75, texture(uCielo, gl_FragCoord.xy / uResolucion).a);
+}
 
 // Distancia con signo a una estrella de cinco puntas (Íñigo Quílez): r radio de las puntas,
 // rf cuánto se hinchan los lados (1 = casi un pentágono).
@@ -928,8 +943,10 @@ vec4 estrellaFugaz() {
 }
 
 void main() {
+  float cielo = cieloEnPixel();
+  if (cielo < 0.01) discard;
   if (vTipo > 2.5) {
-    vec4 fugaz = estrellaFugaz();
+    vec4 fugaz = estrellaFugaz() * cielo;
     if (fugaz.a < 0.01) discard;
     fragColor = fugaz;
     return;
@@ -971,9 +988,9 @@ void main() {
     tinta = 0.8 * max(exterior - lleno, 0.0);
   }
   tinta *= 1.0 - vFondoClaro;
-  float alfa = max(lleno, tinta);
+  float alfa = max(lleno, tinta) * cielo;
   if (alfa < 0.01) discard;
-  vec3 color = mix(uTinta, relleno, lleno / max(alfa, 1e-4));
+  vec3 color = mix(uTinta, relleno, lleno / max(max(lleno, tinta), 1e-4));
   fragColor = vec4(color * alfa, alfa);
 }
 `

@@ -2,6 +2,7 @@
 
 import { Canvas } from '@react-three/fiber'
 import { EscenaCochabamba } from '@/features/cochabamba/components/EscenaCochabamba'
+import { ProgresoSuave } from '@/features/narrativa/components/ProgresoSuave'
 import { CAMARA_AGUJERO } from '../constantes/parametrosAgujero'
 import { CamaraNarrativa } from './CamaraNarrativa'
 import { EfectosPost } from './EfectosPost'
@@ -31,6 +32,8 @@ export function AgujeroNegroCanvas({ onListo }: AgujeroNegroCanvasProps) {
       }}
       style={{ width: '100%', height: '100%' }}
     >
+      {/* Primero: el progreso con inercia que leen las escenas del espacio y del valle. */}
+      <ProgresoSuave />
       <LenteGravitacionalQuad />
       {/* Sin el polvo realista: en el dibujo animado lo sustituyen los destellos de caricatura. */}
       <CamaraNarrativa />

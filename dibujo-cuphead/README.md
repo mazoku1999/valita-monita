@@ -60,6 +60,32 @@ El dibujo es un pase al final del posproceso (`features/agujero-negro/components
   cinco puntas que se mecen despacio), destellos de la banda de polvo que se abren a tiempo con el
   compás y una estrella fugaz que cruza el cielo de vez en cuando.
 
+## Cámara e interfaz en el espacio
+
+- **El scroll con inercia** (`obtenerProgresoSuave` en `features/narrativa/store/progresoScrollStore.ts`):
+  el sistema solar, la Tierra y el valle siguen al scroll como un muelle con amortiguamiento
+  crítico, así que cada golpe de rueda es un deslizamiento de la cámara y no un salto.
+- **Un solo movimiento alrededor del sistema** (`ENCUADRE.recorrido` en
+  `EscenaSistemaSolar.tsx`): del acercamiento a una panorámica con el sistema entero (960–1040 vh),
+  sin pararse en medio, con las órbitas en calma para leer los nombres, y el viaje a la Tierra.
+- **Llegada a la Tierra siempre bonita** (`LLEGADA`): las órbitas corren con el reloj y la Tierra
+  puede estar en cualquier punto; la cámara la rodea mientras se acerca para llegar con el Sol de
+  lado (fase entre 45° y 75°), nunca por el lado de noche ni rozando el Sol.
+- **La mirada del usuario** (`features/agujero-negro/store/miradaEspacio.ts`): dentro del agujero,
+  arrastrar orbita alrededor de lo que se mira (el Sol o la Tierra), Ctrl + rueda o pellizcar
+  acercan, el cursor da un leve paralaje; en el valle, arrastrar gira la cabeza. Todo vuelve al
+  camino al seguir con el scroll o con un doble clic. La cámara del agujero negro, ahí, se queda
+  quieta (antes seguía girando sola y con el cursor, y el marco del agujero de gusano la seguía con
+  retraso: el sistema solar se deslizaba por la pantalla y volvía solo) y el campo de visión ya no
+  cambia con el scroll.
+- **Rótulos** (`features/dibujo/store/rotulos.ts`, `shaders/rotulos.ts`,
+  `features/sistema-solar/utils/rotulos.ts`): el nombre de cada planeta en letra de época bajo él
+  y, en la Tierra, un anillo a trazos que gira despacio con un corazón encima: el destino. Los
+  pinta el pase con las matrices del mismo fotograma, antes de la película antigua; si se tapan
+  entre sí o con el Sol, se funden, y se retiran cuando el planeta ya es grande.
+- **Estrellas detrás de los planetas**: cada píxel de una estrella comprueba si el cielo está
+  abierto (antes bastaba con su centro y alguna se dibujaba encima de un planeta).
+
 ## La llegada a Cochabamba
 
 El final del viaje es un regalo: la entrada en la Tierra lleva a un sitio lleno de girasoles y de
@@ -117,6 +143,9 @@ Además de las del original (`?vista=canto|anillo|elevada|elevadaCercana|inferio
 | `dibujoSoloTinta=1` | sólo la tinta sobre papel |
 | `dibujoGrosor` | grosor de la tinta (radio en px a 720 de alto; la línea mide el doble) |
 
+Con el ratón: arrastrar orbita (o, en el valle, gira la cabeza), Ctrl + rueda o pellizcar acerca,
+doble clic vuelve al camino.
+
 ## Versiones
 
 Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta`,
@@ -125,7 +154,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.9-sistema-solar`, `dibujo-v0.10-remolino`, `dibujo-v0.11-pulido`,
 `dibujo-v0.12-sistema-solar-fisico`, `dibujo-v0.13-entrada-tierra`, `dibujo-v0.14-valle`,
 `dibujo-v0.15-flores`, `dibujo-v0.16-vida-y-destino`, `dibujo-v0.17-nubes-de-verdad`,
-`dibujo-v0.18-flores-de-cerca`.
+`dibujo-v0.18-flores-de-cerca`, `dibujo-v0.19-camara-espacio`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

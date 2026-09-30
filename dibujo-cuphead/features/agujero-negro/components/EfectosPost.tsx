@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { NIEBLA } from '@/features/dibujo/store/niebla'
 import { avanzarRitmo, latido, pulsaciones, tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
 import { PasoDibujo } from '@/features/dibujo/utils/PasoDibujo'
-import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
+import { obtenerProgreso, obtenerProgresoSuave } from '@/features/narrativa/store/progresoScrollStore'
 import { CARRIL_VH, VIAJE } from '../constantes/viajeScroll'
 import { ajuste } from '../store/vistaCamaraStore'
 import { suavizar } from '../utils/aleatorio'
@@ -69,7 +69,7 @@ export function EfectosPost() {
     // Dentro de una nube (la del corazón, al entrar en la Tierra y al salir sobre el valle).
     pasoDibujo.niebla = Math.max(NIEBLA.globo, NIEBLA.valle)
     pasoDibujo.nieblaSentido = NIEBLA.globo > NIEBLA.valle ? -1 : 1
-    pasoDibujo.nieblaAvance = progreso * CARRIL_VH * 0.12 + clock.getElapsedTime() * 0.05
+    pasoDibujo.nieblaAvance = obtenerProgresoSuave() * CARRIL_VH * 0.12 + clock.getElapsedTime() * 0.05
     pasoDibujo.ajustes.activo = ajuste('dibujo', 1) > 0.5
     pasoDibujo.ajustes.soloTinta = ajuste('dibujoSoloTinta', 0) > 0.5
     pasoDibujo.ajustes.grosor = ajuste('dibujoGrosor', pasoDibujo.ajustes.grosor)

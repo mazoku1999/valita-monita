@@ -43,9 +43,14 @@ export const VIAJE = {
   cieloSistemaInicio: enProgreso(765),
   cieloSistemaPleno: enProgreso(835),
   /** Fin del acercamiento al sistema solar: se ve entero, del Sol a la órbita de Neptuno. */
-  sistemaEntero: enProgreso(1000),
+  sistemaEntero: enProgreso(960),
+  /**
+   * Panorámica: con el sistema entero a la vista, la cámara sigue rodeándolo muy despacio (se ven
+   * los nombres de los planetas y la Tierra marcada como destino) antes de emprender el viaje.
+   */
+  panoramicaFin: enProgreso(1040),
   /** Viaje hacia la Tierra: la cámara avanza en línea recta hacia ella y el tiempo se frena. */
-  tierraInicio: enProgreso(1000),
+  tierraInicio: enProgreso(1040),
   tierraFin: enProgreso(1240),
   /**
    * Entrada: la Tierra gira hasta que Cochabamba amanece y la cámara planea sobre ella hasta

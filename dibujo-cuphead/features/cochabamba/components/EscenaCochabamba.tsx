@@ -5,8 +5,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { CAMARA_AGUJERO } from '@/features/agujero-negro/constantes/parametrosAgujero'
 import { CARRIL_VH, VIAJE } from '@/features/agujero-negro/constantes/viajeScroll'
+import { MIRADA_ESPACIO, avanzarMirada } from '@/features/agujero-negro/store/miradaEspacio'
 import { interpolarMonotono } from '@/features/agujero-negro/utils/interpolarMonotono'
-import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
+import { obtenerProgresoSuave } from '@/features/narrativa/store/progresoScrollStore'
 import { CAMARA_VALLE, CAMPO, CIUDAD, CORAZON, LAGUNA, RECORTE_VALLE, SOL_MANANA, direccionRumbo, direccionSol } from '../constantes/valle'
 import { CABEZA_FRAG, CABEZA_VERT, HOJA_FRAG, HOJA_VERT, TALLO_FRAG, TALLO_VERT } from '../shaders/flores'
 import { TERRENO_FRAG, TERRENO_VERT } from '../shaders/valle'
@@ -50,6 +51,13 @@ const poseEn = (progreso: number, posicion: THREE.Vector3, mira: THREE.Vector3):
 }
 
 const ARRIBA = new THREE.Vector3(0, 1, 0)
+
+/**
+ * Mirar alrededor en el valle (ver `store/miradaEspacio.ts`): arrastrando se gira la cabeza, como
+ * al agarrar el paisaje (a la derecha: el paisaje va a la derecha), hasta unos límites; el cursor
+ * inclina la mirada un poco hacia donde está. Sin zoom. Vuelve al camino al seguir con el scroll.
+ */
+const MIRAR = { giroMaximo: 0.75, alzarMaximo: 0.35, bajarMaximo: 0.3, cursor: { giro: 0.05, alzar: 0.035 } } as const
 
 /** Bolas de la nube de entrada (centro y radio) y la altura de su base, para la niebla. */
 const BOLAS_ENTRADA = new Float32Array(NUBE_ENTRADA_VALLE.flatMap(([x, y, z, radio]) => [x, y, z, radio]))
@@ -160,10 +168,10 @@ export function EscenaCochabamba() {
     [flores],
   )
 
-  useFrame(({ camera, clock, gl }) => {
+  useFrame(({ camera, clock, gl }, delta) => {
     const nodo = grupo.current
     if (!nodo) return
-    const progreso = obtenerProgreso()
+    const progreso = obtenerProgresoSuave()
     const visible = progreso >= VIAJE.valleInicio && terreno !== null
     nodo.visible = visible
     VALLE_EN_ESCENA.dia = visible ? 1 : 0
@@ -184,6 +192,23 @@ export function EscenaCochabamba() {
 
     const { posicion, mira, matriz, orientacion, inversa, mundo, rotacion } = auxiliares.current
     poseEn(progreso, posicion, mira)
+    // Mirar alrededor: la cabeza gira alrededor de la vertical y se alza o se baja.
+    const mirada = MIRADA_ESPACIO
+    const cursor = avanzarMirada(progreso, Math.min(delta, 0.1))
+    mirada.zoom = 0
+    mirada.azimut = Math.min(MIRAR.giroMaximo, Math.max(-MIRAR.giroMaximo, mirada.azimut))
+    mirada.elevacion = Math.min(MIRAR.alzarMaximo, Math.max(-MIRAR.bajarMaximo, mirada.elevacion))
+    const giro = -mirada.azimut - cursor.x * MIRAR.cursor.giro
+    const alzar = mirada.elevacion + cursor.y * MIRAR.cursor.alzar
+    if (Math.abs(giro) + Math.abs(alzar) > 1e-5) {
+      const direccion = mira.sub(posicion)
+      const largo = direccion.length()
+      direccion.divideScalar(largo)
+      const inclinacion = Math.asin(Math.min(1, Math.max(-1, direccion.y)))
+      const nueva = Math.min(1.45, Math.max(-1.45, inclinacion + alzar))
+      const horizontal = Math.atan2(direccion.x, direccion.z) + giro
+      mira.set(Math.sin(horizontal) * Math.cos(nueva), Math.sin(nueva), Math.cos(horizontal) * Math.cos(nueva)).multiplyScalar(largo).add(posicion)
+    }
     // Dentro de la nube de entrada, niebla (el pase la pinta).
     NIEBLA.valle = nieblaEn(posicion, BOLAS_ENTRADA, (punto) => punto.y, BASE_ENTRADA, -220, 30)
     matriz.lookAt(posicion, mira, ARRIBA)
