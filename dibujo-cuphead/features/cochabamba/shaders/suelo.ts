@@ -145,30 +145,26 @@ vec3 colorSuelo(vec3 p, vec3 n, vec4 region, float mPorPixel, float dCamara) {
     tapiz = mix(tapiz, vec3(0.77, 0.56, 0.86), lila * 0.7);
     tapiz = mix(tapiz, vec3(0.99, 0.94, 0.95), blanca * 0.75);
     flores = mix(flores, tapiz, smoothstep(30.0, 90.0, dCamara));
-    // De cerca, entre las flores, el follaje: hojas de distintos verdes, orientadas al azar, que se
-    // tapan unas a otras, sobre la sombra del macizo, y algún pétalo caído.
-    vec3 follaje = vec3(0.2, 0.33, 0.18) * (0.9 + 0.2 * ruido2(xz / 0.5));
+    // De cerca, entre las flores, el suelo del macizo: verde en sombra cubierto de hojarasca menuda
+    // de poco contraste, sin contornos (con líneas, hojas sueltas grandes y pétalos caídos se veía
+    // demasiado cargado; con hojas sueltas más claras, manchas).
+    vec3 follaje = vec3(0.22, 0.36, 0.19) * (0.95 + 0.1 * ruido2(xz / 0.9));
     if (dCamara < 24.0) {
-      vec2 g = floor(xz / 0.11);
+      vec2 g = floor(xz / 0.06);
       for (int dz = -1; dz <= 1; dz++) {
         for (int dx = -1; dx <= 1; dx++) {
           vec2 c = g + vec2(float(dx), float(dz));
-          vec2 centro = (c + hash22(c)) * 0.11;
+          vec2 centro = (c + hash22(c)) * 0.06;
           float angulo = hash21(c + 4.4) * 3.14159;
           vec2 q = xz - centro;
           q = vec2(cos(angulo) * q.x + sin(angulo) * q.y, -sin(angulo) * q.x + cos(angulo) * q.y);
-          float largo = 0.075 + 0.04 * hash21(c + 1.9);
+          float largo = 0.028 + 0.018 * hash21(c + 1.9);
           float t = clamp(q.x / largo, -1.0, 1.0);
-          float ancho = largo * 0.36 * sqrt(max(1.0 - t * t, 0.0));
+          float ancho = largo * 0.4 * sqrt(max(1.0 - t * t, 0.0));
           float dHoja = max(abs(q.y) - ancho, abs(q.x) - largo);
           float w = max(fwidth(dHoja), 1e-4);
           float cubre = 1.0 - smoothstep(-w, w, dHoja);
-          float tono = hash21(c + 7.3);
-          vec3 hoja = tono < 0.4 ? vec3(0.34, 0.54, 0.28) : tono < 0.75 ? vec3(0.42, 0.62, 0.32) : vec3(0.5, 0.64, 0.56);
-          hoja *= 0.9 + 0.2 * smoothstep(-ancho, ancho, q.y);
-          hoja = mix(hoja, hoja * 1.2, (1.0 - smoothstep(0.002, 0.005, abs(q.y))) * step(abs(t), 0.85));
-          hoja = mix(hoja, hoja * 0.7, 1.0 - smoothstep(0.5 * w, 1.5 * w, abs(dHoja)));
-          if (hash21(c + 9.1) > 0.94) hoja = mix(flor, vec3(1.0, 0.9, 0.94), 0.3);
+          vec3 hoja = follaje * mix(0.93, 1.07, hash21(c + 7.3)) * (0.97 + 0.06 * smoothstep(-ancho, ancho, q.y));
           follaje = mix(follaje, hoja, cubre);
         }
       }

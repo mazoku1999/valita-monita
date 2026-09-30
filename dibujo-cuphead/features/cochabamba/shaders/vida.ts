@@ -177,6 +177,7 @@ uniform vec4 uCajaMarco;
 uniform vec3 uCajaDesde;
 uniform vec3 uCajaLado;
 uniform vec3 uViento;
+uniform vec3 uCajaPaseo;
 
 varying vec2 vLocal;
 varying float vColor;
@@ -185,10 +186,12 @@ varying float vDetalle;
 
 void main() {
   float t = uTiempo;
-  vec3 q = fract(aAzar.xyz + uViento * t * (0.75 + 0.5 * aAzar2.x) / uCajaLado);
+  // La caja va con quien pasea (uCajaPaseo, en su marco) pero cada pétalo se queda en su sitio del
+  // valle: sólo da la vuelta por los lados de la caja.
+  vec3 q = fract(aAzar.xyz + uViento * t * (0.75 + 0.5 * aAzar2.x) / uCajaLado - uCajaPaseo / uCajaLado);
   vec3 aPared = min(q, 1.0 - q) * uCajaLado;
   float enCaja = smoothstep(0.0, 0.9, min(aPared.x, min(aPared.y, aPared.z)));
-  vec3 local = uCajaDesde + q * uCajaLado;
+  vec3 local = uCajaDesde + q * uCajaLado + uCajaPaseo;
   local += vec3(sin(t * 1.3 + 6.2832 * aAzar2.y), 0.5 * sin(t * 0.9 + 6.2832 * aAzar2.z), cos(t * 1.1 + 6.2832 * aAzar2.y)) * 0.22;
   vec3 centro = uCajaOrigen + vec3(uCajaMarco.z, 0.0, uCajaMarco.w) * local.x + vec3(0.0, local.y, 0.0) + vec3(uCajaMarco.x, 0.0, uCajaMarco.y) * local.z;
 

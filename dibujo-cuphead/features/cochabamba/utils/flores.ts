@@ -287,6 +287,33 @@ export function generarFlores(semilla = 20260929): DatosFlores {
     FINAL[0] + adelanteX * adelante + derechaX * derecha,
     FINAL[2] + adelanteZ * adelante + derechaZ * derecha,
   ]
+  /**
+   * Las hojas de una planta del corazón, pocas y como las de verdad: las de la gerbera, en roseta a
+   * ras del suelo; las del lirio, largas, subiendo por el tallo; las de la rosa, pequeñas y algo
+   * caídas; un par de hojas estrechas en las demás. (Hojas sueltas por el suelo, grandes y con tinta
+   * negra, cargaban demasiado el suelo.)
+   */
+  const hojasDePlanta = (x: number, z: number, alto: number, tipo: number): void => {
+    const hoja = (altura: number, tamano: number, inclinacion: number, forma: number): void => {
+      hojas.push([x + (azar() - 0.5) * 0.02, altura, z + (azar() - 0.5) * 0.02, tamano, 360 * azar() * RADIANES, inclinacion * RADIANES, forma, alto])
+    }
+    if (tipo === TIPO_FLOR.gerbera) {
+      for (let k = 0; k < 3; k += 1) hoja(0.015 + 0.02 * azar(), 0.07 + 0.03 * azar(), 10 + 15 * azar(), FORMA_HOJA.larga)
+    } else if (tipo === TIPO_FLOR.lirio || tipo === TIPO_FLOR.capulloLirio) {
+      const cuantas = tipo === TIPO_FLOR.lirio ? 2 : 1
+      for (let k = 0; k < cuantas; k += 1) hoja(alto * (0.2 + 0.35 * azar()), 0.07 + 0.04 * azar(), 45 + 20 * azar(), FORMA_HOJA.larga)
+    } else if (tipo === TIPO_FLOR.rosa) {
+      for (let k = 0; k < 2; k += 1) hoja(alto * (0.3 + 0.35 * azar()), 0.028 + 0.014 * azar(), 25 + 20 * azar(), FORMA_HOJA.girasol)
+    } else if (tipo === TIPO_FLOR.gipsofila) {
+      if (azar() < 0.5) hoja(alto * (0.3 + 0.3 * azar()), 0.025 + 0.01 * azar(), 40 + 20 * azar(), FORMA_HOJA.larga)
+    } else {
+      for (let k = 0; k < 2; k += 1) hoja(alto * (0.2 + 0.4 * azar()), 0.035 + 0.02 * azar(), 40 + 20 * azar(), FORMA_HOJA.larga)
+    }
+  }
+  /** Una ramita de eucalipto del ramo junto al tallo (hoja redonda gris azulada). */
+  const eucalipto = (x: number, z: number, alto: number): void => {
+    hojas.push([x + (azar() - 0.5) * 0.05, alto * (0.3 + 0.4 * azar()), z + (azar() - 0.5) * 0.05, 0.035 + 0.02 * azar(), 360 * azar() * RADIANES, (25 + 35 * azar()) * RADIANES, FORMA_HOJA.eucalipto, alto])
+  }
   const deFrente = 135 // rumbo (°) de una cara que mira a la cámara final
   // Cómo se ve cada cabeza del ramo desde la cámara final: su dirección (a la derecha y hacia abajo,
   // rad) y su radio aparente (las espigas, más altas que anchas, cuentan el doble).
@@ -302,11 +329,9 @@ export function generarFlores(semilla = 20260929): DatosFlores {
     const [x, z] = enMarco(adelante, derecha)
     cabezas.push([x, 0, z, alto, tamano, tipo, variante, azar(), (deFrente + (azar() - 0.5) * 16) * RADIANES, inclinacion * RADIANES])
     tallos.push([x, 0, z, alto, GROSOR_TALLO[tipo], tipo, cabezas[cabezas.length - 1][7]])
-    // Su verde a lo largo del tallo, que lo tapa: eucalipto y hojas largas.
-    for (let k = 0; k < 3; k += 1) {
-      const eucalipto = azar() < 0.6
-      hojas.push([x + (azar() - 0.5) * 0.06, alto * (0.18 + 0.5 * azar()), z + (azar() - 0.5) * 0.06, eucalipto ? 0.04 + 0.025 * azar() : 0.07 + 0.05 * azar(), 360 * azar() * RADIANES, (20 + 40 * azar()) * RADIANES, eucalipto ? FORMA_HOJA.eucalipto : FORMA_HOJA.larga, alto])
-    }
+    // Sus hojas y, como en el ramo, eucalipto.
+    hojasDePlanta(x, z, alto, tipo)
+    eucalipto(x, z, alto)
   }
   // El relleno, de delante atrás: donde taparía a una de delante, no va; tapada del todo, tampoco.
   const [adelante0, adelante1] = RELLENO.adelante
@@ -331,29 +356,17 @@ export function generarFlores(semilla = 20260929): DatosFlores {
     const cara = tipo === TIPO_FLOR.gerbera ? 10 + 20 * azar() : 25 + 20 * azar()
     cabezas.push([x, 0, z, alto, tam, tipo, azar(), azar(), (deFrente + (azar() - 0.5) * 40) * RADIANES, cara * RADIANES])
     tallos.push([x, 0, z, alto, GROSOR_TALLO[tipo], tipo, cabezas[cabezas.length - 1][7]])
-    const eucalipto = azar() < 0.6
-    hojas.push([x + (azar() - 0.5) * 0.06, alto * (0.2 + 0.45 * azar()), z + (azar() - 0.5) * 0.06, eucalipto ? 0.04 + 0.025 * azar() : 0.07 + 0.05 * azar(), 360 * azar() * RADIANES, (20 + 40 * azar()) * RADIANES, eucalipto ? FORMA_HOJA.eucalipto : FORMA_HOJA.larga, alto])
-  }
-  // El follaje bajo alrededor de la cámara: hojas de lirio, eucalipto y aspidistra a ras del suelo
-  // (entre los tallos se veía la tierra).
-  for (let n = 0; n < 1400; n += 1) {
-    const adelante = -0.5 + 6 * Math.pow(azar(), 1.3)
-    const derecha = (azar() - 0.5) * (2.2 + 1.6 * adelante)
-    const [x, z] = enMarco(adelante, derecha)
-    if (distanciaCorazon(x, z) > -CORAZON.ribete) continue
-    const u = azar()
-    const forma = u < 0.45 ? FORMA_HOJA.larga : u < 0.8 ? FORMA_HOJA.eucalipto : FORMA_HOJA.aspidistra
-    const tam = forma === FORMA_HOJA.eucalipto ? 0.04 + 0.03 * azar() : forma === FORMA_HOJA.larga ? 0.09 + 0.08 * azar() : 0.12 + 0.08 * azar()
-    hojas.push([x, 0.02 + 0.12 * azar(), z, tam, 360 * azar() * RADIANES, (8 + 40 * azar()) * RADIANES, forma, 0.3])
+    hojasDePlanta(x, z, alto, tipo)
+    if (azar() < 0.6) eucalipto(x, z, alto)
   }
   // Las hojas grandes de aspidistra que enmarcan el ramo, como en el de las fotos.
   for (const [adelante, derecha, rumboHoja, tamano] of ASPIDISTRAS) {
     const [x, z] = enMarco(adelante, derecha)
     hojas.push([x, 0.08, z, tamano, rumboHoja * RADIANES, 58 * RADIANES, FORMA_HOJA.aspidistra, 0.4])
   }
-  // Densidad (flores por m²): tupida junto a la cámara final, como un ramo; más clara lejos, donde
-  // el suelo ya pinta el tapiz rosado. Delante de la cámara, sólo el ramo (nada que lo tape).
-  const DENSIDAD = { cerca: 36, lejos: 3.5, alcance: 7 }
+  // Densidad (flores por m²): tupida en todo el corazón (se pasea por él) y más junto a la cámara
+  // final, como un ramo. Delante de la cámara, sólo el ramo (nada que lo tape).
+  const DENSIDAD = { cerca: 36, lejos: 22, alcance: 6 }
   const ladoCaja = 2.4 * CORAZON.escala
   const intentos = Math.round(ladoCaja * ladoCaja * DENSIDAD.cerca)
   for (let n = 0; n < intentos; n += 1) {
@@ -364,24 +377,27 @@ export function generarFlores(semilla = 20260929): DatosFlores {
     const aCamara = Math.hypot(x - FINAL[0], z - FINAL[2])
     const adelante = (x - FINAL[0]) * adelanteX + (z - FINAL[2]) * adelanteZ
     const lateral = (x - FINAL[0]) * derechaX + (z - FINAL[2]) * derechaZ
-    if (adelante < 2.1 && adelante > -1.2 && Math.abs(lateral) < 1.3 + 0.4 * Math.max(adelante, 0)) continue
+    // En lo que ve la cámara final hasta 2 m, sólo el ramo (nada que lo tape); pegado a ella, nada.
+    // A los lados y detrás, sí: girando la cabeza o mirando abajo se veía el suelo pelado. A sus
+    // pies, flores bajas, por debajo del borde de la imagen de la cámara final (su rayo más bajo
+    // baja 1 m cada 2).
+    if (Math.hypot(adelante, lateral) < 0.45) continue
+    const enVista = adelante > 0.15 && adelante < 2.1 && Math.abs(lateral) < 0.35 + 0.85 * adelante
+    if (enVista && adelante > 1.15) continue
     const densidad = DENSIDAD.lejos + (DENSIDAD.cerca - DENSIDAD.lejos) * Math.exp(-aCamara / DENSIDAD.alcance)
     if (azar() > densidad / DENSIDAD.cerca) continue
     const tipo = elegirTipo()
     const { altura, tamano } = medidas[tipo]
-    const alto = altura[0] + (altura[1] - altura[0]) * azar()
-    planta(x, z, alto, tamano[0] + (tamano[1] - tamano[0]) * azar(), tipo, 135 + (azar() - 0.5) * 60, 30 + 30 * azar())
-    // El verde del ramo en las flores cercanas: eucalipto, hojas largas y alguna aspidistra, a media
-    // altura del tallo (se veía el tallo pelado).
-    if (aCamara < 22) {
-      const cuantas = aCamara < 8 ? 3 : 2
-      for (let k = 0; k < cuantas; k += 1) {
-        const u = azar()
-        const forma = u < 0.5 ? FORMA_HOJA.eucalipto : u < 0.9 ? FORMA_HOJA.larga : FORMA_HOJA.aspidistra
-        const tam = forma === FORMA_HOJA.eucalipto ? 0.04 + 0.03 * azar() : forma === FORMA_HOJA.larga ? 0.08 + 0.07 * azar() : 0.12 + 0.06 * azar()
-        hojas.push([x + (azar() - 0.5) * 0.08, alto * (0.12 + 0.5 * azar()), z + (azar() - 0.5) * 0.08, tam, 360 * azar() * RADIANES, (15 + 35 * azar()) * RADIANES, forma, alto])
-      }
+    let alto = altura[0] + (altura[1] - altura[0]) * azar()
+    if (enVista) {
+      if (tipo === TIPO_FLOR.bocaDeDragon || tipo === TIPO_FLOR.lirio || tipo === TIPO_FLOR.capulloLirio) continue
+      alto = Math.min(alto, FINAL[1] - 0.5 * adelante - tamano[1] - 0.05)
+      if (alto < 0.08) continue
     }
+    // Miran más hacia arriba y a todos lados que las del ramo: se ven paseando desde cualquier sitio.
+    planta(x, z, alto, tamano[0] + (tamano[1] - tamano[0]) * azar(), tipo, 135 + (azar() - 0.5) * 140, 40 + 30 * azar())
+    hojasDePlanta(x, z, alto, tipo)
+    if (azar() < 0.15) eucalipto(x, z, alto)
   }
 
   // El ribete: gipsófila blanca y rosa a lo largo del borde del corazón.

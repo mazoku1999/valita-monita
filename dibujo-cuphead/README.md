@@ -130,6 +130,19 @@ flores como las de un ramo (gerberas, rosas, lirios, clavelinas, bocas de dragó
   su tamaño en pantalla (desde el aire el suelo ya pinta el tapiz), y la tinta de tallos y hojas
   llega con el tamaño. Los tallos tienen su grosor de verdad (al menos un píxel): gruesos, eran un
   bosque de palos.
+- **El paseo por el corazón** (`store/paseo.ts`, `hooks/usePaseo.ts`): posada la cámara, se anda
+  por dentro del corazón (nunca fuera: al llegar al borde se desliza por él) con las flechas o WASD
+  (Mayúsculas: más deprisa) o con un clic o toque en el suelo para ir hasta ahí; arrastrar gira la
+  cabeza del todo y deja mirar abajo. Al alejarse de donde se posó, la cámara se pone de pie
+  (1,05 m) mirando algo hacia abajo; un doble clic o subir con el scroll la devuelven al camino. Lo
+  que queda pegado a la cámara se deshace en un tramado en vez de cortarse, y los pétalos al viento
+  acompañan a quien pasea.
+- **El suelo del macizo**: verde en sombra con hojarasca menuda de poco contraste; cada planta lleva
+  sólo sus hojas (la gerbera en roseta a ras del suelo, el lirio largas por el tallo, la rosa
+  pequeñas), con el contorno verde oscuro. Las flores cubren todo el corazón (unas 18.000, más
+  tupidas donde se posa la cámara) y a sus pies crecen flores bajas que no se ven desde la pose
+  final. (Con mil hojas sueltas grandes a tinta negra y pétalos caídos, el suelo se veía demasiado
+  cargado.)
 - **El ramo** (`RAMO`, `RELLENO`): delante de la cámara final, compuesto como el de las fotos (una
   gerbera, el lirio abierto con sus capullos, rosas, claveles de poeta, bocas de dragón, gipsófila,
   dianthus verdes, eucalipto y hojas de aspidistra) y rellenado, tupido y en cúpula, sin que ninguna
@@ -166,7 +179,8 @@ Además de las del original (`?vista=canto|anillo|elevada|elevadaCercana|inferio
 | `dibujoGrosor` | grosor de la tinta (radio en px a 720 de alto; la línea mide el doble) |
 
 Con el ratón: arrastrar orbita (o, en el valle, gira la cabeza), Ctrl + rueda o pellizcar acerca,
-doble clic vuelve al camino.
+doble clic vuelve al camino. Al final, en el corazón: flechas o WASD (Mayúsculas, correr) o un clic
+o toque en el suelo para pasear por él.
 
 ## Versiones
 
@@ -177,7 +191,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.12-sistema-solar-fisico`, `dibujo-v0.13-entrada-tierra`, `dibujo-v0.14-valle`,
 `dibujo-v0.15-flores`, `dibujo-v0.16-vida-y-destino`, `dibujo-v0.17-nubes-de-verdad`,
 `dibujo-v0.18-flores-de-cerca`, `dibujo-v0.19-camara-espacio`, `dibujo-v0.20-region-de-verdad`,
-`dibujo-v0.21-flores-del-ramo`.
+`dibujo-v0.21-flores-del-ramo`, `dibujo-v0.22-paseo-corazon`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

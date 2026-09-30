@@ -7,6 +7,24 @@ import { SALIDA_CARICATURA } from '@/features/dibujo/shaders/caricatura'
  * están cerca lo pone el pase de dibujo (saltos de profundidad).
  */
 
+/**
+ * Lo que queda pegado a la cámara (paseando por el corazón se atraviesan las flores) se deshace en
+ * un tramado ordenado en vez de cortarse en el plano cercano: `vCerca` (0 pegado, 1 lejos) y, en el
+ * fragmento, `deshacer()` descarta los píxeles del tramado.
+ */
+const TRAMADO_GLSL = /* glsl */ `
+float bayer2(vec2 a) {
+  a = floor(a);
+  return fract(dot(a, vec2(0.5, a.y * 0.75)));
+}
+float bayer4(vec2 a) {
+  return bayer2(0.5 * a) * 0.25 + bayer2(a);
+}
+void deshacer(float cerca) {
+  if (cerca < 0.999 && cerca <= bayer4(gl_FragCoord.xy)) discard;
+}
+`
+
 /** La brisa: un vaivén suave que recorre el campo (en metros de desplazamiento por metro de altura). */
 const BRISA_GLSL = /* glsl */ `
 uniform float uTiempo;
@@ -40,6 +58,7 @@ varying float vLuz;
 varying vec2 vSolEnFlor;
 varying float vDetalle;
 varying float vLejos;
+varying float vCerca;
 
 ${BRISA_GLSL}
 
@@ -54,6 +73,7 @@ void main() {
   vec3 centro = base + vec3(empuje.x, altura - 0.25 * dot(empuje, empuje) / max(altura, 0.1), empuje.y);
 
   float distancia = distance(centro, uCamara);
+  vCerca = smoothstep(0.3, 0.55, distancia - tamano);
   // Radio en pantalla: por debajo de un píxel y pico la flor no se dibuja (de lejos, el suelo ya
   // lleva su color) y entre eso y unos píxeles crece (al bajar, las flores aparecen sin saltos).
   float pixeles = tamano / max(distancia, 1e-3) * uPixelesPorRadian;
@@ -118,8 +138,10 @@ varying float vLuz;
 varying vec2 vSolEnFlor;
 varying float vDetalle;
 varying float vLejos;
+varying float vCerca;
 
 ${SALIDA_CARICATURA}
+${TRAMADO_GLSL}
 
 const float PI = 3.14159265;
 
@@ -683,6 +705,7 @@ void main() {
   else if (vTipo < 7.5) flor = capulloLirio(p);
   else flor = bolaVerde(p);
   if (flor.a < 0.5) discard;
+  deshacer(vCerca);
   // Luz de la mañana: lo que da la espalda al Sol, en sombra lila; en los carteles, más claro
   // del lado del Sol.
   float sombra = vTipo < 2.5 ? 1.0 - smoothstep(-0.05, 0.12, vLuz) : 0.0;
@@ -707,6 +730,7 @@ uniform float uPixelesPorRadian;
 varying vec2 vLocal;
 varying float vTipo;
 varying float vAnchoPx;
+varying float vCerca;
 
 ${BRISA_GLSL}
 
@@ -715,6 +739,9 @@ void main() {
   float altura = aBase.w;
   float grosor = aForma.x;
   float tipo = aForma.y;
+  // Lo cerca que pasa de la cámara (el punto del tallo más próximo).
+  vec3 junto = base + vec3(0.0, clamp(uCamara.y - base.y, 0.0, altura), 0.0);
+  vCerca = smoothstep(0.26, 0.5, distance(junto, uCamara));
   float distancia = distance(base + vec3(0.0, altura * 0.5, 0.0), uCamara);
   float pixeles = grosor / max(distancia, 1e-3) * uPixelesPorRadian;
   if (pixeles < 0.2) {
@@ -745,10 +772,13 @@ export const TALLO_FRAG = /* glsl */ `
 varying vec2 vLocal;
 varying float vTipo;
 varying float vAnchoPx;
+varying float vCerca;
 
 ${SALIDA_CARICATURA}
+${TRAMADO_GLSL}
 
 void main() {
+  deshacer(vCerca);
   vec3 verde = vTipo < 0.5 ? vec3(0.36, 0.55, 0.22) : vec3(0.4, 0.58, 0.28);
   verde *= 0.86 + 0.18 * smoothstep(-1.0, 1.0, vLocal.x);
   // Abajo, en la sombra del follaje, más oscuros: se pierden entre las hojas.
@@ -773,6 +803,7 @@ varying vec2 vLocal;
 varying float vLuz;
 varying float vForma;
 varying float vDetalle;
+varying float vCerca;
 
 ${BRISA_GLSL}
 
@@ -802,6 +833,7 @@ void main() {
   vec3 lado = normalize(cross(vec3(0.0, 1.0, 0.0), hacia));
   vec3 normal = normalize(cross(hacia, lado));
   vec3 centro = union_ + vec3(empuje.x, 0.0, empuje.y) + hacia * tamano;
+  vCerca = smoothstep(0.3, 0.55, distance(centro, uCamara) - tamano);
   // Proporciones: la de girasol, ancha; la de eucalipto, redonda; la larga, estrecha; la de
   // aspidistra, una lanza ancha.
   float anchura = aForma.z < 0.5 ? 0.8 : aForma.z < 1.5 ? 0.9 : aForma.z < 2.5 ? 0.28 : 0.34;
@@ -817,10 +849,13 @@ varying vec2 vLocal;
 varying float vLuz;
 varying float vForma;
 varying float vDetalle;
+varying float vCerca;
 
 ${SALIDA_CARICATURA}
+${TRAMADO_GLSL}
 
 void main() {
+  deshacer(vCerca);
   // El tallo en y = -1, la punta en y = 1: la de girasol, acorazonada; la de eucalipto, un óvalo
   // gris azulado; la larga (de lirio), una lanza; la de aspidistra, una lanza ancha y brillante con
   // sus nervios paralelos, como las que envuelven el ramo.
@@ -840,7 +875,9 @@ void main() {
     verde = mix(verde, mix(verde, vec3(0.8, 0.9, 0.7), 0.5), smoothstep(0.2, 0.5, x) * (1.0 - smoothstep(0.5, 0.8, x)) * step(0.0, p.x) * 0.5);
   }
   verde = mix(verde, vec3(0.62, 0.78, 0.36), (1.0 - smoothstep(0.02, 0.06, abs(p.x))) * step(p.y, 0.8) * vDetalle);
-  verde = mix(verde, mix(verde * 0.72, TINTA, vDetalle), 1.0 - smoothstep(0.5 * w, 1.5 * w, abs(d)));
+  // El contorno, verde oscuro (a tinta negra, el suelo era un enredo de líneas): las hojas quedan
+  // detrás de las flores.
+  verde = mix(verde, mix(verde * 0.62, TINTA, 0.3 * vDetalle), 1.0 - smoothstep(0.5 * w, 1.5 * w, abs(d)));
   gl_FragColor = salidaCaricatura(verde);
 }
 `

@@ -1,9 +1,11 @@
 'use client'
 
+import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import { NUBE_BOLA_FRAG, NUBE_BOLA_VERT } from '../shaders/nubesBolas'
 import { ARBOL_FRAG, ARBOL_VERT, MARIPOSA_FRAG, MARIPOSA_VERT, NUBE_VALLE_FRAG, NUBE_VALLE_VERT, PETALO_FRAG, PETALO_VERT } from '../shaders/vida'
+import { PASEO } from '../store/paseo'
 import { crearQuadInstanciado } from '../utils/flores'
 import { crearBolasInstanciadas, generarCumulos, nubesEnValle } from '../utils/nubesDestino'
 import { CAJA_PETALOS, MARCO_FINAL, crearAlasInstanciadas, generarVida } from '../utils/vida'
@@ -62,6 +64,7 @@ export function VidaDelValle({ uniformes }: { uniformes: UniformesValle }) {
           uCajaDesde: { value: new THREE.Vector3(...CAJA_PETALOS.desde) },
           uCajaLado: { value: new THREE.Vector3(...CAJA_PETALOS.lado) },
           uViento: { value: new THREE.Vector3(...CAJA_PETALOS.viento) },
+          uCajaPaseo: { value: new THREE.Vector3() },
         },
         side: THREE.DoubleSide,
         depthWrite: false,
@@ -78,6 +81,17 @@ export function VidaDelValle({ uniformes }: { uniformes: UniformesValle }) {
       }),
     }
   }, [uniformes])
+
+  // Los pétalos al viento acompañan a quien pasea por el corazón (ver `store/paseo.ts`): el
+  // desplazamiento, en el marco de su caja.
+  useFrame(() => {
+    const { adelante, derecha } = MARCO_FINAL
+    ;(materiales.petalos.uniforms.uCajaPaseo.value as THREE.Vector3).set(
+      PASEO.x * derecha[0] + PASEO.z * derecha[1],
+      0,
+      PASEO.x * adelante[0] + PASEO.z * adelante[1],
+    )
+  })
 
   useEffect(() => {
     const espera = window.setTimeout(() => setMallas(crearMallasVida()), 4200)
