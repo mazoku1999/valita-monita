@@ -532,9 +532,13 @@ void main() {
   color = mix(noche, iluminado, dia);
   // Raya dorada de atardecer a lo largo del terminador.
   color = mix(color, vec3(1.0, 0.66, 0.36), trazo(ndl - 0.03, 2.2) * 0.85);
-  // Brillo de barniz sobre el mar.
+  // Brillo de barniz sobre el mar: pequeño y a medias, con un punto más vivo (grande y opaco era un
+  // disco crema pegado al mar), y sólo con la Tierra pequeña en pantalla: de cerca era una mancha
+  // redonda en el agua (la normal cambia menos por píxel cuanto más grande se ve).
   vec3 h = normalize(l + v);
-  color = mix(color, vec3(1.0, 0.99, 0.95), zona(dot(n, h), 0.985) * dia * (1.0 - tierra) * (1.0 - nube));
+  float lejos = smoothstep(0.006, 0.014, length(fwidth(n)));
+  float barniz = (0.45 * zona(dot(n, h), 0.9955) + 0.4 * zona(dot(n, h), 0.9992)) * lejos;
+  color = mix(color, vec3(1.0, 0.99, 0.95), barniz * dia * (1.0 - tierra) * (1.0 - nube));
   color = mix(color, TINTA, 1.0 - smoothstep(1.2 * fwidth(mu), 2.2 * fwidth(mu), mu));
   gl_FragColor = salidaCaricatura(color * uAparicion);
 }

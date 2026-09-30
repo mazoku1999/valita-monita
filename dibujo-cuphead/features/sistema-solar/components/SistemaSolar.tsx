@@ -29,7 +29,8 @@ import {
   TIERRA_FRAG,
 } from '../shaders/sistemaSolar'
 import { DESTINO, RADIO_TIERRA_KM } from '@/features/cochabamba/constantes/destino'
-import { CAMPO, CIUDAD, CORAZON, LAGUNA, SOL_MANANA, direccionRumbo, direccionSol } from '@/features/cochabamba/constantes/valle'
+import { CIUDAD, CORAZON, LAGUNA, SOL_MANANA, direccionRumbo, direccionSol } from '@/features/cochabamba/constantes/valle'
+import { obtenerTexturaCeldas } from '@/features/cochabamba/utils/campos'
 import { PARCHE_FRAG, PARCHE_VERT } from '@/features/cochabamba/shaders/suelo'
 import { crearParcheRegion } from '@/features/cochabamba/utils/parcheRegion'
 import { ORIGEN_REGION, PISO_VALLE } from '@/features/cochabamba/utils/region'
@@ -98,6 +99,11 @@ export interface SistemaSolarProps {
 /** La región de Cochabamba vista desde el sistema (ver `SistemaSolarProps.region`). */
 export interface RegionEnSistema {
   vertical: THREE.Vector3
+  /**
+   * La vertical que tendrá el destino cuando la Tierra acabe de girar hasta que allí amanezca (la
+   * cámara se dirige a ella desde lejos, sin esperar a que la Tierra termine de girar).
+   */
+  verticalAlineada: THREE.Vector3
   este: THREE.Vector3
   norte: THREE.Vector3
   distanciaNubesKm: number
@@ -393,7 +399,7 @@ function crearSistema(fecha: Date) {
       uCorazon: { value: new THREE.Vector4(CORAZON.escala, ejeCorazonX, ejeCorazonZ, CORAZON.ribete) },
       uSombrasNubes: { value: sombrasNubes },
       uLadoSombras: { value: SOMBRAS_NUBES.lado },
-      uCampo: { value: CAMPO.semiLado },
+      uCeldas: { value: obtenerTexturaCeldas() },
       uCiudad: { value: new THREE.Vector3(CIUDAD.centro[0], CIUDAD.centro[1], CIUDAD.radio) },
       uLaguna: { value: new THREE.Vector4(LAGUNA.centro[0], LAGUNA.centro[1], LAGUNA.semiejes[0], LAGUNA.semiejes[1]) },
     },
@@ -481,8 +487,10 @@ function crearSistema(fecha: Date) {
     Math.sin(latitudCochabamba),
     -Math.cos(latitudCochabamba) * Math.sin(longitudCochabamba),
   )
+  const giroAlineado = new THREE.Quaternion()
   const regionEnSistema: RegionEnSistema = {
     vertical: new THREE.Vector3(0, 1, 0),
+    verticalAlineada: new THREE.Vector3(0, 1, 0),
     este: new THREE.Vector3(1, 0, 0),
     norte: new THREE.Vector3(0, 0, -1),
     distanciaNubesKm: Number.POSITIVE_INFINITY,
@@ -551,6 +559,8 @@ function crearSistema(fecha: Date) {
         solDesdeTierra.copy(planeta.malla.position).multiplyScalar(-1).normalize().applyQuaternion(inclinacionInversa)
         const longitudSol = Math.atan2(-solDesdeTierra.z, solDesdeTierra.x)
         const objetivo = longitudSol - longitudCochabamba + ((COCHABAMBA.hora - 12) / 24) * 2 * Math.PI
+        giroAlineado.setFromAxisAngle(arriba, objetivo).premultiply(planeta.inclinacion)
+        regionEnSistema.verticalAlineada.copy(origenRegion).applyQuaternion(giroAlineado)
         // Se sigue sin saltos: el giro corregido va hacia el objetivo por el camino corto.
         const error = envolver(objetivo - (anguloGiro + correccionTierra))
         correccionTierra += error * (1 - Math.exp(-paso * 2.5)) * alineacionTierra

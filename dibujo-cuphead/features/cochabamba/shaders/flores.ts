@@ -83,13 +83,16 @@ void main() {
     ejeY = cross(normal, ejeX);
     vDorso = step(dot(normal, uCamara - centro), 0.0);
     vLuz = dot(normal, uSol);
-  } else if (tipo > 4.5 && tipo < 5.5) {
-    // Espiga (boca de dragón): gira sólo alrededor de la vertical.
+  } else if ((tipo > 4.5 && tipo < 5.5) || (tipo > 6.5 && tipo < 7.5)) {
+    // Espigas (boca de dragón) y capullos de lirio: giran sólo alrededor de la vertical (el capullo,
+    // algo inclinado).
     vec3 aCamara = uCamara - centro;
     ejeX = normalize(vec3(-aCamara.z, 0.0, aCamara.x));
     ejeY = vec3(0.0, 1.0, 0.0);
-    escala = vec2(tamano, tamano * 3.2);
-    centro.y -= tamano * 1.6;
+    float alargado = tipo < 6.0 ? 3.2 : 3.0;
+    if (tipo > 6.5) ejeY = normalize(ejeY + ejeX * (aForma.w - 0.5) * 0.5);
+    escala = vec2(tamano, tamano * alargado);
+    centro -= ejeY * tamano * alargado * 0.5;
     vLuz = dot(normalize(vec3(aCamara.x, 0.0, aCamara.z)), uSol);
   } else {
     ejeX = derechaCam;
@@ -187,76 +190,143 @@ vec4 girasol(vec2 p) {
   return lienzo;
 }
 
+// Pétalos en tira (gerbera): n pétalos entre r0 y el largo r1, de medio ancho casi constante, la
+// punta redonda con una muesca pequeña. En 'lado', la posición a lo ancho (-1..1); en 'largo', a lo
+// largo (0..1); en 'indice', el número de pétalo.
+float tiras(vec2 p, float n, float r0, float r1, float semiancho, float giro, out float lado, out float largo, out float indice) {
+  float r = length(p);
+  float sector = 6.2831853 / n;
+  float angulo = atan(p.y, p.x) - giro;
+  indice = floor(angulo / sector + 0.5);
+  float delta = angulo - indice * sector;
+  float x = delta * r;
+  // Cada pétalo, algo más o menos largo.
+  float largoPetalo = r1 * (0.95 + 0.05 * sin(indice * 3.7 + giro * 5.0));
+  float w = semiancho * (0.72 + 0.28 * smoothstep(r0, r0 + 0.3, r));
+  lado = x / w;
+  largo = clamp((r - r0) / (largoPetalo - r0), 0.0, 1.0);
+  float y = r - (largoPetalo - w);
+  float d = y > 0.0 ? length(vec2(x, y)) - w : abs(x) - w;
+  // La muesca de la punta.
+  d = max(d, -(length(vec2(x, r - largoPetalo - 0.004)) - w * 0.22));
+  return max(d, r0 - r);
+}
+
 vec4 gerbera(vec2 p) {
   vec4 lienzo = vec4(0.0);
   float lado;
   float largo;
-  // Como la del ramo: dos coronas de pétalos finos rosa pálido, más intensos hacia dentro, cada uno
-  // con su nervio claro y la punta con dos dientecillos; dentro, un aro de florecillas rosa fuerte
-  // con puntitos dorados y el centro pequeño, morado oscuro. Líneas del color del pétalo.
-  vec3 palido = vVariante < 0.7 ? vec3(0.99, 0.8, 0.86) : vec3(1.0, 0.72, 0.82);
-  vec3 linea = vec3(0.84, 0.46, 0.64);
-  float giro = vVariante * 2.0;
-  float d1 = corona(p, 22.0, 0.2, 1.0, 0.14, giro, lado, largo);
-  // Punta con dos dientes: una muesca en medio del extremo.
-  d1 = max(d1, -(length(vec2(lado * 0.14, (largo - 1.0) * 0.8)) - 0.035));
-  vec3 petalo = mix(vec3(0.94, 0.54, 0.73), palido, smoothstep(0.1, 0.45, largo));
-  petalo = mix(petalo, mix(palido, vec3(1.0), 0.45), (1.0 - smoothstep(0.08, 0.22, abs(lado))) * smoothstep(0.3, 0.6, largo) * vDetalle);
-  capaConLinea(lienzo, d1, petalo, linea, 1.0);
-  float d2 = corona(p, 22.0, 0.18, 0.66, 0.12, giro + PI / 22.0, lado, largo);
-  vec3 petalo2 = mix(vec3(0.92, 0.48, 0.7), palido * 0.97, smoothstep(0.2, 0.8, largo));
-  petalo2 = mix(petalo2, mix(palido, vec3(1.0), 0.35), (1.0 - smoothstep(0.08, 0.22, abs(lado))) * smoothstep(0.4, 0.7, largo) * vDetalle);
-  capaConLinea(lienzo, d2, petalo2, linea, 0.8);
-  // Aro de florecillas.
+  float indice;
+  // Como la del ramo: rosa muy pálido (casi blanco con un toque lila), más rosado junto al centro,
+  // con dos coronas de pétalos en tira; el centro, un disco casi negro granate rodeado de un aro
+  // malva de florecillas con motas de polen y un collar de pétalos cortos.
+  float giro = vVariante * 6.2831853;
+  vec3 palido = vVariante < 0.65 ? vec3(0.99, 0.86, 0.9) : vec3(0.98, 0.8, 0.87);
+  vec3 rosado = vec3(0.95, 0.66, 0.78);
+  vec3 linea = vec3(0.86, 0.6, 0.72);
+  for (int capaP = 0; capaP < 2; capaP++) {
+    float interior = float(capaP);
+    float d = tiras(p, 30.0, 0.26, mix(1.0, 0.84, interior), mix(0.085, 0.078, interior), giro + interior * 0.1047, lado, largo, indice);
+    vec3 color = mix(rosado, palido, smoothstep(0.02, 0.4, largo));
+    color *= 1.0 - 0.04 * interior + 0.03 * hash21(vec2(indice, interior));
+    // Las rayitas del pétalo, a lo largo.
+    color = mix(color, color * 0.92, (1.0 - smoothstep(0.08, 0.2, abs(abs(lado) - 0.45))) * smoothstep(0.1, 0.3, largo) * vDetalle * 0.7);
+    color = mix(color, mix(color, vec3(1.0), 0.35), (1.0 - smoothstep(0.05, 0.16, abs(lado))) * smoothstep(0.3, 0.7, largo) * vDetalle);
+    capaConLinea(lienzo, d, color, linea, 0.7);
+  }
   float r = length(p);
   float a = atan(p.y, p.x);
-  float florecilla = 1.0 - smoothstep(0.35, 0.5, abs(fract(a * 18.0 / 6.2831853 + r * 3.0) - 0.5) * 2.0);
-  vec3 aro = mix(vec3(0.9, 0.36, 0.6), vec3(1.0, 0.8, 0.5), florecilla * step(0.24, r) * vDetalle);
-  capaConLinea(lienzo, r - 0.3, aro, vec3(0.6, 0.22, 0.42), 0.8);
-  vec3 centro = mix(vec3(0.3, 0.1, 0.22), vec3(0.5, 0.2, 0.36), smoothstep(0.05, 0.17, r));
-  capaConLinea(lienzo, r - 0.18, centro, vec3(0.24, 0.08, 0.18), 0.9);
+  // El collar de pétalos cortos, rosa claro.
+  float dCollar = corona(p, 44.0, 0.19, 0.31, 0.026, giro, lado, largo);
+  capaConLinea(lienzo, dCollar, vec3(0.97, 0.74, 0.84), vec3(0.84, 0.52, 0.66), 0.5);
+  // El aro de florecillas: malva con granitos y motas de polen crema.
+  vec3 aro = mix(vec3(0.62, 0.3, 0.48), vec3(0.8, 0.46, 0.64), smoothstep(0.13, 0.25, r));
+  vec2 polar = vec2(a * 6.0, r * 38.0);
+  vec2 celda = floor(polar);
+  float grano = 1.0 - smoothstep(0.18, 0.4, length(fract(polar) - 0.5 + 0.25 * (vec2(hash21(celda), hash21(celda + 1.7)) - 0.5)));
+  aro = mix(aro, aro * 1.18, grano * vDetalle * 0.7);
+  float polen = step(0.72, hash21(celda + 5.3)) * grano;
+  aro = mix(aro, vec3(1.0, 0.9, 0.62), polen * vDetalle * 0.8);
+  capaConLinea(lienzo, r - 0.24 - 0.008 * sin(a * 9.0 + giro), aro, vec3(0.5, 0.2, 0.36), 0.5);
+  // El centro, casi negro granate, algo irregular.
+  vec3 centro = mix(vec3(0.16, 0.04, 0.1), vec3(0.3, 0.08, 0.18), smoothstep(0.02, 0.12, r));
+  capaConLinea(lienzo, r - 0.12 - 0.012 * sin(a * 3.0 + giro) - 0.006 * sin(a * 7.0), centro, vec3(0.12, 0.03, 0.07), 0.4);
   return lienzo;
 }
 
 vec4 lirio(vec2 p) {
   vec4 lienzo = vec4(0.0);
-  float lado;
-  float largo;
-  // Lirio "stargazer" del ramo: tres pétalos de fuera, anchos, y tres de dentro entre ellos, con el
-  // borde ondulado y blanco rosado, una banda fucsia por el centro con motitas oscuras, la garganta
-  // verde amarilla, un nervio claro; seis estambres con sus anteras y el pistilo.
-  float giro = vVariante * PI;
-  vec3 borde = vec3(1.0, 0.93, 0.96);
-  vec3 banda = vec3(0.9, 0.3, 0.58);
-  vec3 linea = vec3(0.72, 0.3, 0.5);
+  // Lirio oriental del ramo (tipo stargazer): seis tépalos puntiagudos, blancos rosados con un rubor
+  // rosa que sube por el centro y se aclara hacia la punta (que se curva hacia atrás), la garganta
+  // verde, alguna motita, el nervio; seis estambres con sus anteras color óxido y el pistilo.
+  float giro = vVariante * 3.14159;
+  float r = length(p);
+  float a = atan(p.y, p.x);
+  vec3 blanco = vec3(1.0, 0.95, 0.96);
+  vec3 rubor = vec3(0.95, 0.6, 0.74);
+  vec3 linea = vec3(0.84, 0.64, 0.72);
   for (int vuelta = 0; vuelta < 2; vuelta++) {
     float fv = float(vuelta);
-    float d = corona(p, 3.0, 0.02, 1.0 - 0.06 * fv, 0.5 - 0.1 * fv, giro + fv * PI / 3.0, lado, largo);
-    // Borde ondulado hacia la punta.
-    d += 0.018 * sin(largo * 38.0 + fv) * smoothstep(0.35, 0.7, largo);
-    vec3 petalo = mix(banda, borde, smoothstep(0.22, 0.62, abs(lado) + 0.35 * smoothstep(0.55, 0.95, largo)));
-    petalo = mix(petalo, vec3(0.82, 0.9, 0.52), 1.0 - smoothstep(0.1, 0.28, largo));
-    // Nervio claro y motitas.
-    petalo = mix(petalo, mix(banda, borde, 0.7), (1.0 - smoothstep(0.03, 0.08, abs(lado))) * step(0.25, largo) * vDetalle);
-    vec2 celda = floor(p * 13.0);
-    float mota = step(0.7, hash21(celda + fv * 7.0)) * (1.0 - smoothstep(0.08, 0.2, length(fract(p * 13.0) - 0.5))) * step(0.2, largo) * (1.0 - smoothstep(0.45, 0.7, largo)) * (1.0 - smoothstep(0.2, 0.55, abs(lado)));
-    petalo = mix(petalo, vec3(0.5, 0.1, 0.28), mota * vDetalle);
-    capaConLinea(lienzo, d, petalo, linea, 1.0);
+    float sector = 2.0944;
+    float ang = a - giro - fv * 1.0472;
+    float k = floor(ang / sector + 0.5);
+    float delta = ang - k * sector;
+    float x = delta * r;
+    float t = clamp(r / (1.0 - 0.05 * fv), 0.0, 1.0);
+    // Ancho: estrecho en la base, el máximo hacia el 40 % y la punta aguda.
+    float w = (fv > 0.5 ? 0.31 : 0.27) * pow(sin(3.14159 * pow(t, 0.62)), 0.85);
+    // El borde de los de dentro, ondulado.
+    w += fv * 0.018 * sin(t * 34.0 + k) * smoothstep(0.25, 0.7, t);
+    float d = max(abs(x) - w, r - (1.0 - 0.05 * fv));
+    float lado = abs(x) / max(w, 1e-3);
+    vec3 color = mix(blanco, rubor, (1.0 - smoothstep(0.1, 0.62, lado)) * (1.0 - smoothstep(0.5, 0.92, t)) * 0.9);
+    // La garganta verde y la punta (curvada) más clara.
+    color = mix(color, vec3(0.78, 0.88, 0.5), 1.0 - smoothstep(0.08, 0.24, t));
+    color = mix(color, vec3(1.0, 0.98, 0.98), smoothstep(0.78, 0.96, t) * 0.7);
+    // El nervio, rosa más intenso.
+    color = mix(color, vec3(0.88, 0.42, 0.6), (1.0 - smoothstep(0.03, 0.09, lado)) * smoothstep(0.18, 0.3, t) * (1.0 - smoothstep(0.6, 0.85, t)) * vDetalle);
+    // Alguna motita.
+    vec2 celda = floor(p * 15.0 + fv * 7.0);
+    float mota = step(0.84, hash21(celda)) * (1.0 - smoothstep(0.07, 0.16, length(fract(p * 15.0 + fv * 7.0) - 0.5))) * step(0.22, t) * (1.0 - smoothstep(0.42, 0.6, t)) * (1.0 - smoothstep(0.35, 0.6, lado));
+    color = mix(color, vec3(0.78, 0.22, 0.45), mota * vDetalle);
+    // El pliegue donde la punta se curva hacia atrás.
+    color = mix(color, color * 0.9, (1.0 - smoothstep(0.0, 0.03, abs(t - 0.8))) * vDetalle * 0.6);
+    capaConLinea(lienzo, d, color, linea, 0.8);
   }
-  // Estambres: hilos verdes claros entre los pétalos, con la antera oval de color óxido.
-  float r = length(p);
-  float angulo = atan(p.y, p.x) - giro - PI / 6.0;
-  float sector = PI / 3.0;
-  float k = floor(angulo / sector + 0.5);
-  float delta = (angulo - k * sector) * r;
-  float hilo = (1.0 - smoothstep(0.01, 0.022, abs(delta))) * step(r, 0.5) * step(0.06, r);
-  lienzo.rgb = mix(lienzo.rgb, vec3(0.74, 0.86, 0.5), hilo * vDetalle);
-  vec2 enAntera = vec2(delta, r - 0.54);
-  float antera = length(enAntera / vec2(0.055, 0.03)) - 1.0;
-  lienzo.rgb = mix(lienzo.rgb, vec3(0.7, 0.3, 0.12), (1.0 - smoothstep(-0.2, 0.1, antera)) * vDetalle);
-  // El pistilo, más largo, con su punta de tres lóbulos.
-  float pistilo = (1.0 - smoothstep(0.012, 0.026, abs((atan(p.y, p.x) - giro) * r))) * step(r, 0.62);
-  lienzo.rgb = mix(lienzo.rgb, vec3(0.62, 0.8, 0.44), pistilo * vDetalle);
+  // Estambres: seis hilos verde claro con la antera alargada, de través, color óxido.
+  float ang = a - giro - 0.5236;
+  float sector = 1.0472;
+  float k = floor(ang / sector + 0.5);
+  float delta = (ang - k * sector) * r;
+  float largoHilo = 0.58 + 0.06 * sin(k * 2.1);
+  float hilo = (1.0 - smoothstep(0.008, 0.02, abs(delta))) * step(0.08, r) * step(r, largoHilo);
+  lienzo.rgb = mix(lienzo.rgb, vec3(0.78, 0.88, 0.58), hilo * vDetalle);
+  float antera = length(vec2(delta, r - largoHilo) / vec2(0.07, 0.024)) - 1.0;
+  lienzo.rgb = mix(lienzo.rgb, vec3(0.64, 0.3, 0.14), (1.0 - smoothstep(-0.25, 0.12, antera)) * vDetalle);
+  // El pistilo, más largo, con su estigma de tres lóbulos.
+  float delta2 = (a - giro) * r;
+  float pistilo = (1.0 - smoothstep(0.01, 0.024, abs(delta2))) * step(r, 0.68);
+  lienzo.rgb = mix(lienzo.rgb, vec3(0.64, 0.8, 0.46), pistilo * vDetalle);
+  vec2 enEstigma = p - vec2(cos(giro), sin(giro)) * 0.7;
+  lienzo.rgb = mix(lienzo.rgb, vec3(0.5, 0.36, 0.42), (1.0 - smoothstep(0.035, 0.05, length(enEstigma))) * vDetalle);
+  return lienzo;
+}
+
+vec4 capulloLirio(vec2 p) {
+  vec4 lienzo = vec4(0.0);
+  // Capullo de lirio: largo y cerrado, con la barriga hacia arriba y la punta aguda, verde abajo y
+  // crema rosado arriba, con las tres costuras de los tépalos y el brillo del lado del Sol.
+  float t = p.y * 0.5 + 0.5;
+  float w = 0.62 * pow(sin(3.14159 * clamp(pow(t, 0.8), 0.0, 1.0)), 0.7) * (1.0 - 0.15 * t);
+  w = max(w, 0.16 * (1.0 - smoothstep(0.0, 0.15, t)));
+  float d = abs(p.x) - w;
+  vec3 color = mix(vec3(0.42, 0.62, 0.32), vec3(0.8, 0.88, 0.64), smoothstep(0.1, 0.55, t));
+  color = mix(color, vec3(0.96, 0.8, 0.84), smoothstep(0.45, 0.85, t) * (0.5 + 0.5 * vVariante));
+  float lado = p.x / max(w, 1e-3);
+  float costura = (1.0 - smoothstep(0.03, 0.08, abs(abs(lado) - 0.42))) * smoothstep(0.2, 0.35, t);
+  color = mix(color, vec3(0.5, 0.66, 0.38), costura * 0.6 * vDetalle);
+  color *= 0.84 + 0.22 * smoothstep(-0.8, 0.6, lado * sign(vSolEnFlor.x + 1e-4));
+  capaConLinea(lienzo, d, color, vec3(0.4, 0.55, 0.3), 0.8);
   return lienzo;
 }
 
@@ -279,10 +349,11 @@ vec4 rosa(vec2 p) {
   // Como las rosas del ramo: fucsia, rosa claro o melocotón. Sépalos verdes por detrás, tres
   // vueltas de pétalos (de fuera adentro y, en cada una, de atrás adelante), cada pétalo oscuro en
   // su base y claro hacia el borde enrollado, y el capullo apretado en espiral en el centro.
-  vec3 color = vVariante < 0.45 ? vec3(0.9, 0.2, 0.5) : vVariante < 0.85 ? vec3(0.99, 0.62, 0.74) : vec3(1.0, 0.7, 0.64);
-  vec3 oscuro = color * vec3(0.62, 0.46, 0.58);
-  vec3 claro = mix(color, vec3(1.0, 0.95, 0.96), 0.45);
-  vec3 linea = color * vec3(0.48, 0.34, 0.44);
+  // Como las del ramo: rosa claro (las más), fucsia, lila rosado o rubor pálido.
+  vec3 color = vVariante < 0.45 ? vec3(0.97, 0.62, 0.72) : vVariante < 0.75 ? vec3(0.92, 0.24, 0.54) : vVariante < 0.9 ? vec3(0.86, 0.52, 0.76) : vec3(0.99, 0.8, 0.84);
+  vec3 oscuro = color * vec3(0.8, 0.6, 0.7);
+  vec3 claro = mix(color, vec3(1.0, 0.95, 0.96), 0.5);
+  vec3 linea = color * vec3(0.66, 0.5, 0.6);
   vec2 sol = normalize(vSolEnFlor + 1e-4);
   float giro = vVariante * 6.2831853;
 
@@ -336,76 +407,266 @@ vec4 rosa(vec2 p) {
   return lienzo;
 }
 
+// Florecilla de clavel de poeta en su marco (radio 1): cinco pétalos en abanico, anchos en la punta,
+// con la muesca entre pétalo y pétalo y el borde dentado, como cortado con tijeras de picos. En
+// 'enPetalo', la posición a lo ancho del pétalo (-1..1) y en 'rf', la distancia al centro.
+float florecillaClavel(vec2 f, float giro, out float rf, out float enPetalo, out float af) {
+  rf = length(f);
+  af = atan(f.y, f.x) + giro;
+  float sector = 1.2566371;
+  enPetalo = (af - floor(af / sector + 0.5) * sector) / (sector * 0.5);
+  // Seis dientes por pétalo, la punta de uno en el centro.
+  float dientes = abs(fract(enPetalo * 3.0 + 0.5) - 0.5) * 2.0;
+  return rf - (1.0 - 0.26 * pow(abs(enPetalo), 4.0) - 0.1 * dientes);
+}
+
 vec4 clavelina(vec2 p) {
   vec4 lienzo = vec4(0.0);
-  // Clavel de poeta: una cúpula de siete florecillas de cinco pétalos con el borde flecado, magenta,
-  // morada con el borde blanco o granate, con el ojo más oscuro.
-  vec3 base = vVariante < 0.45 ? vec3(0.86, 0.2, 0.54) : vVariante < 0.88 ? vec3(0.64, 0.24, 0.68) : vec3(0.66, 0.1, 0.26);
-  bool bicolor = vVariante >= 0.45 && vVariante < 0.88;
-  for (int k = 0; k < 7; k++) {
-    float angulo = float(k) * 1.0471976 + vVariante * 3.0;
-    vec2 c = k == 6 ? vec2(0.0, 0.04) : vec2(cos(angulo), sin(angulo)) * 0.52;
+  // Clavel de poeta (sweet william), como en el ramo: una cabeza suelta de pocas florecillas grandes
+  // de cinco pétalos dentados, unas de cara y otras de canto, sobre una barba de brácteas verdes
+  // finas como agujas que asoman por todos lados. Cereza con el ojo granate, granate aterciopelado
+  // con el borde y el ojo blancos, fucsia con el aro blanco o morado con el centro blanco.
+  float giro = vVariante * 6.2831853;
+  float espejo = fract(vVariante * 13.7) < 0.5 ? -1.0 : 1.0;
+  p.x *= espejo;
+  // La barba: agujas verdes desde el pie de la cabeza, abiertas hacia los lados y hacia abajo, y
+  // alguna entre las florecillas.
+  vec2 pie = vec2(0.0, -0.08);
+  float barba = 1e3;
+  float puntaBarba = 0.0;
+  for (int k = 0; k < 15; k++) {
+    float fk = float(k);
+    float azar = hash21(vec2(fk, vVariante * 9.1));
+    float ang = k < 12 ? mix(3.5, 5.95, (fk + 0.5 * azar) / 12.0) : mix(0.5, 2.6, (fk - 12.0 + azar) / 3.0);
+    vec2 dir = vec2(cos(ang), sin(ang));
+    float largo = k < 12 ? 0.72 + 0.26 * azar : 0.82;
+    vec2 ap = p - pie - dir * 0.12;
+    float h = clamp(dot(ap, dir) / largo, 0.0, 1.0);
+    float dAguja = length(ap - dir * largo * h) - mix(0.035, 0.008, h);
+    if (dAguja < barba) {
+      barba = dAguja;
+      puntaBarba = h;
+    }
+  }
+  vec3 verdeBarba = mix(vec3(0.4, 0.58, 0.26), vec3(0.66, 0.78, 0.44), puntaBarba);
+  capaConLinea(lienzo, barba, verdeBarba, vec3(0.28, 0.42, 0.18), 0.5 * vDetalle);
+
+  float variedad = fract(vVariante * 7.31);
+  vec3 petalo;
+  vec3 ojo;
+  float bordeBlanco = 0.0;
+  float centroBlanco = 0.0;
+  if (variedad < 0.4) {
+    petalo = vec3(0.9, 0.16, 0.42);
+    ojo = vec3(0.58, 0.04, 0.2);
+  } else if (variedad < 0.65) {
+    petalo = vec3(0.52, 0.05, 0.19);
+    ojo = vec3(0.34, 0.02, 0.12);
+    bordeBlanco = 1.0;
+    centroBlanco = 1.0;
+  } else if (variedad < 0.85) {
+    petalo = vec3(0.9, 0.3, 0.6);
+    ojo = vec3(0.62, 0.1, 0.36);
+    bordeBlanco = 0.55;
+  } else {
+    petalo = vec3(0.58, 0.2, 0.66);
+    ojo = vec3(0.4, 0.1, 0.5);
+    centroBlanco = 1.0;
+  }
+  // Las florecillas, de atrás (arriba, de canto) adelante (abajo, de cara).
+  for (int i = 0; i < 7; i++) {
+    float fi = float(i);
+    float fila = i < 3 ? 0.0 : i < 5 ? 1.0 : 2.0;
+    float enFila = i < 3 ? fi - 1.0 : i < 5 ? fi - 3.5 : fi - 5.5;
+    vec2 c = vec2(enFila * mix(0.42, 0.46, fila * 0.5) + 0.08 * fila, mix(0.36, -0.16, fila * 0.5));
+    c += 0.07 * (vec2(hash21(vec2(fi, vVariante * 5.3)), hash21(vec2(fi + 9.0, vVariante * 3.1))) - 0.5);
+    float radio = mix(0.3, 0.35, fila * 0.5) * (0.92 + 0.14 * hash21(vec2(fi + 2.0, vVariante)));
+    // De canto: aplastada en vertical e inclinada un poco.
+    float aplastado = mix(0.56, 0.94, fila * 0.5);
+    float inclina = (hash21(vec2(fi + 4.0, vVariante * 2.3)) - 0.5) * 0.6;
     vec2 f = p - c;
-    float r = length(f);
-    float a = atan(f.y, f.x) + float(k) * 0.7;
-    float borde = 0.4 + 0.07 * cos(5.0 * a) + 0.025 * sin(23.0 * a);
-    vec3 color = base * (k == 6 ? 1.05 : 0.92);
-    if (bicolor) color = mix(color, vec3(1.0, 0.96, 0.98), smoothstep(0.26, 0.36, r));
-    color = mix(color, base * 0.55, (1.0 - smoothstep(0.08, 0.13, r)));
-    capaConLinea(lienzo, r - borde, color, base * 0.5, 0.9);
+    f = vec2(cos(inclina) * f.x + sin(inclina) * f.y, -sin(inclina) * f.x + cos(inclina) * f.y);
+    f = vec2(f.x, f.y / aplastado) / radio;
+    float rf;
+    float enPetalo;
+    float af;
+    float d = florecillaClavel(f, giro + fi * 1.9, rf, enPetalo, af) * radio * aplastado;
+    float borde = rf - d / (radio * aplastado);
+    vec3 color = petalo * (0.94 + 0.1 * hash21(vec2(fi, 3.3)));
+    // Terciopelo: más oscuro hacia la base del pétalo, con rayitas finas a lo largo.
+    color *= mix(0.84, 1.0, smoothstep(0.2, 0.7, rf));
+    color *= 1.0 - 0.07 * (0.5 + 0.5 * sin(af * 34.0)) * vDetalle * smoothstep(0.3, 0.5, rf);
+    // La muesca entre pétalos, una raya oscura desde el ojo.
+    float entre = (1.0 - smoothstep(0.03, 0.08, (1.0 - abs(enPetalo)) * rf * 0.63)) * smoothstep(0.28, 0.45, rf);
+    color = mix(color, ojo * 0.8, entre * mix(0.5, 0.9, vDetalle));
+    // El borde de picos blanco (granate) o pálido (fucsia).
+    color = mix(color, vec3(1.0, 0.95, 0.97), bordeBlanco * smoothstep(borde - 0.24, borde - 0.12, rf));
+    // El ojo: granate oscuro (o blanco en los de centro blanco), con los pelillos.
+    float enOjo = 1.0 - smoothstep(0.3, 0.36, rf + 0.05 * abs(sin(af * 2.5)));
+    color = mix(color, mix(ojo, vec3(1.0, 0.96, 0.98), centroBlanco), enOjo);
+    float pelillo = (1.0 - smoothstep(0.15, 0.35, abs(fract(af * 2.2) - 0.5))) * step(0.1, rf) * (1.0 - smoothstep(0.3, 0.4, rf));
+    color = mix(color, mix(vec3(1.0, 0.9, 0.95), ojo, centroBlanco), pelillo * 0.6 * vDetalle);
+    // El centro: blanco (o, en los de centro blanco, un puntito oscuro).
+    color = mix(color, mix(vec3(1.0, 0.94, 0.96), ojo * 0.8, centroBlanco), 1.0 - smoothstep(0.06, 0.1, rf));
+    capaConLinea(lienzo, d, color, mix(petalo * 0.55, ojo * 0.7, 0.5), 0.6);
+    // Dos estambres blancos, cortos, que salen del centro algo curvados (sólo de cerca).
+    for (int e = 0; e < 2; e++) {
+      float ae = fi * 2.1 + float(e) * 2.6;
+      vec2 punta = vec2(cos(ae), sin(ae)) * 0.44;
+      float h = dot(f, punta) / dot(punta, punta);
+      vec2 curva = punta * clamp(h, 0.0, 1.0) + vec2(-punta.y, punta.x) * 0.35 * clamp(h, 0.0, 1.0) * (1.0 - clamp(h, 0.0, 1.0));
+      float estambre = (1.0 - smoothstep(0.022, 0.045, length(f - curva))) * step(0.0, h) * step(h, 1.0);
+      lienzo.rgb = mix(lienzo.rgb, vec3(1.0, 0.98, 0.99), estambre * vDetalle * step(d, 0.0));
+    }
   }
   return lienzo;
 }
 
+// Unión suave de dos distancias (radio k).
+float unionSuave(float a, float b, float k) {
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+
 vec4 bocaDeDragon(vec2 p) {
   vec4 lienzo = vec4(0.0);
-  // Espiga que se afina hacia arriba: florecillas de dos labios (el de arriba mayor) alternas, con
-  // la garganta clara, y botones verdes en la punta.
-  vec3 color = vVariante < 0.35 ? vec3(0.76, 0.36, 0.74) : vVariante < 0.7 ? vec3(0.83, 0.6, 0.9) : vec3(0.95, 0.56, 0.74);
-  vec3 linea = color * vec3(0.6, 0.5, 0.65);
+  // Boca de dragón, como las del ramo: abajo, las florecillas abiertas, una a cada lado, cada una
+  // una capucha mullida (el labio de arriba, con su muesca) sobre la bolsa del labio de abajo, que
+  // cierra la boca, y el tubo pálido que sale del tallo; arriba, los botones verde salvia, peludos,
+  // cada vez más pequeños (los de abajo ya enseñan el color). Malva, lila, crema o melocotón.
+  // En unidades del medio ancho (el quad es 3,2 veces más alto que ancho): los círculos, redondos.
+  vec2 s = vec2(p.x, p.y * 3.2);
+  float variedad = fract(vVariante * 5.3);
+  vec3 color = variedad < 0.4 ? vec3(0.7, 0.36, 0.56) : variedad < 0.62 ? vec3(0.76, 0.52, 0.84) : variedad < 0.84 ? vec3(0.99, 0.9, 0.86) : vec3(0.98, 0.74, 0.7);
+  vec3 palido = mix(color, vec3(1.0, 0.96, 0.97), 0.5);
+  vec3 linea = color * vec3(0.58, 0.46, 0.58);
+  float luz = sign(vSolEnFlor.x + 1e-4);
+  // El tallo, que se afina hacia la punta.
+  capaConLinea(lienzo, max(abs(s.x) - mix(0.08, 0.035, s.y * 0.16 + 0.5), s.y - 3.0), vec3(0.46, 0.62, 0.32), vec3(0.3, 0.44, 0.22), 0.4);
+  // Los botones, de la punta hacia abajo (los de abajo, delante): vainas sueltas a un lado y a otro.
   for (int k = 0; k < 8; k++) {
-    float y = -0.88 + float(k) * 0.24;
-    float afinado = 1.0 - 0.45 * (float(k) / 7.0);
-    float x = (k % 2 == 0 ? -0.2 : 0.2) * afinado;
-    vec2 q = (p - vec2(x, y)) / afinado;
-    if (k >= 6) {
-      capaConLinea(lienzo, length(q * vec2(1.3, 1.0)) - 0.28, vec3(0.5, 0.7, 0.36), vec3(0.34, 0.5, 0.24), 0.8);
-      continue;
-    }
-    // El labio de arriba, de dos lóbulos; el de abajo, de tres, con la mancha amarilla de la
-    // garganta (por donde entran las abejas).
-    vec2 qa = q - vec2(0.0, 0.1);
-    float labioArriba = min(length((qa - vec2(-0.17, 0.0)) * vec2(1.0, 1.2)) - 0.28, length((qa - vec2(0.17, 0.0)) * vec2(1.0, 1.2)) - 0.28);
-    vec2 qb = q - vec2(0.0, -0.17);
-    float labioAbajo = min(min(length(qb - vec2(-0.2, 0.0)) - 0.16, length(qb - vec2(0.2, 0.0)) - 0.16), length(qb - vec2(0.0, -0.05)) - 0.18);
-    capaConLinea(lienzo, labioArriba, mix(color, color * 1.08, smoothstep(-0.2, 0.2, qa.y)), linea, 0.9);
-    capaConLinea(lienzo, labioAbajo, mix(color, vec3(1.0, 0.95, 0.92), 0.3), linea, 0.8);
-    float garganta = length((q - vec2(0.0, -0.1)) * vec2(1.8, 2.6)) - 0.12;
-    lienzo.rgb = mix(lienzo.rgb, vec3(1.0, 0.86, 0.4), (1.0 - smoothstep(-0.02, 0.02, garganta)) * vDetalle);
+    float fk = float(k);
+    float t = fk / 7.0;
+    float lado = mod(fk, 2.0) < 0.5 ? -1.0 : 1.0;
+    float tam = mix(0.11, 0.2, t);
+    vec2 c = vec2(lado * mix(0.05, 0.17, t), mix(3.0, 1.12, t));
+    // Una gota que apunta hacia arriba y hacia fuera.
+    float ang = lado * mix(0.2, 0.6, t);
+    vec2 q = s - c;
+    q = vec2(cos(ang) * q.x - sin(ang) * q.y, sin(ang) * q.x + cos(ang) * q.y) / tam;
+    float dBoton = (length(vec2(q.x * (1.0 + 0.7 * max(q.y, 0.0)), q.y * 0.72)) - 1.0) * tam * 0.72;
+    vec3 verde = mix(vec3(0.56, 0.68, 0.42), vec3(0.8, 0.87, 0.64), smoothstep(-0.9, 0.9, q.x * luz));
+    // El cáliz, más oscuro abajo, con sus puntas.
+    float caliz = 1.0 - smoothstep(-0.7, -0.3, q.y - 0.2 * abs(sin(q.x * 4.0)));
+    verde = mix(verde, vec3(0.4, 0.54, 0.28), caliz * 0.7);
+    // Los dos de abajo, con la punta del color de la flor.
+    verde = mix(verde, mix(color, palido, 0.3), smoothstep(0.75, 1.0, t) * smoothstep(0.2, 0.8, q.y) * 0.8);
+    capaConLinea(lienzo, dBoton, verde, vec3(0.34, 0.48, 0.24), 0.7);
+    // La pelusa: un reborde claro por dentro.
+    lienzo.rgb = mix(lienzo.rgb, vec3(0.88, 0.93, 0.8), (1.0 - smoothstep(0.0, 0.05, -dBoton)) * step(dBoton, 0.0) * 0.4 * vDetalle);
+  }
+  // Las florecillas abiertas, de arriba abajo (las de abajo, delante y más grandes).
+  for (int k = 0; k < 6; k++) {
+    float fk = float(k);
+    float t = fk / 5.0;
+    float lado = mod(fk, 2.0) < 0.5 ? 1.0 : -1.0;
+    float tam = mix(0.56, 0.68, t);
+    vec2 c = vec2(lado * 0.2, mix(0.62, -2.42, t));
+    // En el marco de la florecilla: x hacia fuera del tallo, y hacia arriba, algo levantada.
+    vec2 q = (s - c) / tam;
+    q.x *= lado;
+    q = vec2(0.94 * q.x + 0.34 * q.y, -0.34 * q.x + 0.94 * q.y);
+    // El tubo, pálido, que sale del tallo y se ensancha.
+    vec2 ab = vec2(0.62, 0.12);
+    vec2 aq = q - vec2(-0.66, -0.12);
+    float h = clamp(dot(aq, ab) / dot(ab, ab), 0.0, 1.0);
+    capaConLinea(lienzo, (length(aq - ab * h) - mix(0.12, 0.24, h)) * tam, palido, linea, 0.5);
+    // La capucha (el labio de arriba): dos lóbulos fundidos, con la muesca arriba.
+    float capucha = unionSuave(length(q - vec2(0.08, 0.14)) - 0.34, length(q - vec2(0.38, 0.2)) - 0.3, 0.16);
+    capucha = max(capucha, -(length(q - vec2(0.3, 0.6)) - 0.08));
+    vec3 colorArriba = mix(color, mix(color, palido, 0.45), smoothstep(-0.1, 0.5, q.y));
+    colorArriba *= 0.9 + 0.14 * smoothstep(-0.5, 0.5, (q.x - 0.2) * lado * luz);
+    capaConLinea(lienzo, capucha * tam, colorArriba, linea, 0.7);
+    // La bolsa del labio de abajo, que cierra la boca (su raya es la boca), con su brillo.
+    vec2 qb = q - vec2(0.34, -0.2);
+    float bolsa = length(qb * vec2(0.92, 1.18)) - 0.3;
+    vec3 colorAbajo = mix(color * 1.05, palido, 0.2 + 0.25 * smoothstep(0.0, 0.3, qb.y));
+    capaConLinea(lienzo, bolsa * tam, colorAbajo, linea, 0.7);
+    float brillo = 1.0 - smoothstep(0.0, 0.08, length(qb - vec2(0.06, 0.1)) - 0.05);
+    lienzo.rgb = mix(lienzo.rgb, variedad < 0.62 ? mix(color, vec3(1.0), 0.55) : vec3(1.0, 0.9, 0.58), brillo * step(bolsa, 0.0) * 0.6 * vDetalle);
   }
   return lienzo;
 }
 
 vec4 gipsofila(vec2 p) {
   vec4 lienzo = vec4(0.0);
-  // Ramillete: ramitas finas desde abajo que acaban en racimos de puntitos blancos o rosados.
-  vec3 color = vVariante < 0.45 ? vec3(1.0, 0.98, 0.99) : vec3(0.98, 0.64, 0.82);
-  vec3 linea = color * vec3(0.78, 0.72, 0.8);
-  float d = 1e3;
+  // Gipsófila teñida, como la del ramo: una nube suelta y redonda de racimitos de pompones
+  // diminutos, rizados, fucsia claro (alguno, casi blanco), con el centro más oscuro, sobre ramitas
+  // finas moradas que se abren en horquilla; entre racimo y racimo, huecos.
+  float variedad = fract(vVariante * 3.7);
+  vec3 color = variedad < 0.6 ? vec3(0.97, 0.52, 0.78) : variedad < 0.85 ? vec3(0.99, 0.72, 0.87) : vec3(1.0, 0.95, 0.97);
+  vec3 centro = variedad < 0.85 ? vec3(0.86, 0.36, 0.62) : vec3(0.94, 0.76, 0.86);
+  vec3 linea = color * vec3(0.74, 0.54, 0.66);
+  // Tres ramas desde el pie; cada una se abre en cuatro ramitas de largo desigual, con su racimito.
+  vec2 racimos[12];
   float rama = 1e3;
-  for (int k = 0; k < 14; k++) {
-    float a = hash21(vec2(float(k), vVariante * 31.0)) * 6.2831853;
-    float r = 0.25 + 0.6 * hash21(vec2(float(k) + 7.7, vVariante * 17.0));
-    vec2 c = vec2(cos(a), sin(a) * 0.8 + 0.12) * r;
-    d = min(d, length(p - c) - 0.075);
-    // La ramita, del pie (0, -1) al puntito.
-    vec2 ab = c - vec2(0.0, -1.0);
-    vec2 ap = p - vec2(0.0, -1.0);
-    float t = clamp(dot(ap, ab) / dot(ab, ab), 0.0, 1.0);
-    rama = min(rama, length(ap - ab * t) - 0.018);
+  vec2 pie = vec2(0.0, -0.95);
+  for (int k = 0; k < 3; k++) {
+    float fk = float(k);
+    vec2 horquilla = vec2((fk - 1.0) * 0.3 + 0.08 * (hash21(vec2(fk, vVariante * 11.0)) - 0.5), -0.28 + 0.1 * hash21(vec2(fk + 3.0, vVariante * 7.0)) - 0.1 * abs(fk - 1.0));
+    vec2 ab = horquilla - pie;
+    vec2 ap = p - pie;
+    rama = min(rama, length(ap - ab * clamp(dot(ap, ab) / dot(ab, ab), 0.0, 1.0)) - 0.01);
+    for (int j = 0; j < 4; j++) {
+      float fj = float(j);
+      float azar = hash21(vec2(fk * 4.0 + fj, vVariante * 5.0));
+      float ang = 1.5708 - (fk - 1.0) * 0.5 + (fj - 1.5) * 0.46 + 0.24 * (azar - 0.5);
+      vec2 punta = horquilla + vec2(cos(ang), sin(ang)) * (0.3 + 0.42 * hash21(vec2(fj + 7.0, fk + vVariante * 9.0)));
+      racimos[k * 4 + j] = punta;
+      vec2 cd = punta - horquilla;
+      vec2 cp = p - horquilla;
+      rama = min(rama, length(cp - cd * clamp(dot(cp, cd) / dot(cd, cd), 0.0, 1.0)) - 0.006);
+    }
   }
-  capaConLinea(lienzo, rama, vec3(0.44, 0.58, 0.32), vec3(0.44, 0.58, 0.32), 0.0);
-  capaConLinea(lienzo, d, color, linea, 0.7);
+  capaConLinea(lienzo, rama, vec3(0.55, 0.34, 0.44), vec3(0.55, 0.34, 0.44), 0.0);
+  // Los pompones de cada racimito, de fuera adentro (los del centro, encima); abajo, en su sombra.
+  for (int k = 0; k < 12; k++) {
+    float fk = float(k);
+    vec2 centroGrupo = racimos[k];
+    float radioGrupo = 0.09 + 0.05 * hash21(vec2(fk + 5.0, vVariante * 3.0));
+    if (length(p - centroGrupo) > radioGrupo + 0.1) continue;
+    for (int j = 4; j >= 0; j--) {
+      float fj = float(j);
+      float rj = radioGrupo * sqrt(fj / 4.5);
+      float aj = fj * 2.39996 + fk * 1.7 + vVariante * 6.2831853;
+      vec2 c = centroGrupo + vec2(cos(aj), sin(aj)) * rj;
+      float radio = 0.066 + 0.02 * hash21(vec2(fj + fk * 5.0, vVariante));
+      vec2 f = p - c;
+      float af = atan(f.y, f.x);
+      float d = length(f) - radio * (1.0 + 0.13 * sin(af * 8.0 + fj * 1.3));
+      float tono = hash21(vec2(fj * 1.7 + fk, vVariante * 2.0));
+      vec3 claro = mix(color, vec3(1.0, 0.96, 0.98), 0.25 * tono);
+      vec3 pompon = mix(centro, claro, smoothstep(0.1, 0.7, length(f) / radio));
+      pompon = mix(pompon, mix(claro, vec3(1.0), 0.6), (1.0 - smoothstep(0.0, 0.5, length(f / radio - vec2(-0.35, 0.38)))) * 0.65);
+      pompon *= 0.9 + 0.1 * smoothstep(-radioGrupo, radioGrupo, c.y - centroGrupo.y);
+      capaConLinea(lienzo, d, pompon, linea, 0.45);
+    }
+  }
+  return lienzo;
+}
+
+vec4 bolaVerde(vec2 p) {
+  vec4 lienzo = vec4(0.0);
+  // Dianthus "green trick" del ramo: una bola de hebras verdes finas, como un pompón de musgo.
+  float r = length(p);
+  float a = atan(p.y, p.x);
+  float borde = 0.8 + 0.06 * abs(sin(a * 23.0 + vVariante * 9.0)) + 0.035 * sin(a * 57.0);
+  float d = r - borde;
+  vec3 verde = mix(vec3(0.38, 0.58, 0.24), vec3(0.66, 0.84, 0.4), smoothstep(-0.7, 0.7, dot(p, normalize(vSolEnFlor + vec2(0.0, 0.4)))));
+  float hebra = 1.0 - smoothstep(0.15, 0.4, abs(fract(a * 7.0 + r * 3.0) - 0.5));
+  verde = mix(verde, verde * 0.82, hebra * vDetalle * 0.6);
+  verde = mix(verde, vec3(0.82, 0.92, 0.62), step(0.8, hash21(floor(p * 9.0))) * vDetalle * 0.5);
+  capaConLinea(lienzo, d, verde, vec3(0.3, 0.46, 0.2), 0.6);
   return lienzo;
 }
 
@@ -418,7 +679,9 @@ void main() {
   else if (vTipo < 3.5) flor = rosa(p);
   else if (vTipo < 4.5) flor = clavelina(p);
   else if (vTipo < 5.5) flor = bocaDeDragon(p);
-  else flor = gipsofila(p);
+  else if (vTipo < 6.5) flor = gipsofila(p);
+  else if (vTipo < 7.5) flor = capulloLirio(p);
+  else flor = bolaVerde(p);
   if (flor.a < 0.5) discard;
   // Luz de la mañana: lo que da la espalda al Sol, en sombra lila; en los carteles, más claro
   // del lado del Sol.
@@ -454,12 +717,14 @@ void main() {
   float tipo = aForma.y;
   float distancia = distance(base + vec3(0.0, altura * 0.5, 0.0), uCamara);
   float pixeles = grosor / max(distancia, 1e-3) * uPixelesPorRadian;
-  if (pixeles < 0.35) {
+  if (pixeles < 0.2) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
-  // Como la flor, el tallo crece al aparecer.
-  altura *= smoothstep(0.35, 1.0, pixeles);
+  // Como la flor, el tallo crece al aparecer; los finos (son de su grosor de verdad), al menos de un
+  // píxel de ancho.
+  altura *= smoothstep(0.2, 0.45, pixeles);
+  grosor *= max(1.0, 0.5 / pixeles);
   // La misma brisa que su flor (con otra fase, el tallo se salía por delante de la cabeza), y acaba
   // justo debajo de ella.
   float mecida = tipo < 0.5 ? 0.018 : 0.035;
@@ -486,6 +751,8 @@ ${SALIDA_CARICATURA}
 void main() {
   vec3 verde = vTipo < 0.5 ? vec3(0.36, 0.55, 0.22) : vec3(0.4, 0.58, 0.28);
   verde *= 0.86 + 0.18 * smoothstep(-1.0, 1.0, vLocal.x);
+  // Abajo, en la sombra del follaje, más oscuros: se pierden entre las hojas.
+  verde *= mix(0.62, 1.0, smoothstep(-1.0, 0.2, vLocal.y));
   // Los bordes a tinta sólo en los tallos anchos en pantalla: en los finos, todo era borde y el pie
   // del muro de girasoles se veía negro.
   float borde = smoothstep(0.62, 0.95, abs(vLocal.x)) * smoothstep(1.5, 4.0, vAnchoPx);
@@ -535,8 +802,9 @@ void main() {
   vec3 lado = normalize(cross(vec3(0.0, 1.0, 0.0), hacia));
   vec3 normal = normalize(cross(hacia, lado));
   vec3 centro = union_ + vec3(empuje.x, 0.0, empuje.y) + hacia * tamano;
-  // Proporciones: la de girasol, ancha; la de eucalipto, redonda; la larga, estrecha.
-  float anchura = aForma.z < 0.5 ? 0.8 : aForma.z < 1.5 ? 0.9 : 0.28;
+  // Proporciones: la de girasol, ancha; la de eucalipto, redonda; la larga, estrecha; la de
+  // aspidistra, una lanza ancha.
+  float anchura = aForma.z < 0.5 ? 0.8 : aForma.z < 1.5 ? 0.9 : aForma.z < 2.5 ? 0.28 : 0.34;
   vec3 punto = centro + hacia * position.y * tamano + lado * position.x * tamano * anchura;
   vLocal = position.xy;
   vLuz = abs(dot(normal, uSol));
@@ -554,16 +822,23 @@ ${SALIDA_CARICATURA}
 
 void main() {
   // El tallo en y = -1, la punta en y = 1: la de girasol, acorazonada; la de eucalipto, un óvalo
-  // verde azulado; la larga, una lanza.
+  // gris azulado; la larga (de lirio), una lanza; la de aspidistra, una lanza ancha y brillante con
+  // sus nervios paralelos, como las que envuelven el ramo.
   vec2 p = vLocal;
   float t = clamp((p.y + 1.0) * 0.5, 0.0, 1.0);
-  float ancho = vForma < 0.5 ? 0.95 * sin(3.14159 * t) * (1.0 - 0.3 * t) : vForma < 1.5 ? 0.92 * sqrt(max(1.0 - p.y * p.y, 0.0)) : 0.95 * pow(sin(3.14159 * t), 0.6);
+  float ancho = vForma < 0.5 ? 0.95 * sin(3.14159 * t) * (1.0 - 0.3 * t) : vForma < 1.5 ? 0.92 * sqrt(max(1.0 - p.y * p.y, 0.0)) : vForma < 2.5 ? 0.95 * pow(sin(3.14159 * t), 0.6) : 0.95 * pow(sin(3.14159 * pow(t, 0.8)), 0.9);
   float d = abs(p.x) - ancho;
   float w = max(fwidth(d), 1e-4);
   if (d > w) discard;
-  vec3 claro = vForma > 0.5 && vForma < 1.5 ? vec3(0.56, 0.72, 0.58) : vForma < 0.5 ? vec3(0.5, 0.72, 0.28) : vec3(0.46, 0.68, 0.28);
+  vec3 claro = vForma < 0.5 ? vec3(0.5, 0.72, 0.28) : vForma < 1.5 ? vec3(0.54, 0.68, 0.62) : vForma < 2.5 ? vec3(0.46, 0.68, 0.28) : vec3(0.34, 0.58, 0.3);
   vec3 verde = mix(claro * vec3(0.72, 0.78, 0.8), claro, smoothstep(0.1, 0.5, vLuz));
-  verde = mix(verde, verde * 0.8, smoothstep(0.0, 0.9, abs(p.x) / max(ancho, 1e-3)));
+  float x = abs(p.x) / max(ancho, 1e-3);
+  verde = mix(verde, verde * 0.8, smoothstep(0.0, 0.9, x));
+  if (vForma > 2.5) {
+    // Nervios paralelos y el brillo de la hoja (un lado más claro, como encerado).
+    verde = mix(verde, verde * 0.86, (1.0 - smoothstep(0.08, 0.2, abs(fract(x * 3.5) - 0.5))) * vDetalle * 0.7);
+    verde = mix(verde, mix(verde, vec3(0.8, 0.9, 0.7), 0.5), smoothstep(0.2, 0.5, x) * (1.0 - smoothstep(0.5, 0.8, x)) * step(0.0, p.x) * 0.5);
+  }
   verde = mix(verde, vec3(0.62, 0.78, 0.36), (1.0 - smoothstep(0.02, 0.06, abs(p.x))) * step(p.y, 0.8) * vDetalle);
   verde = mix(verde, mix(verde * 0.72, TINTA, vDetalle), 1.0 - smoothstep(0.5 * w, 1.5 * w, abs(d)));
   gl_FragColor = salidaCaricatura(verde);

@@ -68,23 +68,17 @@ const OCUPACION_TIERRA = 0.72
 const VIAJE_TIERRA = { centrar: [0, 0.35], avance: [0.1, 1], alineacion: [0.35, 0.9], rodear: [0.15, 0.95] } as const
 
 /**
- * La llegada a la Tierra, siempre bonita y sin rozar el Sol: los planetas se mueven con el reloj,
- * así que la Tierra puede estar en cualquier punto de su órbita al emprender el viaje. Visto desde
- * la Tierra, el ángulo entre el Sol y la cámara (la fase) tiene que quedar entre estos límites: con
- * más, se llegaba por el lado de noche; con menos, el camino pasaba junto al Sol. Si al salir está
- * fuera, la cámara rodea la Tierra mientras se acerca (en el plano que forman el Sol y la cámara)
- * hasta ese límite: sale hacia donde estaba y llega con la Tierra en cuarto creciente o casi llena.
+ * La llegada a la Tierra: la cámara llega sobre el destino (su vertical cuando en Cochabamba
+ * amanece), inclinada hacia el Sol lo justo para ver la Tierra bien iluminada, con la línea del
+ * amanecer cerca de Cochabamba; así el destino queda cerca del centro del disco y, en el último
+ * tramo, la cámara lo centra en pantalla y ya no lo suelta hasta el valle. Los planetas se mueven
+ * con el reloj: la cámara rodea la Tierra mientras se acerca, desde donde estaba (nunca pasa por el
+ * lado de noche ni junto al Sol).
  */
-const LLEGADA = { faseMinima: 45, faseMaxima: 75 } as const
+const LLEGADA = { haciaElSol: 20, centrar: [0.55, 0.95] } as const
 
 /** Ritmo del reloj de las órbitas: normal al llegar, en calma en la panorámica, casi quieto en el viaje. */
 const RITMO_ORBITAS = { panoramica: 0.35, viaje: 0.03 } as const
-
-/**
- * Entrada en la Tierra: cuánto mira la cámara por delante de su camino mientras planea hasta la
- * vertical del destino.
- */
-const ENTRADA = { adelanto: 0.3 } as const
 
 /**
  * La bajada hacia Cochabamba (vh del carril → km sobre el mar, en escala logarítmica: el suelo
@@ -162,24 +156,15 @@ const interpolarDireccion = (a: THREE.Vector3, b: THREE.Vector3, t: number, dest
 }
 
 /**
- * Dirección de llegada a la Tierra (unitaria, desde la Tierra) a partir de la de salida: la misma
- * si la fase (el ángulo con el Sol, visto desde la Tierra) ya está entre sus límites; si no, girada
- * en el plano del Sol y la cámara hasta el límite más cercano.
+ * Dirección de llegada a la Tierra (unitaria, desde la Tierra): la vertical del destino una vez
+ * alineada, girada `LLEGADA.haciaElSol` grados hacia el Sol.
  */
 const haciaSol = new THREE.Vector3()
-const perpendicular = new THREE.Vector3()
-const direccionLlegadaA = (salida: THREE.Vector3, tierra: THREE.Vector3, destino: THREE.Vector3): THREE.Vector3 => {
+const direccionLlegadaA = (verticalAlineada: THREE.Vector3, tierra: THREE.Vector3, destino: THREE.Vector3): THREE.Vector3 => {
   haciaSol.copy(tierra).multiplyScalar(-1).normalize()
-  const coseno = Math.min(1, Math.max(-1, salida.dot(haciaSol)))
-  const fase = THREE.MathUtils.radToDeg(Math.acos(coseno))
-  const faseDeseada = Math.min(LLEGADA.faseMaxima, Math.max(LLEGADA.faseMinima, fase))
-  if (Math.abs(faseDeseada - fase) < 1e-3) return destino.copy(salida)
-  perpendicular.copy(salida).addScaledVector(haciaSol, -coseno)
-  // Cámara, Tierra y Sol alineados: se gira hacia el norte de la eclíptica.
-  if (perpendicular.lengthSq() < 1e-6) perpendicular.set(0, 1, 0).addScaledVector(haciaSol, -haciaSol.y)
-  perpendicular.normalize()
-  const angulo = THREE.MathUtils.degToRad(faseDeseada)
-  return destino.copy(haciaSol).multiplyScalar(Math.cos(angulo)).addScaledVector(perpendicular, Math.sin(angulo)).normalize()
+  const angulo = Math.acos(Math.min(1, Math.max(-1, verticalAlineada.dot(haciaSol))))
+  if (angulo < 1e-4) return destino.copy(verticalAlineada)
+  return interpolarDireccion(verticalAlineada, haciaSol, Math.min(1, THREE.MathUtils.degToRad(LLEGADA.haciaElSol) / angulo), destino)
 }
 
 export function EscenaSistemaSolar() {
@@ -192,6 +177,7 @@ export function EscenaSistemaSolar() {
   const tierra = useRef<THREE.Object3D | null>(null)
   const region = useRef<RegionEnSistema>({
     vertical: new THREE.Vector3(0, 1, 0),
+    verticalAlineada: new THREE.Vector3(0, 1, 0),
     este: new THREE.Vector3(1, 0, 0),
     norte: new THREE.Vector3(0, 0, -1),
     distanciaNubesKm: Number.POSITIVE_INFINITY,
@@ -205,7 +191,6 @@ export function EscenaSistemaSolar() {
     haciaCamara: new THREE.Vector3(),
     camaraSistema: new THREE.Vector3(),
     direccionEntrada: new THREE.Vector3(),
-    direccionMirada: new THREE.Vector3(),
     direccionLlegada: new THREE.Vector3(),
     direccionViaje: new THREE.Vector3(),
     objetivo: new THREE.Vector3(),
@@ -217,6 +202,7 @@ export function EscenaSistemaSolar() {
     camaraMirada: new THREE.Vector3(),
     noroeste: new THREE.Vector3(),
     sureste: new THREE.Vector3(),
+    puntoDestino: new THREE.Vector3(),
   })
 
   useEffect(() => {
@@ -247,7 +233,6 @@ export function EscenaSistemaSolar() {
       haciaCamara,
       camaraSistema,
       direccionEntrada,
-      direccionMirada,
       direccionLlegada,
       direccionViaje,
       objetivo,
@@ -259,6 +244,7 @@ export function EscenaSistemaSolar() {
       camaraMirada,
       noroeste,
       sureste,
+      puntoDestino,
     } = auxiliares.current
     const tramoTierra = Math.min(1, Math.max(0, (progreso - VIAJE.tierraInicio) / (VIAJE.tierraFin - VIAJE.tierraInicio)))
     const tramoPlaneo = Math.min(1, Math.max(0, (progreso - VIAJE.tierraFin) / (VIAJE.planeoFin - VIAJE.tierraFin)))
@@ -307,9 +293,9 @@ export function EscenaSistemaSolar() {
       haciaCamara.copy(origenViaje).sub(malla.position)
       const lejos = haciaCamara.length()
       haciaCamara.normalize()
-      // La dirección de llegada (desde la Tierra) con la fase dentro de sus límites, y la del viaje:
-      // de la de salida a la de llegada mientras se acerca.
-      direccionLlegadaA(haciaCamara, malla.position, direccionLlegada)
+      // La dirección de llegada (desde la Tierra, sobre el destino) y la del viaje: de la de salida a
+      // la de llegada mientras se acerca.
+      direccionLlegadaA(region.current.verticalAlineada, malla.position, direccionLlegada)
       interpolarDireccion(haciaCamara, direccionLlegada, suavizar(VIAJE_TIERRA.rodear[0], VIAJE_TIERRA.rodear[1], tramoTierra), direccionViaje)
       const radioTierra = malla.scale.x
       // Al final del avance la Tierra ocupa `OCUPACION_TIERRA` de media pantalla (a lo alto o, en
@@ -318,8 +304,15 @@ export function EscenaSistemaSolar() {
       const recorrido = Math.exp(Math.log(lejos) + (Math.log(cerca) - Math.log(lejos)) * acercar)
       camaraSistema.copy(malla.position).addScaledVector(direccionViaje, recorrido)
       objetivo.copy(malla.position).multiplyScalar(centrar)
+      // En el último tramo del acercamiento la mirada pasa del centro de la Tierra al destino (si
+      // ya está de cara a la cámara): Cochabamba queda en el centro de la pantalla y ya no se mueve.
+      const { vertical } = region.current
+      const deCara = THREE.MathUtils.smoothstep(vertical.dot(direccionViaje), 0.3, 0.7)
+      const aDestino = suavizar(LLEGADA.centrar[0], LLEGADA.centrar[1], tramoTierra) * deCara
+      puntoDestino.copy(malla.position).addScaledVector(vertical, radioTierra * (1 + ALTURA_CORAZON_KM / RADIO_TIERRA_KM))
+      objetivo.lerp(puntoDestino, tramoPlaneo > 0 ? 1 : aDestino)
       if (tramoPlaneo > 0) {
-        const { vertical, este, norte } = region.current
+        const { este, norte } = region.current
         noroeste.copy(norte).sub(este).normalize()
         sureste.copy(noroeste).multiplyScalar(-1)
         const kmAMundo = radioTierra / RADIO_TIERRA_KM
@@ -332,14 +325,13 @@ export function EscenaSistemaSolar() {
         ]
         const altura = Math.exp(interpolarMonotono(vh, BAJADA_VH, logAltura, true))
         if (vh < VIAJE.planeoFin * CARRIL_VH) {
-          // El planeo: desde donde llegó hasta la vertical del corazón de flores, pasando de mirar
-          // al centro de la Tierra a mirar el suelo y girando hasta tener el noroeste arriba (como
-          // en el valle: el Tunari arriba).
+          // El planeo: desde donde llegó hasta la vertical del destino, bajando, siempre mirando al
+          // destino (centrado en pantalla) y girando hasta tener el noroeste arriba (como en el
+          // valle: el Tunari arriba).
           const e = suavizar(0, 1, tramoPlaneo)
           interpolarDireccion(direccionLlegada, vertical, e, direccionEntrada)
           camaraSistema.copy(malla.position).addScaledVector(direccionEntrada, radioTierra + altura)
-          interpolarDireccion(direccionEntrada, vertical, ENTRADA.adelanto * (1 - e), direccionMirada)
-          objetivo.copy(malla.position).addScaledVector(direccionMirada, radioTierra * e)
+          objetivo.copy(puntoDestino)
           arribaCamara.copy(arriba).lerp(noroeste, e).normalize()
         } else {
           // La bajada: la cámara mira al corazón de flores desde el sureste, cada vez más tendida,

@@ -37,8 +37,8 @@ export const SOL_MANANA = { rumbo: 72, elevacion: 17 } as const
  */
 export const CORAZON = { escala: 32, rumbo: 315, ribete: 1.8 } as const
 
-/** El campo de girasoles alrededor del corazón: semilado (m) y marco de plantación (hileras norte-sur). */
-export const CAMPO = { semiLado: 150, entreHileras: 0.9, entrePlantas: 0.6 } as const
+/** El marco de plantación de los girasoles (m): entre hileras (a lo largo de sus franjas) y entre plantas. */
+export const CAMPO = { entreHileras: 0.9, entrePlantas: 0.6 } as const
 
 /** La ciudad (centro x, z y radio en m), la laguna Alalay (centro y semiejes) y el cerro de San Pedro. */
 export const CIUDAD = { centro: [8200, 1600], radio: 3600 } as const
@@ -58,7 +58,7 @@ export const CAMARA_VALLE: readonly { readonly vh: number; readonly posicion: re
   { vh: 1615, posicion: [380, 800, 380], mira: [0, 0, 0] },
   { vh: 1705, posicion: [62, 115, 62], mira: [0, 0, 0] },
   { vh: 1777, posicion: [20, 8, 20], mira: [-24, 0, -24] },
-  { vh: 1835, posicion: [7.9, 1.1, 7.9], mira: [-60, -5, -60] },
+  { vh: 1835, posicion: [7.9, 0.68, 7.9], mira: [-60, -3.6, -60] },
 ]
 
 /** Planos de recorte de la cámara en el valle (m): cerca para las flores, lejos para las montañas. */

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { CAMARA_VALLE, direccionRumbo } from '../constantes/valle'
-import { distanciaCorazon } from './flores'
+import { BORDE, CAMPOS, CELDAS_CAMPOS, CULTIVO, MANZANA, campoEn, crearCampo, distanciaArroyo, distanciaPrado, sitioCelda } from './campos'
 import { alturaValle } from './terreno'
 
 /**
@@ -117,34 +117,62 @@ export function generarVida(semilla = 20260930): DatosVida {
   const distanciaFinal = (n: (typeof nubes)[number]): number => Math.hypot(n[0] - FINAL.posicion[0], n[2] - FINAL.posicion[2])
   nubes.sort((a, b) => distanciaFinal(b) - distanciaFinal(a))
 
-  // Eucaliptos.
+  // Eucaliptos y otros árboles: en los setos entre campos, a la orilla del arroyo, en los huertos y
+  // en los patios, como en el valle de verdad (antes iban en filas rectas).
   const arboles: number[] = []
   const arbolAzar: number[] = []
-  const arbol = (x: number, z: number): void => {
-    if (Math.abs(x) < 165 && Math.abs(z) < 165) return
-    if (distanciaCorazon(x, z) < 20) return
-    arboles.push(x, alturaValle(x, z) - 0.5, z, 15 + 17 * Math.pow(azar(), 0.8))
+  const arbol = (x: number, z: number, alto = 15 + 17 * Math.pow(azar(), 0.8)): void => {
+    if (distanciaPrado(x, z) < 6) return
+    arboles.push(x, alturaValle(x, z) - 0.5, z, alto)
     arbolAzar.push(azar(), azar(), azar(), azar())
   }
-  // Hilera entre el campo y el Tunari, y otras a los lados del campo, junto a los caminos: tramos de
-  // árboles con claros entre ellos (una hilera sin huecos parecía un muro).
-  const hilera = (desde: number, hasta: number, plantar: (t: number) => void): void => {
-    let t = desde
-    while (t < hasta) {
-      const fin = t + 40 + 130 * azar()
-      for (; t < Math.min(fin, hasta); t += 6 + 7 * azar()) plantar(t)
-      t += 14 + 40 * azar()
+  const campo = crearCampo()
+  const RADIO_ARBOLES = 760
+  for (let z = -RADIO_ARBOLES; z <= RADIO_ARBOLES; z += 6.5) {
+    for (let x = -RADIO_ARBOLES; x <= RADIO_ARBOLES; x += 6.5) {
+      const px = x + (azar() - 0.5) * 5
+      const pz = z + (azar() - 0.5) * 5
+      if (Math.hypot(px, pz) > RADIO_ARBOLES) continue
+      const dArroyo = distanciaArroyo(px, pz)
+      if (dArroyo > 3.5 && dArroyo < 9.5) {
+        if (azar() < 0.55) arbol(px, pz, 12 + 14 * azar())
+        continue
+      }
+      campoEn(CELDAS_CAMPOS, px, pz, campo)
+      if (campo.tipoBorde === BORDE.seto && campo.borde < 2.8) {
+        // Setos con algún claro.
+        if (azar() < 0.8) arbol(px, pz)
+      } else if (campo.cultivo === CULTIVO.patio) {
+        const d = Math.hypot(px - campo.sitioX, pz - campo.sitioZ)
+        if (d > 13 && d < 26 && azar() < 0.25) arbol(px, pz, 10 + 12 * azar())
+      }
     }
   }
-  hilera(-1100, 1100, (x) => arbol(x + (azar() - 0.5) * 3, -238 + (azar() - 0.5) * 6))
-  hilera(-232, 420, (z) => arbol(-212 + (azar() - 0.5) * 4, z))
-  hilera(-232, 420, (z) => arbol(215 + (azar() - 0.5) * 4, z))
-  // Bosquecillos sueltos por el valle.
+  // Huertos: árboles bajos en marco de 5 m.
+  const { n } = CAMPOS
+  for (let j = -n / 2; j < n / 2; j += 1) {
+    for (let i = -n / 2; i < n / 2; i += 1) {
+      const [sx, sz, k] = sitioCelda(CELDAS_CAMPOS, i, j)
+      if (Math.hypot(sx, sz) > RADIO_ARBOLES || Math.floor(CELDAS_CAMPOS.valores[k + 3]) !== MANZANA.huerto) continue
+      const angulo = CELDAS_CAMPOS.valores[k + 2]
+      const [dx, dz] = [Math.cos(angulo), Math.sin(angulo)]
+      for (let v = -CAMPOS.alcance; v <= CAMPOS.alcance; v += 5) {
+        for (let u = -CAMPOS.alcance; u <= CAMPOS.alcance; u += 5) {
+          const px = sx + dx * u - dz * v
+          const pz = sz + dz * u + dx * v
+          campoEn(CELDAS_CAMPOS, px, pz, campo)
+          if (campo.indice === k && campo.borde > 3) arbol(px, pz, 5 + 3 * azar())
+        }
+      }
+    }
+  }
+  // Bosquecillos sueltos por el resto del valle.
   for (let g = 0; g < 34; g += 1) {
     const cx = (azar() - 0.5) * 6000
     const cz = (azar() - 0.5) * 3800 + 300
-    const n = 5 + Math.floor(azar() * 14)
-    for (let k = 0; k < n; k += 1) arbol(cx + (azar() - 0.5) * 110, cz + (azar() - 0.5) * 110)
+    if (Math.hypot(cx, cz) < RADIO_ARBOLES + 150) continue
+    const cuantos = 5 + Math.floor(azar() * 14)
+    for (let k = 0; k < cuantos; k += 1) arbol(cx + (azar() - 0.5) * 110, cz + (azar() - 0.5) * 110)
   }
 
   return {

@@ -8,7 +8,8 @@ import { CARRIL_VH, VIAJE } from '@/features/agujero-negro/constantes/viajeScrol
 import { MIRADA_ESPACIO, avanzarMirada } from '@/features/agujero-negro/store/miradaEspacio'
 import { interpolarMonotono } from '@/features/agujero-negro/utils/interpolarMonotono'
 import { obtenerProgresoSuave } from '@/features/narrativa/store/progresoScrollStore'
-import { CAMARA_VALLE, CAMPO, CIUDAD, CORAZON, LAGUNA, RECORTE_VALLE, SOL_MANANA, direccionRumbo, direccionSol } from '../constantes/valle'
+import { CAMARA_VALLE, CIUDAD, CORAZON, LAGUNA, RECORTE_VALLE, SOL_MANANA, direccionRumbo, direccionSol } from '../constantes/valle'
+import { obtenerTexturaCeldas } from '../utils/campos'
 import { CABEZA_FRAG, CABEZA_VERT, HOJA_FRAG, HOJA_VERT, TALLO_FRAG, TALLO_VERT } from '../shaders/flores'
 import { VALLE_SUELO_FRAG, VALLE_SUELO_VERT } from '../shaders/suelo'
 import { NIEBLA } from '@/features/dibujo/store/niebla'
@@ -114,7 +115,7 @@ export function EscenaCochabamba() {
         uCamara: { value: new THREE.Vector3() },
         uSol: { value: new THREE.Vector3(...direccionSol(SOL_MANANA.rumbo, SOL_MANANA.elevacion)) },
         uCorazon: { value: new THREE.Vector4(CORAZON.escala, ejeX, ejeZ, CORAZON.ribete) },
-        uCampo: { value: CAMPO.semiLado },
+        uCeldas: { value: obtenerTexturaCeldas() },
         uCiudad: { value: new THREE.Vector3(CIUDAD.centro[0], CIUDAD.centro[1], CIUDAD.radio) },
         uLaguna: { value: new THREE.Vector4(LAGUNA.centro[0], LAGUNA.centro[1], LAGUNA.semiejes[0], LAGUNA.semiejes[1]) },
       },

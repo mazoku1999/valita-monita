@@ -70,7 +70,9 @@ El dibujo es un pase al final del posproceso (`features/agujero-negro/components
   sin pararse en medio, con las órbitas en calma para leer los nombres, y el viaje a la Tierra.
 - **Llegada a la Tierra siempre bonita** (`LLEGADA`): las órbitas corren con el reloj y la Tierra
   puede estar en cualquier punto; la cámara la rodea mientras se acerca para llegar con el Sol de
-  lado (fase entre 45° y 75°), nunca por el lado de noche ni rozando el Sol.
+  lado, sobre Cochabamba ya de día; en el último tramo la mirada pasa del centro de la Tierra a
+  Cochabamba, que queda en el centro de la pantalla hasta el valle. El brillo del mar es pequeño y
+  se apaga cuando la Tierra llena la pantalla.
 - **La mirada del usuario** (`features/agujero-negro/store/miradaEspacio.ts`): dentro del agujero,
   arrastrar orbita alrededor de lo que se mira (el Sol o la Tierra), Ctrl + rueda o pellizcar
   acercan, el cursor da un leve paralaje; en el valle, arrastrar gira la cabeza. Todo vuelve al
@@ -100,7 +102,16 @@ flores como las de un ramo (gerberas, rosas, lirios, clavelinas, bocas de dragó
 - **El relieve 3D** (`utils/parcheRegion.ts`): 300 km de malla hija de la Tierra, con la curvatura,
   que se ve al bajar; pintada con el mismo suelo que el valle (`shaders/suelo.ts`): colores de la
   región de lejos y, de cerca, las parcelas en franjas con caminos, eucaliptos y casas, el río Rocha,
-  la ciudad con sus avenidas, el campo de girasoles y el corazón de flores.
+  la ciudad con sus avenidas, el valle de las flores y el corazón.
+- **El valle de las flores** (`utils/campos.ts`, `shaders/campos.ts`): alrededor del corazón,
+  manzanas irregulares alargadas a lo largo del eje del valle (Voronoi sobre un dominio deformado y
+  estirado), partidas en franjas largas que siguen casi todas el eje, como las parcelas junto a sus
+  acequias: girasoles (más cerca del corazón y detrás de él), flores de corte rosadas, lilas, fucsias
+  y blancas, prados, alfalfa, maíz y tierra arada, en grupos de franjas del mismo cultivo; algunas
+  manzanas son invernaderos, huertos o un patio con su casa. Entre ellas, caminos, setos de
+  eucaliptos o nada; un arroyo con su fila de árboles y un prado alrededor del corazón. Los datos de
+  cada manzana van en una textura que leen igual la GPU (que pinta el suelo) y la CPU (que planta
+  los girasoles en sus franjas y los árboles en los setos): las mismas cuentas, el mismo campo.
 - **Las nubes** (`utils/nubesDestino.ts`, `shaders/nubesBolas.ts`): el mismo campo en el globo y en
   el valle: un mar de nubes sobre el Chapare, cúmulos sobre las sierras y los valles, algunos altos
   junto al camino de la cámara, y la nube por la que se entra al valle. Bolas trazadas por píxel
@@ -113,19 +124,30 @@ flores como las de un ramo (gerberas, rosas, lirios, clavelinas, bocas de dragó
   el Tunari al norte) y el mismo suelo (`shaders/suelo.ts`), con bruma a ras. La cámara sale de la
   nube de entrada y baja por las poses de `constantes/valle.ts` hasta posarse entre las flores, en
   la punta del corazón.
-- **Las flores** (`utils/flores.ts`, `shaders/flores.ts`): girasoles en hileras mirando al Sol y,
-  dentro del corazón, las flores del ramo; cada cabeza se dibuja en su quad con pétalos de colores
-  planos y su línea fina. Aparecen y ganan detalle según su tamaño en pantalla (desde el aire el
-  suelo ya pinta el tapiz), y la tinta de tallos y hojas llega con el tamaño.
+- **Las flores** (`utils/flores.ts`, `shaders/flores.ts`): girasoles en hileras dentro de sus
+  franjas, mirando al Sol, y, dentro del corazón, las flores del ramo de las fotos; cada cabeza se
+  dibuja en su quad con pétalos de colores planos y su línea fina. Aparecen y ganan detalle según
+  su tamaño en pantalla (desde el aire el suelo ya pinta el tapiz), y la tinta de tallos y hojas
+  llega con el tamaño. Los tallos tienen su grosor de verdad (al menos un píxel): gruesos, eran un
+  bosque de palos.
+- **El ramo** (`RAMO`, `RELLENO`): delante de la cámara final, compuesto como el de las fotos (una
+  gerbera, el lirio abierto con sus capullos, rosas, claveles de poeta, bocas de dragón, gipsófila,
+  dianthus verdes, eucalipto y hojas de aspidistra) y rellenado, tupido y en cúpula, sin que ninguna
+  flor tape a otra de delante más de un poco; con su propio azar, para que no lo baraje lo que cambie
+  en los campos.
 - **La vida** (`utils/vida.ts`, `shaders/vida.ts`, `components/VidaDelValle.tsx`): hileras de
   eucaliptos con claros, nubes de la mañana (unas agarradas a las faldas del Tunari, otras en el
   cielo del oeste), mariposas que aletean y a ratos planean, y pétalos que lleva la brisa.
-- **Las flores de cerca**: rosas con pétalos en tres vueltas (de fuera adentro y de atrás adelante),
-  cada uno oscuro en su base y claro en el borde enrollado, sépalos verdes y el capullo en espiral;
-  lirios "stargazer" con tres pétalos de fuera y tres de dentro, borde ondulado, banda fucsia con
-  motitas, garganta verde, estambres con sus anteras y el pistilo; gerberas con dos coronas de
-  pétalos de punta dentada y un aro de florecillas; bocas de dragón de labios lobulados con su
-  mancha amarilla. Los tallos se mecen con su flor y quedan siempre detrás de ella.
+- **Las flores de cerca**, como en las fotos: rosas rosa claro, fucsia, lila y rubor, con pétalos
+  en tres vueltas, cada uno oscuro en su base y claro en el borde enrollado, y el capullo en espiral;
+  lirios "stargazer" blancos con el rubor rosa, la garganta verde, motitas, estambres con sus anteras
+  y el pistilo, y sus capullos largos verde crema; gerberas rosa pálido de pétalos en tira con el
+  centro casi negro granate y un aro malva con polen; claveles de poeta en cabezas sueltas de
+  florecillas de cinco pétalos dentados (cereza, granate con el borde y el ojo blancos, fucsia o
+  morado) sobre su barba de brácteas verdes; bocas de dragón con florecillas mullidas de dos labios y
+  botones verde salvia peludos; gipsófila teñida de rosa en racimitos de pompones sobre ramitas en
+  horquilla; dianthus verdes como pompones de musgo; eucalipto y aspidistra. Los tallos se mecen con
+  su flor y quedan siempre detrás de ella.
 - **El pase en el valle** (`VALLE_EN_ESCENA`): cielo de mañana en vez del nocturno (con el
   cinturón de Venus rosado frente al Sol), sin estrellas, y la tinta de profundidad sólo en las
   siluetas contra el cielo, algo más fina. Las nubes lejanas escriben la profundidad del cielo para
@@ -154,7 +176,8 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.9-sistema-solar`, `dibujo-v0.10-remolino`, `dibujo-v0.11-pulido`,
 `dibujo-v0.12-sistema-solar-fisico`, `dibujo-v0.13-entrada-tierra`, `dibujo-v0.14-valle`,
 `dibujo-v0.15-flores`, `dibujo-v0.16-vida-y-destino`, `dibujo-v0.17-nubes-de-verdad`,
-`dibujo-v0.18-flores-de-cerca`, `dibujo-v0.19-camara-espacio`, `dibujo-v0.20-region-de-verdad`.
+`dibujo-v0.18-flores-de-cerca`, `dibujo-v0.19-camara-espacio`, `dibujo-v0.20-region-de-verdad`,
+`dibujo-v0.21-flores-del-ramo`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
