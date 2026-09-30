@@ -4,7 +4,8 @@
  * del valle, con los datos de cada celda en `uCeldas`), con los bordes nítidos a cualquier altura. Cada campo con su cultivo y sus hileras
  * (los detalles se apagan cuando miden menos de unos píxeles: de lejos, su color medio, sin muaré),
  * caminos, setos de árboles y lindes entre campos, el arroyo con sus árboles, las casas de los
- * patios y el prado alrededor del corazón. Necesita RUIDO_2D y CORAZON_GLSL (y `uCorazon`).
+ * patios y el girasolar alrededor del corazón, con su sendero de tierra. Necesita RUIDO_2D y
+ * CORAZON_GLSL (y `uCorazon`).
  *
  * También las parcelas del resto del valle, más grandes: polígonos irregulares alargados en el mismo
  * eje, con sus franjas casi todas a lo largo de él, y caminos y setos entre ellos.
@@ -42,14 +43,14 @@ float cultivoFranja(float semilla, float franja, float cerca, float vista) {
   float grupo = floor(franja / (1.0 + floor(fract(semilla * 5.3) * 3.0)));
   float h = fract(semilla * 97.13 + grupo * 0.618034);
   float p0 = 0.2 + 0.25 * cerca + 0.45 * vista;
-  float p1 = 0.07 + 0.05 * cerca;
-  float p2 = 0.06 + 0.04 * cerca;
-  float p3 = 0.05 + 0.03 * cerca;
-  float p4 = 0.04 + 0.02 * cerca;
-  float p5 = 0.08;
-  float p6 = 0.17 - 0.07 * cerca;
-  float p7 = 0.14 - 0.06 * cerca;
-  float p8 = 0.09 - 0.04 * cerca;
+  float p1 = 0.07 + 0.07 * cerca;
+  float p2 = 0.06 + 0.05 * cerca;
+  float p3 = 0.05 + 0.04 * cerca;
+  float p4 = 0.04 + 0.03 * cerca;
+  float p5 = 0.08 - 0.07 * cerca;
+  float p6 = 0.17 - 0.15 * cerca;
+  float p7 = 0.14 - 0.12 * cerca;
+  float p8 = 0.09 - 0.07 * cerca;
   float u = h * (p0 + p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8);
   if (u < p0) return 1.0;
   u -= p0;
@@ -165,7 +166,9 @@ float distanciaArroyo(vec2 xz) {
   return d;
 }
 
-float distanciaPrado(vec2 xz) {
+// El girasolar que rodea el corazón (la misma cuenta que en la CPU) y el sendero entre los dos.
+const float SENDERO_CORAZON = 1.3;
+float distanciaGirasolar(vec2 xz) {
   float angulo = atan(xz.y, xz.x);
   return corazonEn(xz, uCorazon) - (13.0 + 4.0 * sin(angulo * 5.0 + 1.3) + 2.0 * sin(angulo * 11.0 + 0.4));
 }
@@ -197,6 +200,24 @@ vec3 copas(vec2 xz, float mPorPixel, out float a) {
   vec3 copa = mix(vec3(0.24, 0.42, 0.27), vec3(0.4, 0.6, 0.35), smoothstep(-0.3, 0.6, luz));
   vec3 color = mix(vec3(0.2, 0.33, 0.24), copa, a);
   return mix(color, vec3(0.3, 0.48, 0.3), smoothstep(0.8, 2.5, mPorPixel));
+}
+
+// Un campo de girasoles desde arriba: amarillo con manchas doradas (las cabezas se juntan) y, al
+// acercarse, las hileras (a lo largo, cada 0,9 m de 'u') con la tierra entre ellas; a 'borde' m del
+// borde del campo se ven los tallos y las hojas. Cerca de la cámara, donde cada girasol ya se dibuja
+// con su cabeza, el suelo es el de debajo: tierra entre las hileras y el verde al pie de las plantas
+// (amarillo, desde dentro del corazón parecía un suelo pintado).
+vec3 pintarGirasoles(vec2 xz, float u, float semilla, float fw, float borde, float dCamara) {
+  vec3 color = vec3(0.97, 0.8, 0.22) * (0.95 + 0.1 * fbm2(xz / 23.0 + semilla * 17.0));
+  float manchas = fbm2(xz / 7.0 + semilla * 9.0);
+  color = mix(color, vec3(0.9, 0.66, 0.15), smoothstep(0.45, 0.75, manchas) * 0.6);
+  color = mix(color, vec3(0.99, 0.88, 0.36), smoothstep(0.64, 0.8, fbm2(xz / 2.6 + 4.0)) * 0.45);
+  float hilera = abs(fract(u / 0.9) - 0.5) * 0.9;
+  float verHileras = 1.0 - smoothstep(0.12, 0.3, fw);
+  color = mix(color, vec3(0.46, 0.56, 0.24), (1.0 - smoothstep(0.1, 0.1 + fw, hilera)) * verHileras * 0.7);
+  color = mix(color, vec3(0.45, 0.6, 0.26), (1.0 - smoothstep(1.5, 3.0, borde)) * 0.55);
+  vec3 debajo = mix(vec3(0.6, 0.5, 0.34), vec3(0.3, 0.4, 0.2), smoothstep(0.12, 0.3, hilera)) * (0.92 + 0.16 * fbm2(xz / 1.3));
+  return mix(debajo, color, smoothstep(12.0, 45.0, dCamara));
 }
 
 // Colores de los cultivos del valle de las flores.
@@ -236,16 +257,7 @@ vec3 pintarCampos(vec2 xz, float mPorPixel, float dCamara, out float peso) {
   color *= 0.95 + 0.1 * fbm2(xz / 23.0 + semilla * 17.0);
 
   if (cultivo > 0.5 && cultivo < 1.5) {
-    // Girasoles desde arriba: amarillo con manchas doradas (las cabezas se juntan) y, al
-    // acercarse, las hileras con la tierra entre ellas.
-    float manchas = fbm2(xz / 7.0 + semilla * 9.0);
-    color = mix(color, vec3(0.9, 0.66, 0.15), smoothstep(0.45, 0.75, manchas) * 0.6);
-    color = mix(color, vec3(0.99, 0.88, 0.36), smoothstep(0.64, 0.8, fbm2(xz / 2.6 + 4.0)) * 0.45);
-    float hilera = abs(fract(u / 0.9) - 0.5) * 0.9;
-    float verHileras = 1.0 - smoothstep(0.12, 0.3, fw);
-    color = mix(color, vec3(0.46, 0.56, 0.24), (1.0 - smoothstep(0.1, 0.1 + fw, hilera)) * verHileras * 0.7);
-    // El borde del campo: se ven los tallos y las hojas.
-    color = mix(color, vec3(0.45, 0.6, 0.26), (1.0 - smoothstep(1.5, 3.0, min(borde, campo.bordeFranja))) * 0.55);
+    color = pintarGirasoles(xz, u, semilla, fw, min(borde, campo.bordeFranja), dCamara);
   } else if (cultivo > 1.5 && cultivo < 5.5) {
     // Flores de corte en hileras de 1,4 m: la flor y el follaje; de lejos, el color medio.
     float hilera = abs(fract(u / 1.4) - 0.5) * 1.4;
@@ -323,14 +335,15 @@ vec3 pintarCampos(vec2 xz, float mPorPixel, float dCamara, out float peso) {
     color = mix(color, mix(vec3(0.44, 0.68, 0.84), vec3(0.62, 0.82, 0.92), 0.5 + 0.5 * sin(xz.y * 0.9 + xz.x * 0.4)), agua);
   }
 
-  // El prado alrededor del corazón, con florecillas sueltas de cerca.
-  float dPrado = distanciaPrado(xz);
-  if (dPrado < fw) {
-    vec3 prado = vec3(0.56, 0.75, 0.37) * (0.95 + 0.1 * fbm2(xz / 3.0));
-    vec3 punto = celdas2(xz / 0.5);
-    float florecilla = (1.0 - smoothstep(0.12, 0.18, punto.x)) * step(0.7, punto.z) * (1.0 - smoothstep(0.03, 0.08, fw));
-    prado = mix(prado, punto.z < 0.85 ? vec3(1.0, 0.97, 0.9) : vec3(0.98, 0.72, 0.84), florecilla);
-    color = mix(color, prado, 1.0 - smoothstep(-fw, fw, dPrado));
+  // El girasolar que rodea el corazón (en hileras a lo largo del eje del valle, como las que se
+  // plantan en la CPU) y, junto al corazón, el sendero de tierra.
+  float dGirasolar = distanciaGirasolar(xz);
+  if (dGirasolar < fw) {
+    float dCorazon = corazonEn(xz, uCorazon);
+    vec3 girasolar = pintarGirasoles(xz, dot(xz, vec2(-EJE_CAMPOS.y, EJE_CAMPOS.x)), 0.37, fw, dCorazon - SENDERO_CORAZON, dCamara);
+    vec3 tierra = vec3(0.8, 0.68, 0.5) * (0.94 + 0.12 * fbm2(xz / 1.7));
+    girasolar = mix(tierra, girasolar, smoothstep(-fw, fw, dCorazon - SENDERO_CORAZON));
+    color = mix(color, girasolar, 1.0 - smoothstep(-fw, fw, dGirasolar));
   }
   return color;
 }

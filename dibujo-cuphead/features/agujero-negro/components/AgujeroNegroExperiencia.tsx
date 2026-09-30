@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useCallback, useState } from 'react'
+import { ControlesPaseo } from '@/features/cochabamba/components/ControlesPaseo'
 import { NarrativaOverlay } from '@/features/narrativa/components/NarrativaOverlay'
 
 const AgujeroNegroCanvas = dynamic(
@@ -24,9 +25,12 @@ export function AgujeroNegroExperiencia() {
       </div>
       <p className="sr-only">
         Simulación interactiva de un agujero negro con disco de acreción y lente gravitacional. Desplázate para
-        recorrer la historia y arrastra para orbitar alrededor.
+        recorrer la historia y arrastra para orbitar alrededor. Al final, en el corazón de flores, se pasea con
+        las flechas o WASD, o con la palanca en pantalla.
       </p>
       <NarrativaOverlay />
+      {/* Al final, posada la cámara en el corazón de flores: la palanca y los botones del paseo. */}
+      <ControlesPaseo />
     </>
   )
 }

@@ -11,6 +11,10 @@ const nextConfig = {
   turbopack: {
     root: import.meta.dirname,
   },
+  // El indicador de desarrollo, arriba a la izquierda: abajo a la izquierda va la palanca del paseo.
+  devIndicators: {
+    position: 'top-left',
+  },
 }
 
 export default nextConfig

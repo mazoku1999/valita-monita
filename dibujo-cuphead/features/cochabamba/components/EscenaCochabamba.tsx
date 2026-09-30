@@ -15,7 +15,7 @@ import { VALLE_SUELO_FRAG, VALLE_SUELO_VERT } from '../shaders/suelo'
 import { NIEBLA } from '@/features/dibujo/store/niebla'
 import { RECORTE_ENTRADA, VALLE_EN_ESCENA } from '../store/valle'
 import { usePaseo } from '../hooks/usePaseo'
-import { PASEO, RITMO_PASEO, avanzarPaseo, irA, reiniciarPaseo } from '../store/paseo'
+import { PASEO, RITMO_PASEO, alturaPaseo, avanzarPaseo, reiniciarPaseo } from '../store/paseo'
 import { crearQuadInstanciado, generarFlores } from '../utils/flores'
 import { SOMBRAS_NUBES, crearTexturaSombras, generarCumulos, nieblaEnNubes } from '../utils/nubesDestino'
 import { PISO_VALLE } from '../utils/region'
@@ -57,12 +57,12 @@ const poseEn = (progreso: number, posicion: THREE.Vector3, mira: THREE.Vector3):
 const ARRIBA = new THREE.Vector3(0, 1, 0)
 
 /**
- * Mirar alrededor en el valle (ver `store/miradaEspacio.ts`): arrastrando se gira la cabeza, como
- * al agarrar el paisaje (a la derecha: el paisaje va a la derecha), hasta unos límites (ya posada la
- * cámara, paseando, del todo y mirando más abajo); el cursor inclina la mirada un poco hacia donde
- * está. Sin zoom. Vuelve al camino al seguir con el scroll.
+ * Mirar alrededor en el valle (ver `store/miradaEspacio.ts`): arrastrando se gira la cabeza como en
+ * los juegos, en la bajada hasta unos límites y, paseando, del todo (y arriba o abajo hasta
+ * `alzarPaseo` y `bajarPaseo`, rad sobre la horizontal); el cursor inclina la mirada un poco hacia
+ * donde está. Sin zoom. Vuelve al camino al seguir con el scroll.
  */
-const MIRAR = { giroMaximo: 0.75, alzarMaximo: 0.35, bajarMaximo: 0.3, bajarPaseo: 0.95, cursor: { giro: 0.05, alzar: 0.035 } } as const
+const MIRAR = { giroMaximo: 0.75, alzarMaximo: 0.35, bajarMaximo: 0.3, alzarPaseo: 0.9, bajarPaseo: 1.25, cursor: { giro: 0.05, alzar: 0.035 } } as const
 
 /** Lleva `valor` hacia [minimo, maximo] con el factor k (0..1): al cambiar los límites, sin saltos. */
 const acotarSuave = (valor: number, minimo: number, maximo: number, k: number): number =>
@@ -109,11 +109,8 @@ export function EscenaCochabamba() {
     inversa: new THREE.Quaternion(),
     mundo: new THREE.Quaternion(),
     rotacion: new THREE.Matrix4(),
-    rayo: new THREE.Raycaster(),
-    puntoPantalla: new THREE.Vector2(),
-    inversaGrupo: new THREE.Matrix4(),
-    origenRayo: new THREE.Vector3(),
-    direccionRayo: new THREE.Vector3(),
+    /** Cuánto sigue la mirada al cursor (se apaga al posarse: paseando manda la cabeza del paseo). */
+    pesoCursor: 1,
   })
 
   const material = useMemo(() => {
@@ -213,50 +210,49 @@ export function EscenaCochabamba() {
     }
     if (!visible) return
 
-    const { posicion, mira, matriz, orientacion, inversa, mundo, rotacion, rayo, puntoPantalla, inversaGrupo, origenRayo, direccionRayo } = auxiliares.current
+    const { posicion, mira, matriz, orientacion, inversa, mundo, rotacion } = auxiliares.current
     const paso = Math.min(delta, 0.1)
     poseEn(progreso, posicion, mira)
-    // Posada la cámara, se pasea por el corazón (ver `store/paseo.ts`). Un clic o toque en el suelo
-    // es un destino: el rayo del puntero (con la cámara y el valle del fotograma que se vio) hasta el
-    // suelo del valle.
+    // Posada la cámara, se pasea por el corazón con los mandos de un juego (ver `store/paseo.ts`).
     const posado = progreso >= VIAJE.aterrizajeFin - 1e-3
-    if (PASEO.clic) {
-      puntoPantalla.set(PASEO.clic.x, PASEO.clic.y)
-      PASEO.clic = null
-      if (posado) {
-        rayo.setFromCamera(puntoPantalla, camera)
-        inversaGrupo.copy(nodo.matrixWorld).invert()
-        origenRayo.copy(rayo.ray.origin).applyMatrix4(inversaGrupo)
-        direccionRayo.copy(rayo.ray.direction).transformDirection(inversaGrupo)
-        if (direccionRayo.y < -0.01) {
-          const t = -origenRayo.y / direccionRayo.y
-          irA(origenRayo.x + direccionRayo.x * t, origenRayo.z + direccionRayo.z * t, FINAL.x, FINAL.z)
-        }
-      }
-    }
-    // Mirar alrededor: la cabeza gira alrededor de la vertical y se alza o se baja. Posada la cámara,
-    // un poco de scroll (sin salir de la pose final) no la devuelve al camino.
+    // Mirar alrededor en la bajada: arrastrando se gira la cabeza como en los juegos (a la derecha,
+    // se mira a la derecha; hacia abajo, abajo) hasta unos límites, y el cursor la inclina un poco.
+    // Al posarse, lo girado pasa a la cabeza del paseo, que manda desde entonces (el arrastre de la
+    // bajada se descarta: si no, cada arrastre giraría dos veces). Posada, un poco de scroll no la
+    // devuelve al camino.
     const mirada = MIRADA_ESPACIO
     const cursor = avanzarMirada(posado ? VIAJE.aterrizajeFin : progreso, paso)
     mirada.zoom = 0
-    const kLimite = 1 - Math.exp(-paso * 6)
-    if (posado) mirada.azimut = Math.atan2(Math.sin(mirada.azimut), Math.cos(mirada.azimut))
-    else mirada.azimut = acotarSuave(mirada.azimut, -MIRAR.giroMaximo, MIRAR.giroMaximo, kLimite)
-    mirada.elevacion = acotarSuave(mirada.elevacion, -(posado ? MIRAR.bajarPaseo : MIRAR.bajarMaximo), MIRAR.alzarMaximo, posado ? 1 : kLimite)
-    const giro = -mirada.azimut - cursor.x * MIRAR.cursor.giro
-    const alzar = mirada.elevacion + cursor.y * MIRAR.cursor.alzar
+    if (posado) {
+      if (!PASEO.activo) {
+        PASEO.giro += mirada.azimut
+        PASEO.cabeceo -= mirada.elevacion
+      }
+      mirada.azimut = 0
+      mirada.elevacion = 0
+    } else {
+      const kLimite = 1 - Math.exp(-paso * 6)
+      mirada.azimut = acotarSuave(mirada.azimut, -MIRAR.giroMaximo, MIRAR.giroMaximo, kLimite)
+      mirada.elevacion = acotarSuave(mirada.elevacion, -MIRAR.alzarMaximo, MIRAR.bajarMaximo, kLimite)
+    }
     const direccion = mira.sub(posicion)
     const largo = direccion.length()
     direccion.divideScalar(largo)
     const inclinacion = Math.asin(Math.min(1, Math.max(-1, direccion.y)))
-    const horizontal = Math.atan2(direccion.x, direccion.z) + giro
-    // El paseo: la cámara se desplaza (dentro del corazón) y se alza al alejarse de donde se posó,
-    // mirando algo más abajo.
-    const alzado = avanzarPaseo(paso, posado, horizontal, FINAL.x, FINAL.z)
-    const nueva = Math.min(1.45, Math.max(-1.45, inclinacion + alzar - RITMO_PASEO.bajarMirada * alzado))
+    const auxiliar = auxiliares.current
+    auxiliar.pesoCursor += ((posado ? 0 : 1) - auxiliar.pesoCursor) * (1 - Math.exp(-paso * 4))
+    const cursorGiro = cursor.x * MIRAR.cursor.giro * auxiliar.pesoCursor
+    const cursorAlzar = cursor.y * MIRAR.cursor.alzar * auxiliar.pesoCursor
+    const horizontal = Math.atan2(direccion.x, direccion.z) + mirada.azimut + PASEO.giro - cursorGiro
+    // El paseo: la cámara anda (dentro del corazón) y se pone de pie, mirando algo más abajo.
+    avanzarPaseo(paso, posado, horizontal, FINAL.x, FINAL.z)
+    const dePie = alturaPaseo()
+    const bajarDePie = RITMO_PASEO.bajarMirada * dePie
+    if (posado) PASEO.cabeceo = Math.min(MIRAR.alzarPaseo - inclinacion + bajarDePie, Math.max(-MIRAR.bajarPaseo - inclinacion + bajarDePie, PASEO.cabeceo))
+    const nueva = Math.min(1.45, Math.max(-1.45, inclinacion - mirada.elevacion + PASEO.cabeceo - bajarDePie + cursorAlzar))
     posicion.x += PASEO.x
     posicion.z += PASEO.z
-    posicion.y += (RITMO_PASEO.altura - FINAL.y) * alzado
+    posicion.y += (RITMO_PASEO.altura - FINAL.y) * dePie
     mira.set(Math.sin(horizontal) * Math.cos(nueva), Math.sin(nueva), Math.cos(horizontal) * Math.cos(nueva)).multiplyScalar(largo).add(posicion)
     // Dentro de la nube de entrada, niebla (el pase la pinta).
     NIEBLA.valle = nieblaEnNubes(posicion.x / 1000, -posicion.z / 1000, (posicion.y + PISO_VALLE) / 1000, NUBES_CERCANAS)

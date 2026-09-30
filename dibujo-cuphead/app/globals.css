@@ -182,3 +182,31 @@
     color: var(--color-crema);
   }
 }
+
+/* La palanca del paseo por el corazón: algo transparente en reposo, del todo al usarla. */
+.palanca-paseo {
+  opacity: 0.82;
+  transition: opacity 0.2s ease;
+}
+.palanca-paseo[data-activa] {
+  opacity: 1;
+}
+
+/* La pista de mirar: el dedo va y viene despacio (sin latir). */
+.pista-mirar-dedo {
+  animation: pista-mirar 2.8s ease-in-out infinite;
+}
+@keyframes pista-mirar {
+  0%,
+  100% {
+    transform: translateX(-7px);
+  }
+  50% {
+    transform: translateX(7px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pista-mirar-dedo {
+    animation: none;
+  }
+}

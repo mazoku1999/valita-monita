@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { CAMARA_VALLE, direccionRumbo } from '../constantes/valle'
-import { BORDE, CAMPOS, CELDAS_CAMPOS, CULTIVO, MANZANA, campoEn, crearCampo, distanciaArroyo, distanciaPrado, sitioCelda } from './campos'
+import { BORDE, CAMPOS, CELDAS_CAMPOS, CULTIVO, MANZANA, campoEn, crearCampo, distanciaArroyo, distanciaGirasolar, sitioCelda } from './campos'
 import { alturaValle } from './terreno'
 
 /**
@@ -122,7 +122,7 @@ export function generarVida(semilla = 20260930): DatosVida {
   const arboles: number[] = []
   const arbolAzar: number[] = []
   const arbol = (x: number, z: number, alto = 15 + 17 * Math.pow(azar(), 0.8)): void => {
-    if (distanciaPrado(x, z) < 6) return
+    if (distanciaGirasolar(x, z) < 6) return
     arboles.push(x, alturaValle(x, z) - 0.5, z, alto)
     arbolAzar.push(azar(), azar(), azar(), azar())
   }

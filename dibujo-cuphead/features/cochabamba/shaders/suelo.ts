@@ -171,6 +171,9 @@ vec3 colorSuelo(vec3 p, vec3 n, vec4 region, float mPorPixel, float dCamara) {
     }
     flores = mix(follaje, flores, smoothstep(6.0, 22.0, dCamara));
     vec3 ribete = mix(vec3(0.99, 0.94, 0.97), vec3(0.97, 0.7, 0.84), step(0.8, salpicado.z) * (1.0 - smoothstep(0.3, 0.4, salpicado.x)));
+    // De cerca, el ribete es la gipsófila de verdad (las plantas): el suelo, el mismo del macizo
+    // (pintado de blanco, a ras del suelo era una franja blanca con lunares).
+    ribete = mix(follaje, ribete, smoothstep(10.0, 30.0, dCamara));
     vec3 corazon = mix(flores, ribete, zona(dCorazon, -uCorazon.w));
     color = mix(color, corazon, 1.0 - zona(dCorazon, 0.0));
   }

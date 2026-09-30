@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { CAMARA_VALLE, CAMPO, CORAZON } from '../constantes/valle'
-import { CAMPOS, CELDAS_CAMPOS, CULTIVO, MANZANA, campoEn, crearCampo, dentroDelCultivo, sitioCelda } from './campos'
+import { CAMPOS, CELDAS_CAMPOS, CULTIVO, MANZANA, SENDERO, campoEn, crearCampo, dentroDelCultivo, enGirasolar, sitioCelda } from './campos'
 import { distanciaCorazon } from './corazon'
 
 /**
@@ -170,16 +170,25 @@ export function generarFlores(semilla = 20260929): DatosFlores {
   const tallos: number[][] = []
   const hojas: number[][] = []
 
-  const planta = (x: number, z: number, altura: number, tamano: number, tipo: number, rumbo: number, inclinacion: number): void => {
-    const variante = azar()
+  const planta = (x: number, z: number, altura: number, tamano: number, tipo: number, rumbo: number, inclinacion: number, variante = azar()): void => {
     // La semilla de la flor mueve también su tallo (la misma brisa).
     const semilla = azar()
     cabezas.push([x, 0, z, altura, tamano, tipo, variante, semilla, rumbo * RADIANES, inclinacion * RADIANES])
     tallos.push([x, 0, z, altura, GROSOR_TALLO[tipo], tipo, semilla])
   }
 
-  // Girasoles en los campos de girasol cercanos, en hileras en la dirección de su campo, mirando al
-  // este (al Sol de la mañana) con algo de desorden. Más allá, el suelo pinta sus campos.
+  /** Un girasol mirando al este (al Sol de la mañana) con algo de desorden; cerca de la cámara final, con sus hojas grandes. */
+  const girasol = (px: number, pz: number, altura: number): void => {
+    planta(px, pz, altura, 0.15 + 0.06 * azar(), TIPO_FLOR.girasol, 95 + (azar() - 0.5) * 30, 15 + 20 * azar())
+    if (Math.hypot(px - FINAL[0], pz - FINAL[2]) < 60) {
+      for (let h = 0; h < 3; h += 1) {
+        hojas.push([px, altura * (0.3 + 0.2 * h + 0.06 * azar()), pz, 0.2 + 0.12 * azar(), 360 * azar() * RADIANES, (20 + 30 * azar()) * RADIANES, FORMA_HOJA.girasol, altura])
+      }
+    }
+  }
+
+  // Girasoles en los campos de girasol cercanos, en hileras en la dirección de su campo. Más allá,
+  // el suelo pinta sus campos.
   const campo = crearCampo()
   const { n } = CAMPOS
   // Un mapa grueso (1,5 m) de a qué manzana pertenece cada sitio y si hay girasoles cerca: así la
@@ -232,15 +241,26 @@ export function generarFlores(semilla = 20260929): DatosFlores {
           campoEn(CELDAS_CAMPOS, px, pz, campo)
           if (campo.indice !== k || campo.cultivo !== CULTIVO.girasol || !dentroDelCultivo(campo, px, pz)) continue
           if (azar() < 0.04) continue
-          const altura = 1.4 + 0.7 * azar()
-          planta(px, pz, altura, 0.15 + 0.06 * azar(), TIPO_FLOR.girasol, 95 + (azar() - 0.5) * 30, 15 + 20 * azar())
-          // Hojas grandes en los que quedan cerca de la cámara al final.
-          if (Math.hypot(px - FINAL[0], pz - FINAL[2]) < 60) {
-            for (let h = 0; h < 3; h += 1) {
-              hojas.push([px, altura * (0.3 + 0.2 * h + 0.06 * azar()), pz, 0.2 + 0.12 * azar(), 360 * azar() * RADIANES, (20 + 30 * azar()) * RADIANES, FORMA_HOJA.girasol, altura])
-            }
-          }
+          girasol(px, pz, 1.4 + 0.7 * azar())
         }
+      }
+    }
+  }
+  // El girasolar que rodea el corazón (era un prado verde): hileras a lo largo del eje del valle,
+  // como las que pinta el suelo, hasta el sendero de tierra. Junto al corazón, bajos (a la altura de
+  // los ojos de quien pasea, que ve sus caras y no un muro de tallos) y cada vez más altos.
+  {
+    const [ejeX, ejeZ] = [Math.cos(CAMPOS.eje), Math.sin(CAMPOS.eje)]
+    for (let v = -60; v <= 60; v += CAMPO.entreHileras) {
+      for (let u = -60; u <= 60; u += CAMPO.entrePlantas) {
+        const x0 = ejeX * u - ejeZ * v
+        const z0 = ejeZ * u + ejeX * v
+        if (!enGirasolar(x0, z0)) continue
+        const px = x0 + (azar() - 0.5) * 0.2
+        const pz = z0 + (azar() - 0.5) * 0.16
+        if (!enGirasolar(px, pz) || azar() < 0.04) continue
+        const alejado = distanciaCorazon(px, pz) - SENDERO
+        girasol(px, pz, Math.min(1.85, 0.8 + 0.11 * alejado) + 0.2 * (azar() - 0.5))
       }
     }
   }
@@ -400,14 +420,17 @@ export function generarFlores(semilla = 20260929): DatosFlores {
     if (azar() < 0.15) eucalipto(x, z, alto)
   }
 
-  // El ribete: gipsófila blanca y rosa a lo largo del borde del corazón.
+  // El ribete: gipsófila blanca y rosa pálido a lo largo del borde del corazón, tupida (la que se ve
+  // desde el aire como su contorno blanco). En `shaders/flores.ts` el color de la gipsófila sale de
+  // fract(variante · 3,7): de 0,6 a 0,85 rosa pálido y de 0,85 a 1, blanca.
   for (let n = 0; n < 120000; n += 1) {
     const x = (azar() - 0.5) * 2.4 * CORAZON.escala
     const z = (azar() - 0.5) * 2.4 * CORAZON.escala
     const d = distanciaCorazon(x, z)
     if (d > 0.1 || d < -CORAZON.ribete) continue
-    if (azar() > 0.35) continue
-    planta(x, z, 0.3 + 0.2 * azar(), 0.09 + 0.05 * azar(), TIPO_FLOR.gipsofila, 135, 40)
+    if (azar() > 0.6) continue
+    const color = azar() < 0.55 ? 0.85 + 0.14 * azar() : 0.6 + 0.24 * azar()
+    planta(x, z, 0.3 + 0.2 * azar(), 0.09 + 0.05 * azar(), TIPO_FLOR.gipsofila, 135, 40, (Math.floor(3 * azar()) + color) / 3.7)
   }
 
   const plano = (filas: number[][], ancho: number, desde: number, hasta: number): Float32Array => {

@@ -10,8 +10,9 @@ import { distanciaCorazon } from './corazon'
  * sobre todo alrededor del corazón y detrás de él, en la vista final), flores de corte rosadas,
  * lilas, fucsias y blancas, prados, alfalfa, maíz y tierra arada. Algunas manzanas son un solo campo
  * de girasoles, otras invernaderos, huertos o un patio con su casa. Un arroyo con su fila de árboles
- * y, alrededor del corazón, un prado. (Con celdas iguales y cada una en su dirección, desde el aire
- * era un panal de vidriera.)
+ * y, alrededor del corazón, un girasolar con un sendero de tierra junto a su borde (era un prado
+ * verde: el usuario lo quería de girasoles). (Con celdas iguales y cada una en su dirección, desde
+ * el aire era un panal de vidriera.)
  *
  * La geometría se calcula igual en la GPU (`shaders/campos.ts`, que pinta el suelo con los bordes
  * nítidos a cualquier altura) y aquí, en la CPU (dónde van los girasoles y los árboles). Los datos
@@ -114,8 +115,11 @@ export const distanciaArroyo = (x: number, z: number): number => {
   return mejor
 }
 
-/** El prado alrededor del corazón: distancia (m, negativa dentro) a su borde, que ondula. */
-export const distanciaPrado = (x: number, z: number): number => {
+/**
+ * El girasolar que rodea el corazón: distancia (m, negativa dentro) a su borde de fuera, que ondula
+ * (por dentro llega hasta el sendero de tierra, `SENDERO` m alrededor del corazón).
+ */
+export const distanciaGirasolar = (x: number, z: number): number => {
   const angulo = Math.atan2(z, x)
   return distanciaCorazon(x, z) - (13 + 4 * Math.sin(angulo * 5 + 1.3) + 2 * Math.sin(angulo * 11 + 0.4))
 }
@@ -162,16 +166,18 @@ export const cultivoFranja = (semilla: number, franja: number, cerca: number, vi
   // arcoíris).
   const grupo = Math.floor(franja / (1 + Math.floor(fraccion(semilla * 5.3) * 3)))
   const h = fraccion(semilla * 97.13 + grupo * 0.618034)
+  // Junto al corazón, girasoles y flores; los cultivos verdes (prado, alfalfa, maíz) y la tierra
+  // arada, más lejos (alrededor del corazón el usuario no quería verde).
   const pesos = [
     0.2 + 0.25 * cerca + 0.45 * vista,
-    0.07 + 0.05 * cerca,
-    0.06 + 0.04 * cerca,
-    0.05 + 0.03 * cerca,
-    0.04 + 0.02 * cerca,
-    0.08,
-    0.17 - 0.07 * cerca,
-    0.14 - 0.06 * cerca,
-    0.09 - 0.04 * cerca,
+    0.07 + 0.07 * cerca,
+    0.06 + 0.05 * cerca,
+    0.05 + 0.04 * cerca,
+    0.04 + 0.03 * cerca,
+    0.08 - 0.07 * cerca,
+    0.17 - 0.15 * cerca,
+    0.14 - 0.12 * cerca,
+    0.09 - 0.07 * cerca,
   ]
   const cultivos = [CULTIVO.girasol, CULTIVO.rosado, CULTIVO.lila, CULTIVO.fucsia, CULTIVO.blanco, CULTIVO.prado, CULTIVO.alfalfa, CULTIVO.maiz, CULTIVO.arado]
   let total = 0
@@ -208,8 +214,9 @@ export function generarCeldas(semilla = 20261010): DatosCeldas {
         const girasoles = 0.12 + 0.1 * (1 - lejos)
         if (u < girasoles) tipo = MANZANA.girasoles
         else if (u < girasoles + 0.07 * lejos) tipo = MANZANA.invernaderos
-        else if (u < girasoles + 0.07 * lejos + 0.06) tipo = MANZANA.huerto
-        else if (u < girasoles + 0.13 * lejos + 0.06) tipo = MANZANA.patio
+        // Los huertos (verdes, de árboles), sobre todo lejos del corazón.
+        else if (u < girasoles + 0.07 * lejos + 0.06 * (0.25 + 0.75 * lejos)) tipo = MANZANA.huerto
+        else if (u < girasoles + 0.13 * lejos + 0.06 * (0.25 + 0.75 * lejos)) tipo = MANZANA.patio
       }
       // Las franjas siguen el eje (alguna manzana, de través), cada una un poco torcida.
       const angulo = eje + (azar() < 0.28 ? Math.PI / 2 : 0) + (azar() - 0.5) * 0.14
@@ -326,11 +333,17 @@ export const campoEn = ({ valores }: DatosCeldas, x: number, z: number, destino:
   return destino
 }
 
-/** Si en (x, z) puede ir una planta del cultivo de su campo (lejos de bordes, arroyo y prado). */
+/** Ancho (m) del sendero de tierra entre el corazón y su girasolar. */
+export const SENDERO = 1.3
+
+/** Si en (x, z) va un girasol del girasolar del corazón (fuera del sendero). */
+export const enGirasolar = (x: number, z: number): boolean => distanciaGirasolar(x, z) < 0 && distanciaCorazon(x, z) > SENDERO
+
+/** Si en (x, z) puede ir una planta del cultivo de su campo (lejos de bordes y arroyo, fuera del girasolar del corazón). */
 export const dentroDelCultivo = (campo: Campo, x: number, z: number): boolean => {
   const margen = campo.tipoBorde === BORDE.camino ? 2.8 : campo.tipoBorde === BORDE.seto ? 4.6 : 0.8
   if (campo.borde < margen || campo.bordeFranja < 0.7) return false
-  if (distanciaPrado(x, z) < 0) return false
+  if (distanciaGirasolar(x, z) < 0) return false
   if (distanciaArroyo(x, z) < 9) return false
   return true
 }

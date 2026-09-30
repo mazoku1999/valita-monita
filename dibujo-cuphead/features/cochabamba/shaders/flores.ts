@@ -189,11 +189,15 @@ vec4 girasol(vec2 p) {
   float lado;
   float largo;
   if (vDorso > 0.5) {
-    // Por detrás: las puntas de los pétalos y el cáliz verde con sus sépalos.
+    // Por detrás: los pétalos amarillos asomando, el cáliz verde claro con sus sépalos en punta y el
+    // arranque del tallo; con tinta fina (oscuro y entintado, un girasolar de espaldas era un montón
+    // de manchas negras).
     float d1 = corona(p, 18.0, 0.3, 0.98, 0.2, 0.0, lado, largo);
-    capa(lienzo, d1, vec3(0.93, 0.74, 0.22), 1.2);
-    float dSepalos = corona(p, 14.0, 0.2, 0.72, 0.2, 0.1, lado, largo);
-    capa(lienzo, min(dSepalos, length(p) - 0.5), vec3(0.36, 0.53, 0.22), 1.2);
+    capaConLinea(lienzo, d1, mix(vec3(0.95, 0.72, 0.2), vec3(0.99, 0.84, 0.34), largo), vec3(0.72, 0.5, 0.12), 0.8);
+    float dSepalos = corona(p, 14.0, 0.2, 0.66, 0.19, 0.1, lado, largo);
+    vec3 caliz = mix(vec3(0.42, 0.6, 0.26), vec3(0.56, 0.72, 0.34), smoothstep(-0.5, 0.6, dot(p, normalize(vSolEnFlor + 1e-4))));
+    capaConLinea(lienzo, min(dSepalos, length(p) - 0.44), caliz, vec3(0.28, 0.42, 0.16), 0.8);
+    capaConLinea(lienzo, length(p) - 0.1, vec3(0.36, 0.52, 0.22), vec3(0.28, 0.42, 0.16), 0.6);
     return lienzo;
   }
   float d1 = corona(p, 18.0, 0.28, 1.0, 0.2, 0.0, lado, largo);
@@ -709,7 +713,7 @@ void main() {
   // Luz de la mañana: lo que da la espalda al Sol, en sombra lila; en los carteles, más claro
   // del lado del Sol.
   float sombra = vTipo < 2.5 ? 1.0 - smoothstep(-0.05, 0.12, vLuz) : 0.0;
-  if (vDorso > 0.5) sombra = max(sombra, 0.5);
+  if (vDorso > 0.5) sombra = max(sombra, 0.2);
   vec3 color = mix(flor.rgb, flor.rgb * vec3(0.72, 0.68, 0.86), sombra);
   if (vTipo > 2.5) color *= 0.9 + 0.14 * smoothstep(-0.6, 0.6, dot(p, normalize(vSolEnFlor + 1e-4)));
   // De lejos, cada flor se funde un poco con el tono de su macizo (las oscuras parecían tierra).
