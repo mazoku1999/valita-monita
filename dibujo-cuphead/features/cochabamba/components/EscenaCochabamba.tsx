@@ -10,11 +10,12 @@ import { interpolarMonotono } from '@/features/agujero-negro/utils/interpolarMon
 import { obtenerProgresoSuave } from '@/features/narrativa/store/progresoScrollStore'
 import { CAMARA_VALLE, CAMPO, CIUDAD, CORAZON, LAGUNA, RECORTE_VALLE, SOL_MANANA, direccionRumbo, direccionSol } from '../constantes/valle'
 import { CABEZA_FRAG, CABEZA_VERT, HOJA_FRAG, HOJA_VERT, TALLO_FRAG, TALLO_VERT } from '../shaders/flores'
-import { TERRENO_FRAG, TERRENO_VERT } from '../shaders/valle'
+import { VALLE_SUELO_FRAG, VALLE_SUELO_VERT } from '../shaders/suelo'
 import { NIEBLA } from '@/features/dibujo/store/niebla'
 import { RECORTE_ENTRADA, VALLE_EN_ESCENA } from '../store/valle'
 import { crearQuadInstanciado, generarFlores } from '../utils/flores'
-import { NUBE_ENTRADA_VALLE, nieblaEn } from '../utils/nubesDestino'
+import { SOMBRAS_NUBES, crearTexturaSombras, generarCumulos, nieblaEnNubes } from '../utils/nubesDestino'
+import { PISO_VALLE } from '../utils/region'
 import { crearTerreno } from '../utils/terreno'
 import { type UniformesValle, VidaDelValle } from './VidaDelValle'
 
@@ -59,9 +60,9 @@ const ARRIBA = new THREE.Vector3(0, 1, 0)
  */
 const MIRAR = { giroMaximo: 0.75, alzarMaximo: 0.35, bajarMaximo: 0.3, cursor: { giro: 0.05, alzar: 0.035 } } as const
 
-/** Bolas de la nube de entrada (centro y radio) y la altura de su base, para la niebla. */
-const BOLAS_ENTRADA = new Float32Array(NUBE_ENTRADA_VALLE.flatMap(([x, y, z, radio]) => [x, y, z, radio]))
-const BASE_ENTRADA = NUBE_ENTRADA_VALLE[0][4]
+/** Las nubes de la llegada (km): las cercanas al valle, para la niebla al atravesarlas. */
+const CUMULOS = generarCumulos()
+const NUBES_CERCANAS = CUMULOS.filter((bola) => Math.hypot(bola.x, bola.y) < 40)
 
 /**
  * El valle de Cochabamba al final del viaje (ver `constantes/valle.ts`). Va dentro del marco del
@@ -103,9 +104,13 @@ export function EscenaCochabamba() {
   const material = useMemo(() => {
     const [ejeX, ejeZ] = direccionRumbo(CORAZON.rumbo)
     return new THREE.ShaderMaterial({
-      vertexShader: TERRENO_VERT,
-      fragmentShader: TERRENO_FRAG,
+      vertexShader: VALLE_SUELO_VERT,
+      fragmentShader: VALLE_SUELO_FRAG,
       uniforms: {
+        uSombrasNubes: { value: crearTexturaSombras(CUMULOS) },
+        uLadoSombras: { value: SOMBRAS_NUBES.lado },
+        uRegion: { value: null },
+        uLadoRegion: { value: 2400 },
         uCamara: { value: new THREE.Vector3() },
         uSol: { value: new THREE.Vector3(...direccionSol(SOL_MANANA.rumbo, SOL_MANANA.elevacion)) },
         uCorazon: { value: new THREE.Vector4(CORAZON.escala, ejeX, ejeZ, CORAZON.ribete) },
@@ -210,7 +215,7 @@ export function EscenaCochabamba() {
       mira.set(Math.sin(horizontal) * Math.cos(nueva), Math.sin(nueva), Math.cos(horizontal) * Math.cos(nueva)).multiplyScalar(largo).add(posicion)
     }
     // Dentro de la nube de entrada, niebla (el pase la pinta).
-    NIEBLA.valle = nieblaEn(posicion, BOLAS_ENTRADA, (punto) => punto.y, BASE_ENTRADA, -220, 30)
+    NIEBLA.valle = nieblaEnNubes(posicion.x / 1000, -posicion.z / 1000, (posicion.y + PISO_VALLE) / 1000, NUBES_CERCANAS)
     matriz.lookAt(posicion, mira, ARRIBA)
     orientacion.setFromRotationMatrix(matriz)
     inversa.copy(orientacion).invert()

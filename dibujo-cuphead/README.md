@@ -78,11 +78,6 @@ El dibujo es un pase al final del posproceso (`features/agujero-negro/components
   quieta (antes seguía girando sola y con el cursor, y el marco del agujero de gusano la seguía con
   retraso: el sistema solar se deslizaba por la pantalla y volvía solo) y el campo de visión ya no
   cambia con el scroll.
-- **Rótulos** (`features/dibujo/store/rotulos.ts`, `shaders/rotulos.ts`,
-  `features/sistema-solar/utils/rotulos.ts`): el nombre de cada planeta en letra de época bajo él
-  y, en la Tierra, un anillo a trazos que gira despacio con un corazón encima: el destino. Los
-  pinta el pase con las matrices del mismo fotograma, antes de la película antigua; si se tapan
-  entre sí o con el Sol, se funden, y se retiran cuando el planeta ya es grande.
 - **Estrellas detrás de los planetas**: cada píxel de una estrella comprueba si el cielo está
   abierto (antes bastaba con su centro y alguna se dibujaba encima de un planeta).
 
@@ -91,28 +86,33 @@ El dibujo es un pase al final del posproceso (`features/agujero-negro/components
 El final del viaje es un regalo: la entrada en la Tierra lleva a un sitio lleno de girasoles y de
 flores como las de un ramo (gerberas, rosas, lirios, clavelinas, bocas de dragón y gipsófila).
 
-- **La entrada** (`features/agujero-negro/components/EscenaSistemaSolar.tsx`): tras acercarse a la
-  Tierra en línea recta, la cámara planea hasta la vertical de Cochabamba (la Tierra gira para que
-  allí amanezca, a las 7:15) y baja derecha en escala logarítmica, sin frenar (`BAJADA_KM`): al
-  terminar el planeo, a 1600 km, se ve Bolivia con el norte arriba; ya cerca de las nubes gira hasta
-  tener el noroeste arriba, como en el valle. El plano cercano baja con ella (`RECORTE_ENTRADA`).
-- **El mapa** (`features/sistema-solar/shaders/sistemaSolar.ts`, `DESTINO_GLSL`): Bolivia con su
-  frontera a trazos y un tinte cálido, los Andes como una cadena de picos con cumbres nevadas, el
-  Altiplano, el Titicaca, el Poopó, el salar de Uyuni, los grandes ríos (Amazonas, Madeira, Mamoré,
-  Beni, Paraguay, Pilcomayo), las ciudades como puntitos, el valle de Cochabamba y las sombras de
-  las nubes de la llegada, alargadas hacia el oeste por el Sol bajo.
-- **Las nubes de verdad** (`features/cochabamba/shaders/nubesBolas.ts`, `utils/nubesDestino.ts`):
-  racimos de bolas en el espacio, trazadas por píxel sobre carteles (cada píxel busca dónde entra
-  su rayo en la bola, escribe esa profundidad y se ilumina con el Sol de la mañana; base plana y
-  una línea fina en el contorno de cada lóbulo). Sobre Cochabamba flota una nube rosada con forma
-  de corazón, alrededor hay cúmulos sueltos y en el valle otros pasan junto a la cámara al bajar.
-  La cámara entra en la nube del corazón: dentro, el pase pinta la niebla (`NIEBLA`), con volutas
-  que se cierran al entrar y se abren desde el centro al salir por la base, sobre el valle.
-- **El valle** (`features/cochabamba`): relieve calculado en la CPU (`utils/terreno.ts`: el Tunari
-  al norte, serranías, el cerro de San Pedro) y pintado por píxel (`shaders/valle.ts`: parcelas
-  en franjas con caminos y lindes, la ciudad, la laguna Alalay, laderas con bosquecillos, nieve,
-  luz de mañana en tres tonos y bruma). La cámara baja por las poses de `constantes/valle.ts` hasta
-  posarse entre las flores, en la punta del corazón.
+- **La región de verdad** (`features/cochabamba/utils/region.ts`): una sola geografía, en km
+  alrededor del corazón de flores, para el mapa, el relieve y el valle: el frente de los Andes con
+  las yungas del Chapare, la Cordillera Oriental (sierras multifractales sobre un dominio deformado),
+  el Altiplano con el Titicaca, el Poopó y los salares, la Cordillera Occidental con sus volcanes,
+  el desierto hasta el Pacífico y, en el centro, el valle de Cochabamba con el Tunari. Humedad
+  (selva, yungas, valles, puna) y agua y sal por punto.
+- **El mapa** (`features/cochabamba/utils/texturaRegion.ts`, `DESTINO_GLSL` en
+  `features/sistema-solar/shaders/sistemaSolar.ts`): 2.400 km de región en una textura (altura,
+  humedad, lagos, salares) pintada con zonas de color de dibujo y el relieve sombreado por el Sol
+  bajo del amanecer (`shaders/region.ts`); aparece al acercarse, cuando un píxel mide menos de unos
+  km: desde lejos, la Tierra de dibujo entera.
+- **El relieve 3D** (`utils/parcheRegion.ts`): 300 km de malla hija de la Tierra, con la curvatura,
+  que se ve al bajar; pintada con el mismo suelo que el valle (`shaders/suelo.ts`): colores de la
+  región de lejos y, de cerca, las parcelas en franjas con caminos, eucaliptos y casas, el río Rocha,
+  la ciudad con sus avenidas, el campo de girasoles y el corazón de flores.
+- **Las nubes** (`utils/nubesDestino.ts`, `shaders/nubesBolas.ts`): el mismo campo en el globo y en
+  el valle: un mar de nubes sobre el Chapare, cúmulos sobre las sierras y los valles, algunos altos
+  junto al camino de la cámara, y la nube por la que se entra al valle. Bolas trazadas por píxel
+  (escriben su profundidad y se iluminan con el Sol); sus sombras, alargadas por el Sol bajo, en una
+  textura que usan el mapa, el relieve y el valle. Dentro de una nube, niebla (`NIEBLA`).
+- **La bajada** (`EscenaSistemaSolar.tsx`, `BAJADA_KM` e `INCLINACION_BAJADA`): tras planear hasta
+  la vertical del destino, la cámara baja en escala logarítmica mirando al corazón desde el sureste,
+  cada vez más tendida, entre los cúmulos, hasta la nube de entrada; sale por su base sobre el valle.
+- **El valle** (`features/cochabamba`): la misma altura que la región (`utils/terreno.ts`, con
+  el Tunari al norte) y el mismo suelo (`shaders/suelo.ts`), con bruma a ras. La cámara sale de la
+  nube de entrada y baja por las poses de `constantes/valle.ts` hasta posarse entre las flores, en
+  la punta del corazón.
 - **Las flores** (`utils/flores.ts`, `shaders/flores.ts`): girasoles en hileras mirando al Sol y,
   dentro del corazón, las flores del ramo; cada cabeza se dibuja en su quad con pétalos de colores
   planos y su línea fina. Aparecen y ganan detalle según su tamaño en pantalla (desde el aire el
@@ -154,7 +154,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.9-sistema-solar`, `dibujo-v0.10-remolino`, `dibujo-v0.11-pulido`,
 `dibujo-v0.12-sistema-solar-fisico`, `dibujo-v0.13-entrada-tierra`, `dibujo-v0.14-valle`,
 `dibujo-v0.15-flores`, `dibujo-v0.16-vida-y-destino`, `dibujo-v0.17-nubes-de-verdad`,
-`dibujo-v0.18-flores-de-cerca`, `dibujo-v0.19-camara-espacio`.
+`dibujo-v0.18-flores-de-cerca`, `dibujo-v0.19-camara-espacio`, `dibujo-v0.20-region-de-verdad`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

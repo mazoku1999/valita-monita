@@ -13,7 +13,7 @@
  * pidió entrar en la Tierra, ver las nubes y llegar a Cochabamba (Bolivia), a un campo de girasoles
  * y flores como las de un ramo: es un regalo para su novia.
  */
-export const CARRIL_VH = 1840
+export const CARRIL_VH = 1895
 
 const enProgreso = (vh: number): number => vh / CARRIL_VH
 
@@ -57,13 +57,13 @@ export const VIAJE = {
    * quedar encima de Bolivia (`planeoFin`); de ahí sigue bajando en vertical hacia el corazón
    * pintado en el mapa, que las nubes van rodeando hasta taparlo (`nubesPleno`).
    */
-  planeoFin: enProgreso(1395),
+  planeoFin: enProgreso(1360),
   /**
    * La cámara está dentro de la nube del corazón (niebla plena): la Tierra da paso al valle, donde
    * la cámara sale por la base de la nube.
    */
-  nubesPleno: enProgreso(1445),
+  nubesPleno: enProgreso(1500),
   /** El valle de Cochabamba: la bajada hasta el corazón de flores y el aterrizaje entre ellas. */
-  valleInicio: enProgreso(1445),
-  aterrizajeFin: enProgreso(1780),
+  valleInicio: enProgreso(1500),
+  aterrizajeFin: enProgreso(1835),
 } as const

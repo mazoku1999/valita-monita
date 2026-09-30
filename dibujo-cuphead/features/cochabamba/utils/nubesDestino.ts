@@ -1,15 +1,21 @@
 import * as THREE from 'three'
-import { DESTINO, NUBE_CORAZON, RADIO_TIERRA_KM } from '../constantes/destino'
+import { RADIO_TIERRA_KM } from '../constantes/destino'
+import { SOL_MANANA, direccionSol } from '../constantes/valle'
+import { PISO_VALLE, alturaRegion, humedadRegion } from './region'
 
 /**
- * Las nubes de la llegada (ver `shaders/nubesBolas.ts`), con azar fijo:
+ * Las nubes de la llegada a Cochabamba (ver `shaders/nubesBolas.ts`), con azar fijo, en km en el
+ * plano de la región (x al este, y al norte, altura sobre el mar), como en una mañana de verdad:
  *
- * - Sobre la Tierra (en el marco de su malla, en radios terrestres): la nube con forma de corazón
- *   que flota sobre Cochabamba (bolas a lo largo del contorno y otras, más altas, que lo rellenan,
- *   con una grande en el centro, donde entra la cámara) y cúmulos sueltos alrededor, más en las
- *   tierras bajas del noreste que sobre el Altiplano.
- * - En el valle (en metros): la parte baja de esa misma nube, por la que sale la cámara, y cúmulos
- *   a los lados del camino, que pasan junto a ella mientras baja.
+ * - Un mar de nubes sobre las tierras bajas húmedas (el Chapare, el Beni): un manto de nubes
+ *   bajas y anchas que llega hasta el pie de las yungas.
+ * - Cúmulos sueltos sobre las sierras y los valles, más donde es húmedo, casi ninguno sobre el
+ *   Altiplano; alguno alto (cúmulo congesto) junto al camino de la cámara.
+ * - La nube por la que entra la cámara al valle, sobre el punto de llegada, y cúmulos a los lados
+ *   del camino en el valle, que pasan junto a ella al bajar.
+ *
+ * Las mismas nubes se dibujan en el globo (en radios terrestres, hijas de la Tierra) y en el valle
+ * (en metros), y proyectan sus sombras, alargadas por el Sol bajo, en una textura.
  */
 
 const crearAzar = (semilla: number): (() => number) => {
@@ -39,16 +45,158 @@ export const esteNorte = (latitud: number, longitud: number): { este: THREE.Vect
   }
 }
 
-/** Una bola de nube: centro, radio, arriba de su nube, altura de la base (en radios) y tono. */
-interface Bola {
-  centro: THREE.Vector3
-  radio: number
-  arriba: THREE.Vector3
+/** Una bola de nube en km: centro (x este, y norte, z altura sobre el mar), radio, base de su nube. */
+export interface BolaNube {
+  x: number
+  y: number
+  z: number
+  r: number
+  /** Altura de la base de su nube (km sobre el mar) y de la bola en su nube (0 abajo, 1 arriba). */
   base: number
-  rosado: number
-  altura: number
+  alto: number
 }
 
+/** La nube de entrada: donde está la cámara al pasar del globo al valle (km) y su base (km sobre el mar). */
+export const NUBE_ENTRADA = { x: 2.15, y: -2.15, base: 5.55 } as const
+
+/** Radio (km) del campo de nubes alrededor del corazón de flores. */
+const RADIO_CAMPO = 330
+
+/** Racimo de bolas: `cuantas` bolas en un círculo de radio `radio` sobre `base`, más o menos altas. */
+const racimo = (
+  bolas: BolaNube[],
+  azar: () => number,
+  x: number,
+  y: number,
+  base: number,
+  radio: number,
+  cuantas: number,
+  aplastada: number,
+): void => {
+  for (let k = 0; k < cuantas; k += 1) {
+    const angulo = 2 * Math.PI * azar()
+    const lejos = radio * 0.62 * Math.sqrt(azar())
+    const r = radio * (0.3 + 0.24 * azar()) * (1 - 0.3 * (lejos / radio))
+    const alto = (0.3 + 0.55 * azar()) * (1 - aplastada)
+    bolas.push({ x: x + Math.cos(angulo) * lejos, y: y + Math.sin(angulo) * lejos, z: base + r * (0.25 + alto), r, base, alto: Math.min(1, alto + 0.25) })
+  }
+}
+
+export function generarCumulos(semilla = 20261003): BolaNube[] {
+  const azar = crearAzar(semilla)
+  const bolas: BolaNube[] = []
+
+  // El campo: una rejilla de 11 km con cada nube desplazada al azar dentro de su celda.
+  const celda = 11
+  for (let cy = -RADIO_CAMPO; cy <= RADIO_CAMPO; cy += celda) {
+    for (let cx = -RADIO_CAMPO; cx <= RADIO_CAMPO; cx += celda) {
+      const x = cx + (azar() - 0.5) * celda
+      const y = cy + (azar() - 0.5) * celda
+      const distancia = Math.hypot(x, y)
+      if (distancia > RADIO_CAMPO) continue
+      // El valle se queda despejado alrededor del corazón (sólo la nube de entrada).
+      if (distancia < 9) continue
+      const suelo = alturaRegion(x, y, 3) / 1000
+      const humedad = humedadRegion(x, y)
+      const bajo = suelo < 1.0
+      let probabilidad: number
+      if (bajo) probabilidad = 0.97 * Math.min(1, Math.max(0, (humedad - 0.45) / 0.18))
+      else if (suelo > 3.5 && humedad < 0.45) probabilidad = 0.05
+      else probabilidad = 0.13 + 0.4 * Math.min(1, Math.max(0, (humedad - 0.5) / 0.3))
+      if (azar() > probabilidad * (1 - Math.min(1, Math.max(0, (distancia - 260) / 70)))) continue
+      if (bajo) {
+        // El mar de nubes: nubes bajas, anchas y chatas, muy juntas.
+        const radio = 7.5 + 5 * azar()
+        racimo(bolas, azar, x, y, suelo + 0.9 + 0.5 * azar(), radio, 9 + Math.floor(6 * azar()), 0.6)
+      } else {
+        // Cúmulos: la base a unos 1,5 km sobre el suelo (no por debajo de los 4,3 km en la sierra).
+        const radio = 1.8 + 3.2 * azar()
+        const base = Math.max(suelo + 1.3, 4.3) + 0.7 * azar()
+        racimo(bolas, azar, x, y, base, radio, 5 + Math.floor(5 * azar()), 0)
+        // Alguno crece en torre.
+        if (azar() < 0.25) racimo(bolas, azar, x + (azar() - 0.5) * radio * 0.4, y + (azar() - 0.5) * radio * 0.4, base + radio * 0.6, radio * 0.7, 4, 0)
+      }
+    }
+  }
+
+  // Cúmulos altos junto al camino de la cámara (que baja sobre el valle desde el noroeste): se
+  // pasa junto a ellos al bajar.
+  for (const [x, y, radio, base] of [
+    [14, 6, 4.2, 5.2],
+    [-11, -9, 3.6, 5.0],
+    [9, -14, 3.2, 5.4],
+    [-6, 13, 3.8, 5.6],
+    [22, -4, 3, 5.1],
+  ] as const) {
+    racimo(bolas, azar, x, y, base, radio, 7, 0)
+    racimo(bolas, azar, x, y, base + radio * 0.6, radio * 0.7, 5, 0)
+  }
+
+  // La nube de entrada: la cámara entra por arriba y sale por su base sobre el valle.
+  const entrada: readonly (readonly [number, number, number, number])[] = [
+    [2.2, -2.2, 6.72, 0.9],
+    [2.02, -2.02, 6.35, 0.72],
+    [1.84, -1.84, 5.99, 0.64],
+    [1.68, -1.68, 5.73, 0.52],
+    [2.7, -1.9, 6.47, 0.76],
+    [1.9, -2.75, 6.52, 0.78],
+    [2.6, -2.5, 6.09, 0.7],
+    [1.5, -2.3, 6.27, 0.62],
+    [2.35, -1.45, 6.17, 0.6],
+    [2.8, -2.6, 6.87, 0.82],
+    [2.3, -2.3, 7.4, 0.8],
+    [1.9, -1.9, 7.1, 0.7],
+    [2.6, -2.1, 7.7, 0.62],
+  ]
+  for (const [x, y, z, r] of entrada) bolas.push({ x, y, z, r, base: NUBE_ENTRADA.base, alto: Math.min(1, (z - NUBE_ENTRADA.base) / 2) })
+
+  // Cúmulos a los lados del camino en el valle (por delante de la cámara al salir de la nube y más
+  // abajo, hacia los bordes del cuadro), nunca a menos de 7° de la línea de vista hacia el corazón
+  // ni en el propio camino (en km: x este, y norte, z altura sobre el fondo del valle).
+  const arriba = new THREE.Vector3(0, 1, 0)
+  const camino = [4, 3.5, 3, 2.6, 2.2, 1.8, 1.4, 1].map((z) => new THREE.Vector3(1.3 + (z - 2.4) * 0.5, z, 1.3 + (z - 2.4) * 0.5))
+  const haciaCorazon = new THREE.Vector3()
+  const haciaNube = new THREE.Vector3()
+  for (const grupo of [
+    { referencia: new THREE.Vector3(1.6, 2.9, 1.6), base: [1.2, 3.4], cuantos: 8 },
+    { referencia: new THREE.Vector3(0.95, 1.75, 0.95), base: [0.7, 2.1], cuantos: 7 },
+  ]) {
+    // Marco del valle en km (x este, y arriba, z sur), como la cámara del valle.
+    const adelante = grupo.referencia.clone().multiplyScalar(-1).normalize()
+    const derechaVista = new THREE.Vector3().crossVectors(adelante, arriba).normalize()
+    const arribaVista = new THREE.Vector3().crossVectors(derechaVista, adelante)
+    let hechos = 0
+    let intentos = 0
+    while (hechos < grupo.cuantos && intentos < 4000) {
+      intentos += 1
+      const radio = 0.3 + 0.36 * azar()
+      const lejos = 0.6 + 1.8 * azar()
+      const lado = (azar() < 0.5 ? -1 : 1) * Math.tan((16 + 20 * azar()) * GRADO)
+      const alto = Math.tan((-14 + 26 * azar()) * GRADO)
+      const centro = grupo.referencia.clone().addScaledVector(adelante, lejos).addScaledVector(derechaVista, lado * lejos).addScaledVector(arribaVista, alto * lejos)
+      const base = centro.y - radio * 0.5
+      if (base < grupo.base[0] || base > grupo.base[1]) continue
+      const bloquea = camino.some((ojo) => {
+        haciaCorazon.copy(ojo).multiplyScalar(-1).normalize()
+        haciaNube.copy(centro).sub(ojo)
+        const distancia = haciaNube.length()
+        if (distancia < radio * 1.4 + 0.15) return true
+        const angulo = Math.acos(Math.min(1, haciaNube.normalize().dot(haciaCorazon)))
+        return angulo < 7 * GRADO + Math.asin(Math.min(1, radio / distancia))
+      })
+      if (bloquea) continue
+      // Del marco del valle (km sobre el fondo) al de la región (km sobre el mar).
+      const cuantas = 5 + Math.floor(5 * azar())
+      const inicio = bolas.length
+      racimo(bolas, azar, centro.x, -centro.z, base + PISO_VALLE / 1000, radio, cuantas, 0)
+      for (let k = inicio; k < bolas.length; k += 1) bolas[k].alto = Math.min(1, (bolas[k].z - bolas[k].base) / radio)
+      hechos += 1
+    }
+  }
+  return bolas
+}
+
+/** Las bolas para el shader: bola (centro y radio), arriba de su nube y base (en radios) y tono. */
 export interface Nubes {
   bolas: Float32Array
   arriba: Float32Array
@@ -56,232 +204,34 @@ export interface Nubes {
   cantidad: number
 }
 
-const empaquetar = (bolas: readonly Bola[], azar: () => number): Nubes => {
-  const datos = { bolas: new Float32Array(bolas.length * 4), arriba: new Float32Array(bolas.length * 4), tono: new Float32Array(bolas.length * 4), cantidad: bolas.length }
-  bolas.forEach((bola, i) => {
-    datos.bolas.set([bola.centro.x, bola.centro.y, bola.centro.z, bola.radio], i * 4)
-    datos.arriba.set([bola.arriba.x, bola.arriba.y, bola.arriba.z, bola.base], i * 4)
-    datos.tono.set([bola.rosado, azar(), bola.altura, 0], i * 4)
+/**
+ * Las nubes en el globo: en el marco de la malla de la Tierra (radios terrestres), con la
+ * curvatura. `origen`, `este` y `norte`: la base de la región en ese marco.
+ */
+export function nubesEnGlobo(bolas: readonly BolaNube[], origen: THREE.Vector3, este: THREE.Vector3, norte: THREE.Vector3): Nubes {
+  const datos: Nubes = { bolas: new Float32Array(bolas.length * 4), arriba: new Float32Array(bolas.length * 4), tono: new Float32Array(bolas.length * 4), cantidad: bolas.length }
+  const punto = new THREE.Vector3()
+  bolas.forEach((b, i) => {
+    punto.copy(origen).addScaledVector(este, b.x / RADIO_TIERRA_KM).addScaledVector(norte, b.y / RADIO_TIERRA_KM).normalize()
+    const arriba = punto.clone()
+    punto.multiplyScalar(1 + b.z / RADIO_TIERRA_KM)
+    datos.bolas.set([punto.x, punto.y, punto.z, b.r / RADIO_TIERRA_KM], i * 4)
+    datos.arriba.set([arriba.x, arriba.y, arriba.z, (b.base - b.z) / b.r], i * 4)
+    datos.tono.set([0, ((i * 0.61803) % 1 + 1) % 1, b.alto, 0], i * 4)
   })
   return datos
 }
 
-/** Corazón con signo (el de `CORAZON_GLSL`): la punta en (0, 0), los lóbulos hacia +y. */
-const sdCorazon = (px: number, py: number): number => {
-  const x = Math.abs(px)
-  if (py + x > 1) return Math.hypot(x - 0.25, py - 0.75) - Math.SQRT2 / 4
-  const m = 0.5 * Math.max(x + py, 0)
-  return Math.sqrt(Math.min(x * x + (py - 1) * (py - 1), (x - m) * (x - m) + (py - m) * (py - m))) * Math.sign(x - py)
-}
-
-/**
- * Puntos del contorno del corazón (unidades de la curva, la punta en (0, 0)) cada `paso`, con la
- * normal hacia dentro: el lado recto de la punta al lóbulo y el arco del lóbulo, a cada lado.
- */
-const contornoCorazon = (paso: number): { punto: [number, number]; dentro: [number, number] }[] => {
-  const puntos: { punto: [number, number]; dentro: [number, number] }[] = []
-  const radio = Math.SQRT2 / 4
-  for (const lado of [1, -1]) {
-    const recto = Math.SQRT1_2
-    for (let s = lado > 0 ? 0 : paso; s < recto; s += paso) {
-      const a = (s / recto) * 0.5
-      puntos.push({ punto: [lado * a, a], dentro: [-lado * Math.SQRT1_2, Math.SQRT1_2] })
-    }
-    const arco = radio * Math.PI
-    for (let s = 0; s < arco; s += paso) {
-      const angulo = -Math.PI / 4 + s / radio
-      const [cx, cy] = [Math.cos(angulo), Math.sin(angulo)]
-      puntos.push({ punto: [lado * (0.25 + radio * cx), 0.75 + radio * cy], dentro: [-lado * cx, -cy] })
-    }
-  }
-  return puntos
-}
-
-export interface NubesTierra extends Nubes {
-  /** Bolas de la nube del corazón (centro y radio): para la niebla al entrar en ella. */
-  corazon: Float32Array
-  /** Racimos, para sus sombras en el mapa: centro (a media altura) y radio horizontal. */
-  sombras: Float32Array
-  racimos: number
-}
-
-/** Las nubes sobre la Tierra alrededor de Cochabamba, en radios terrestres. */
-export function generarNubesTierra(semilla = 20261001): NubesTierra {
-  const azar = crearAzar(semilla)
-  const centro = puntoTierra(DESTINO.latitud, DESTINO.longitud)
-  const { este, norte } = esteNorte(DESTINO.latitud, DESTINO.longitud)
-  const km = 1 / RADIO_TIERRA_KM
-  /** Punto a (e, n) km del destino (hacia el este y el norte) y a `altura` km sobre el suelo. */
-  const enKm = (e: number, n: number, altura: number): THREE.Vector3 =>
-    centro
-      .clone()
-      .addScaledVector(este, e * km)
-      .addScaledVector(norte, n * km)
-      .normalize()
-      .multiplyScalar(1 + altura * km)
-  const bolas: Bola[] = []
-  const bola = (e: number, n: number, alturaCentro: number, radio: number, base: number, rosado: number, alturaEnNube: number): void => {
-    const c = enKm(e, n, alturaCentro)
-    bolas.push({ centro: c, radio: radio * km, arriba: c.clone().normalize(), base: (base - alturaCentro) / radio, rosado, altura: alturaEnNube })
-  }
-
-  // La nube del corazón: su eje (de la punta a los lóbulos) hacia el noroeste, como el corazón de
-  // flores; (u, v) en km a su derecha y a lo largo del eje, con el centro sobre Cochabamba.
-  const { rumbo, escala, base, cima } = NUBE_CORAZON
-  const eje = [Math.sin(rumbo * GRADO), Math.cos(rumbo * GRADO)]
-  const derecha = [eje[1], -eje[0]]
-  const enCorazon = (u: number, v: number): [number, number] => [derecha[0] * u + eje[0] * v, derecha[1] * u + eje[1] * v]
-  const alturaEnCorazon = (alturaCentro: number): number => (alturaCentro - base) / (cima - base)
-  const inicioCorazon = bolas.length
-  for (const { punto, dentro } of contornoCorazon(0.15)) {
-    const radio = 2.4 + 0.8 * azar()
-    const u = punto[0] * escala + dentro[0] * radio * 0.75
-    const v = (punto[1] - 0.6) * escala + dentro[1] * radio * 0.75
-    const alto = base + radio * (0.45 + 0.25 * azar())
-    bola(...enCorazon(u, v), alto, radio, base, 0.85, alturaEnCorazon(alto))
-  }
-  for (let u = -0.62 * escala; u <= 0.62 * escala; u += 3.4) {
-    for (let v = -0.62 * escala; v <= 0.55 * escala; v += 3.4) {
-      const uu = u + (azar() - 0.5) * 1.6
-      const vv = v + (azar() - 0.5) * 1.6
-      const d = sdCorazon(uu / escala, vv / escala + 0.6) * escala
-      if (d > -2.5) continue
-      const radio = 2.6 + 1.4 * azar()
-      const alto = base + radio * 0.55 + 2.6 * Math.min(1, -d / 8)
-      bola(...enCorazon(uu, vv), alto, radio, base, 0.85, alturaEnCorazon(alto))
-    }
-  }
-  // La bola del centro, la más alta: la cámara baja derecha y entra en ella.
-  bola(0, 0, cima - 5, 5, base, 0.85, 1)
-  const corazon = new Float32Array((bolas.length - inicioCorazon) * 4)
-  bolas.slice(inicioCorazon).forEach((b, i) => corazon.set([b.centro.x, b.centro.y, b.centro.z, b.radio], i * 4))
-
-  // Cúmulos sueltos: más hacia el noreste y el este (las tierras bajas) que hacia el Altiplano.
-  const sombras: number[] = []
-  let racimos = 0
-  while (racimos < 46) {
-    const rumboRacimo = 360 * azar()
-    const distancia = 36 + 390 * Math.sqrt(azar())
-    if (azar() > 0.3 + 0.7 * (0.5 + 0.5 * Math.cos((rumboRacimo - 60) * GRADO))) continue
-    const e0 = Math.sin(rumboRacimo * GRADO) * distancia
-    const n0 = Math.cos(rumboRacimo * GRADO) * distancia
-    const baseRacimo = 2.2 + 3.2 * azar()
-    const radioRacimo = 3 + 6 * azar()
-    const cuantas = 4 + Math.floor(6 * azar())
-    for (let k = 0; k < cuantas; k += 1) {
-      const angulo = 2 * Math.PI * azar()
-      const lejos = radioRacimo * 0.62 * Math.sqrt(azar())
-      const radio = radioRacimo * (0.32 + 0.26 * azar()) * (1 - 0.35 * (lejos / radioRacimo))
-      const alto = baseRacimo + radio * (0.3 + 0.55 * azar())
-      bola(e0 + Math.cos(angulo) * lejos, n0 + Math.sin(angulo) * lejos, alto, radio, baseRacimo, 0, Math.min(1, (alto - baseRacimo) / radioRacimo))
-    }
-    const medio = enKm(e0, n0, baseRacimo + radioRacimo * 0.4)
-    sombras.push(medio.x, medio.y, medio.z, radioRacimo * 0.8 * km)
-    racimos += 1
-  }
-
-  return { ...empaquetar(bolas, azar), corazon, sombras: new Float32Array(sombras), racimos }
-}
-
-/**
- * Una bola del valle y su racimo: centro (x, y, z) en metros, radio y la altura de la base de su
- * nube (m sobre el fondo del valle).
- */
-type BolaValle = readonly [number, number, number, number, number]
-
-/**
- * La nube de entrada del valle (la parte baja de la nube del corazón): bolas a lo largo del camino
- * de la cámara, que empieza dentro de ella y sale por su base (ver `CAMARA_VALLE`).
- */
-export const NUBE_ENTRADA_VALLE: readonly BolaValle[] = [
-  [2200, 4150, 2200, 900, 3000],
-  [2020, 3780, 2020, 720, 3000],
-  [1840, 3420, 1840, 640, 3000],
-  [1680, 3160, 1680, 520, 3000],
-  [2700, 3900, 1900, 760, 3000],
-  [1900, 3950, 2750, 780, 3000],
-  [2600, 3520, 2500, 700, 3000],
-  [1500, 3700, 2300, 620, 3000],
-  [2350, 3600, 1450, 600, 3000],
-  [2800, 4300, 2600, 820, 3000],
-]
-
-export interface NubesValle extends Nubes {
-  /** Bolas de la nube de entrada (centro y radio) y la altura de su base, para la niebla. */
-  entrada: readonly BolaValle[]
-}
-
-/** Las nubes del valle: la de entrada (rosada, la del corazón) y cúmulos a los lados del camino. */
-export function generarNubesValle(semilla = 20261002): NubesValle {
-  const azar = crearAzar(semilla)
-  const arriba = new THREE.Vector3(0, 1, 0)
-  const bolas: Bola[] = NUBE_ENTRADA_VALLE.map(([x, y, z, radio, base]) => ({
-    centro: new THREE.Vector3(x, y, z),
-    radio,
-    arriba,
-    base: (base - y) / radio,
-    rosado: 0.85,
-    altura: Math.min(1, (y - base) / 1500),
-  }))
-
-  // Cúmulos a los lados del camino, por delante de la cámara (se buscan en su marco en dos puntos
-  // del camino: al salir de la nube y más abajo; hacia los bordes del cuadro, por debajo de ella,
-  // para que suban a su lado al bajar), nunca a menos de 7° de la línea de vista hacia el corazón
-  // ni en el propio camino.
-  const camino = [4000, 3500, 3000, 2600, 2200, 1800, 1400, 1000].map((y) => new THREE.Vector3(1300 + (y - 2400) * 0.5, y, 1300 + (y - 2400) * 0.5))
-  const haciaCorazon = new THREE.Vector3()
-  const haciaNube = new THREE.Vector3()
-  const grupos = [
-    { referencia: new THREE.Vector3(1600, 2900, 1600), base: [1200, 3400], cuantos: 8 },
-    { referencia: new THREE.Vector3(950, 1750, 950), base: [700, 2100], cuantos: 7 },
-  ] as const
-  for (const grupo of grupos) {
-    const adelante = grupo.referencia.clone().multiplyScalar(-1).normalize()
-    const derechaVista = new THREE.Vector3().crossVectors(adelante, arriba).normalize()
-    const arribaVista = new THREE.Vector3().crossVectors(derechaVista, adelante)
-    let racimos = 0
-    let intentos = 0
-    while (racimos < grupo.cuantos && intentos < 4000) {
-      intentos += 1
-      const radioRacimo = 300 + 360 * azar()
-      const lejos = 600 + 1800 * azar()
-      const lado = (azar() < 0.5 ? -1 : 1) * Math.tan((16 + 20 * azar()) * GRADO)
-      const alto = Math.tan((-14 + 26 * azar()) * GRADO)
-      const centro = grupo.referencia
-        .clone()
-        .addScaledVector(adelante, lejos)
-        .addScaledVector(derechaVista, lado * lejos)
-        .addScaledVector(arribaVista, alto * lejos)
-      const base = centro.y - radioRacimo * 0.5
-      if (base < grupo.base[0] || base > grupo.base[1]) continue
-      const bloquea = camino.some((ojo) => {
-        haciaCorazon.copy(ojo).multiplyScalar(-1).normalize()
-        haciaNube.copy(centro).sub(ojo)
-        const distancia = haciaNube.length()
-        if (distancia < radioRacimo * 1.4 + 150) return true
-        const angulo = Math.acos(Math.min(1, haciaNube.normalize().dot(haciaCorazon)))
-        return angulo < 7 * GRADO + Math.asin(Math.min(1, radioRacimo / distancia))
-      })
-      if (bloquea) continue
-      const cuantas = 5 + Math.floor(5 * azar())
-      for (let k = 0; k < cuantas; k += 1) {
-        const angulo = 2 * Math.PI * azar()
-        const lejosBola = radioRacimo * 0.6 * Math.sqrt(azar())
-        const radio = radioRacimo * (0.34 + 0.26 * azar()) * (1 - 0.3 * (lejosBola / radioRacimo))
-        const y = base + radio * (0.3 + 0.55 * azar())
-        bolas.push({
-          centro: new THREE.Vector3(centro.x + Math.cos(angulo) * lejosBola, y, centro.z + Math.sin(angulo) * lejosBola),
-          radio,
-          arriba,
-          base: (base - y) / radio,
-          rosado: 0.12,
-          altura: Math.min(1, (y - base) / radioRacimo),
-        })
-      }
-      racimos += 1
-    }
-  }
-  return { ...empaquetar(bolas, azar), entrada: NUBE_ENTRADA_VALLE }
+/** Las nubes en el valle (m: x al este, y sobre el fondo del valle, z al sur), las de a menos de `radio` km. */
+export function nubesEnValle(bolas: readonly BolaNube[], radio = 70): Nubes {
+  const cerca = bolas.filter((b) => Math.hypot(b.x, b.y) < radio)
+  const datos: Nubes = { bolas: new Float32Array(cerca.length * 4), arriba: new Float32Array(cerca.length * 4), tono: new Float32Array(cerca.length * 4), cantidad: cerca.length }
+  cerca.forEach((b, i) => {
+    datos.bolas.set([b.x * 1000, b.z * 1000 - PISO_VALLE, -b.y * 1000, b.r * 1000], i * 4)
+    datos.arriba.set([0, 1, 0, (b.base - b.z) / b.r], i * 4)
+    datos.tono.set([0, ((i * 0.61803) % 1 + 1) % 1, b.alto, 0], i * 4)
+  })
+  return datos
 }
 
 /**
@@ -299,20 +249,80 @@ export const crearBolasInstanciadas = (nubes: Nubes): THREE.InstancedBufferGeome
   return geometria
 }
 
+/** La textura de sombras de las nubes: lado (km) del cuadrado centrado en el corazón y texels. */
+export const SOMBRAS_NUBES = { lado: 660, texeles: 1024 } as const
+
 /**
- * Cuánto se está dentro de una nube (0..1) según la distancia con signo (en las unidades de las
- * bolas) de la cámara a la nube: la unión de las bolas cortadas por su base. `dentro` y `fuera`
- * fijan la niebla plena y la niebla nula.
+ * Sombras de las nubes en el suelo (R: 0..1), con el Sol bajo de la mañana: la de cada bola es una
+ * elipse alargada en la dirección del Sol, desplazada hacia el oeste tanto más cuanto más alta va
+ * la nube sobre el suelo (a 17° de elevación, más de tres veces su altura).
  */
-export const nieblaEn = (camara: THREE.Vector3, bolas: Float32Array, altura: (punto: THREE.Vector3) => number, base: number, dentro: number, fuera: number): number => {
-  let distancia = Number.POSITIVE_INFINITY
-  for (let i = 0; i < bolas.length; i += 4) {
-    const dx = camara.x - bolas[i]
-    const dy = camara.y - bolas[i + 1]
-    const dz = camara.z - bolas[i + 2]
-    distancia = Math.min(distancia, Math.sqrt(dx * dx + dy * dy + dz * dz) - bolas[i + 3])
+export function crearTexturaSombras(bolas: readonly BolaNube[]): THREE.DataTexture {
+  const { lado, texeles } = SOMBRAS_NUBES
+  const datos = new Float32Array(texeles * texeles)
+  const [sx, sAlto, sz] = direccionSol(SOL_MANANA.rumbo, SOL_MANANA.elevacion)
+  // Hacia el Sol en el plano (x este, y norte) y su elevación.
+  const solX = sx
+  const solY = -sz
+  const horizontal = Math.hypot(solX, solY)
+  const ux = solX / horizontal
+  const uy = solY / horizontal
+  const cotangente = horizontal / sAlto
+  const kmPorTexel = lado / texeles
+  for (const b of bolas) {
+    const suelo = Math.max(0, alturaRegion(b.x, b.y, 3) / 1000)
+    const sobre = Math.max(0.2, b.z - suelo)
+    // La sombra cae del lado contrario al Sol.
+    const cx = b.x - ux * sobre * cotangente
+    const cy = b.y - uy * sobre * cotangente
+    const largo = b.r / Math.max(sAlto, 0.1)
+    const ancho = b.r
+    const alcance = largo + kmPorTexel
+    const i0 = Math.max(0, Math.floor((cx - alcance + lado / 2) / kmPorTexel))
+    const i1 = Math.min(texeles - 1, Math.ceil((cx + alcance + lado / 2) / kmPorTexel))
+    const j0 = Math.max(0, Math.floor((cy - alcance + lado / 2) / kmPorTexel))
+    const j1 = Math.min(texeles - 1, Math.ceil((cy + alcance + lado / 2) / kmPorTexel))
+    for (let j = j0; j <= j1; j += 1) {
+      const py = -lado / 2 + (j + 0.5) * kmPorTexel - cy
+      for (let i = i0; i <= i1; i += 1) {
+        const px = -lado / 2 + (i + 0.5) * kmPorTexel - cx
+        const a = (px * ux + py * uy) / largo
+        const c = (-px * uy + py * ux) / ancho
+        const d = a * a + c * c
+        if (d < 1) {
+          const k = j * texeles + i
+          datos[k] = Math.max(datos[k], Math.min(1, (1 - d) * 3))
+        }
+      }
+    }
   }
-  distancia = Math.max(distancia, base - altura(camara))
-  const t = Math.min(1, Math.max(0, (distancia - fuera) / (dentro - fuera)))
+  const bytes = new Uint8Array(texeles * texeles)
+  for (let k = 0; k < bytes.length; k += 1) bytes[k] = Math.round(datos[k] * 255)
+  const textura = new THREE.DataTexture(bytes, texeles, texeles, THREE.RedFormat, THREE.UnsignedByteType)
+  textura.minFilter = THREE.LinearFilter
+  textura.magFilter = THREE.LinearFilter
+  textura.needsUpdate = true
+  return textura
+}
+
+/**
+ * La distancia (km, negativa dentro) de un punto (km: x este, y norte, altura sobre el mar) a las
+ * nubes: la unión de las bolas, cada una cortada por la base de su nube.
+ */
+export const distanciaANubes = (x: number, y: number, alto: number, bolas: readonly BolaNube[]): number => {
+  let distancia = Number.POSITIVE_INFINITY
+  for (const b of bolas) {
+    const dx = x - b.x
+    const dy = y - b.y
+    if (Math.abs(dx) - b.r > distancia || Math.abs(dy) - b.r > distancia) continue
+    const dz = alto - b.z
+    distancia = Math.min(distancia, Math.max(Math.sqrt(dx * dx + dy * dy + dz * dz) - b.r, b.base - alto))
+  }
+  return distancia
+}
+
+/** Cuánto se está dentro de una nube (0..1): plena a 250 m dentro, nula a 50 m fuera. */
+export const nieblaEnNubes = (x: number, y: number, alto: number, bolas: readonly BolaNube[]): number => {
+  const t = Math.min(1, Math.max(0, (distanciaANubes(x, y, alto, bolas) - 0.05) / (-0.25 - 0.05)))
   return t * t * (3 - 2 * t)
 }

@@ -484,8 +484,8 @@ void main() {
     float v = fbm3(vec3(d * 2.2, lejos * 2.4 - uNieblaAvance));
     v += 0.3 * (fbm3(vec3(d * 5.0 + 7.0, lejos * 4.5 - 2.0 * uNieblaAvance)) - 0.5);
     // Dentro, casi todo claro y rosado (la nube del corazón), con volutas suaves algo más lilas.
-    vec3 claro = vec3(1.0, 0.93, 0.94);
-    vec3 voluta = vec3(0.94, 0.83, 0.92);
+    vec3 claro = vec3(1.0, 0.98, 0.94);
+    vec3 voluta = vec3(0.86, 0.85, 0.94);
     vec3 niebla = mix(voluta, claro, smoothstep(0.3, 0.56, v));
     niebla = mix(niebla, vec3(1.0, 0.97, 0.95), smoothstep(0.62, 0.76, v) * 0.6);
     niebla = mix(claro, niebla, smoothstep(0.02, 0.5, r));

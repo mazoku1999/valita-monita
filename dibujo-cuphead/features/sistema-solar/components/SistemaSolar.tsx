@@ -28,13 +28,26 @@ import {
   SOL_VERT,
   TIERRA_FRAG,
 } from '../shaders/sistemaSolar'
-import { DESTINO, NUBE_CORAZON, RADIO_TIERRA_KM } from '@/features/cochabamba/constantes/destino'
+import { DESTINO, RADIO_TIERRA_KM } from '@/features/cochabamba/constantes/destino'
+import { CAMPO, CIUDAD, CORAZON, LAGUNA, SOL_MANANA, direccionRumbo, direccionSol } from '@/features/cochabamba/constantes/valle'
+import { PARCHE_FRAG, PARCHE_VERT } from '@/features/cochabamba/shaders/suelo'
+import { crearParcheRegion } from '@/features/cochabamba/utils/parcheRegion'
+import { ORIGEN_REGION, PISO_VALLE } from '@/features/cochabamba/utils/region'
+import { LADO_REGION, crearTexturaRegion } from '@/features/cochabamba/utils/texturaRegion'
 import { NUBE_BOLA_FRAG, NUBE_BOLA_VERT } from '@/features/cochabamba/shaders/nubesBolas'
-import { crearBolasInstanciadas, esteNorte, generarNubesTierra, nieblaEn } from '@/features/cochabamba/utils/nubesDestino'
+import {
+  crearBolasInstanciadas,
+  crearTexturaSombras,
+  distanciaANubes,
+  esteNorte,
+  generarCumulos,
+  nieblaEnNubes,
+  nubesEnGlobo,
+  puntoTierra,
+  SOMBRAS_NUBES,
+} from '@/features/cochabamba/utils/nubesDestino'
 import { NIEBLA } from '@/features/dibujo/store/niebla'
-import { ROTULOS } from '@/features/dibujo/store/rotulos'
 import { SOL_EN_ESCENA } from '../store/solEnEscena'
-import { NOMBRES_PLANETAS, PRIORIDAD_PLANETAS, crearTexturaNombre } from '../utils/rotulos'
 import { crearTexturasTierra, type TexturasTierra } from '../utils/texturaTierra'
 
 /**
@@ -75,15 +88,19 @@ export interface SistemaSolarProps {
    * fija a esa hora (el tiempo, al final del viaje, está casi detenido).
    */
   alineacionTierra?: { readonly current: number }
-  /** Recibe la vertical de Cochabamba (vector unitario en el marco del sistema). */
-  cochabamba?: { current: THREE.Vector3 }
   /**
-   * Recibe el noroeste en Cochabamba (unitario, marco del sistema): la cámara lo pone arriba al
-   * bajar, como en el valle, donde el corazón de flores y la nube apuntan hacia allí.
+   * Recibe la región de Cochabamba en el marco del sistema: la vertical, el este y el norte en el
+   * corazón de flores (unitarios) y la distancia (km) de la cámara a la nube más cercana.
    */
-  noroeste?: { current: THREE.Vector3 }
-  /** Recibe el norte en Cochabamba (unitario, marco del sistema). */
-  norte?: { current: THREE.Vector3 }
+  region?: { current: RegionEnSistema }
+}
+
+/** La región de Cochabamba vista desde el sistema (ver `SistemaSolarProps.region`). */
+export interface RegionEnSistema {
+  vertical: THREE.Vector3
+  este: THREE.Vector3
+  norte: THREE.Vector3
+  distanciaNubesKm: number
 }
 
 /** Estado de un fotograma del sistema. */
@@ -223,17 +240,16 @@ function crearSistema(fecha: Date) {
         uPoblacion: { value: vacia },
         ...(esTierra
           ? {
-              uDestino: { value: new THREE.Vector2(COCHABAMBA.longitud, COCHABAMBA.latitud) },
               uSolLocal: { value: new THREE.Vector3(1, 0, 0) },
-              uSombras: { value: [] as THREE.Vector4[] },
-              uNubeCorazon: {
-                value: new THREE.Vector4(
-                  THREE.MathUtils.degToRad(NUBE_CORAZON.rumbo),
-                  NUBE_CORAZON.escala,
-                  (NUBE_CORAZON.base + NUBE_CORAZON.cima) / 2,
-                  RADIO_TIERRA_KM,
-                ),
-              },
+              // La región de Cochabamba (ver `features/cochabamba/utils/region.ts`).
+              uRegion: { value: vacia },
+              uRegionListo: { value: 0 },
+              uLadoRegion: { value: LADO_REGION },
+              uOrigen: { value: puntoTierra(ORIGEN_REGION.latitud, ORIGEN_REGION.longitud) },
+              uEste: { value: esteNorte(ORIGEN_REGION.latitud, ORIGEN_REGION.longitud).este },
+              uNorte: { value: esteNorte(ORIGEN_REGION.latitud, ORIGEN_REGION.longitud).norte },
+              uSombrasNubes: { value: vacia },
+              uLadoSombras: { value: SOMBRAS_NUBES.lado },
             }
           : {}),
       },
@@ -309,10 +325,15 @@ function crearSistema(fecha: Date) {
   tierra?.malla.add(atmosfera)
   liberables.push(materialAtmosfera)
 
-  // Las nubes de la llegada (la del corazón sobre Cochabamba y cúmulos alrededor), de bolas en el
-  // espacio, hijas de la Tierra: giran con ella, y sus sombras se pintan en su mapa.
-  const nubesTierra = generarNubesTierra()
-  const geometriaNubes = crearBolasInstanciadas(nubesTierra)
+  // Las nubes de la llegada (el mar de nubes sobre el Chapare, cúmulos sobre sierras y valles y la
+  // nube de entrada), de bolas en el espacio, hijas de la Tierra: giran con ella, y sus sombras se
+  // pintan en su mapa y en el relieve.
+  const baseRegion = esteNorte(ORIGEN_REGION.latitud, ORIGEN_REGION.longitud)
+  const cumulos = generarCumulos()
+  const geometriaNubes = crearBolasInstanciadas(nubesEnGlobo(cumulos, puntoTierra(ORIGEN_REGION.latitud, ORIGEN_REGION.longitud), baseRegion.este, baseRegion.norte))
+  const sombrasNubes = crearTexturaSombras(cumulos)
+  liberables.push(sombrasNubes)
+  if (tierra) tierra.material.uniforms.uSombrasNubes.value = sombrasNubes
   const materialNubes = new THREE.ShaderMaterial({
     vertexShader: NUBE_BOLA_VERT,
     fragmentShader: NUBE_BOLA_FRAG,
@@ -322,6 +343,7 @@ function crearSistema(fecha: Date) {
       uEscalaVista: { value: 1 },
       uPixelesPorRadian: { value: 800 },
       uBruma: { value: new THREE.Vector2(1, 0) },
+      uCrecer: { value: 0 },
     },
     // El cartel mira hacia fuera de la cámara: se dibujan las dos caras.
     side: THREE.DoubleSide,
@@ -329,12 +351,14 @@ function crearSistema(fecha: Date) {
   const nubes = new THREE.Mesh(geometriaNubes, materialNubes)
   nubes.frustumCulled = false
   tierra?.malla.add(nubes)
-  liberables.push(geometriaNubes, materialNubes)
-  if (tierra) {
-    const sombras: THREE.Vector4[] = []
-    for (let i = 0; i < nubesTierra.sombras.length; i += 4) sombras.push(new THREE.Vector4().fromArray(nubesTierra.sombras, i))
-    tierra.material.uniforms.uSombras.value = sombras
+  // La cámara en el marco de la Tierra, justo antes de dibujar (con las matrices de este
+  // fotograma: en la bajada rápida, un fotograma de retraso movía las nubes respecto al suelo).
+  const camaraAlDibujar = new THREE.Vector3()
+  nubes.onBeforeRender = (_renderer, _escena, camaraEscena) => {
+    nubes.worldToLocal(camaraAlDibujar.setFromMatrixPosition(camaraEscena.matrixWorld))
+    materialNubes.uniforms.uCamara.value.copy(camaraAlDibujar)
   }
+  liberables.push(geometriaNubes, materialNubes)
 
   // La Luna: mares y cráteres (aspecto 8).
   const materialLuna = new THREE.ShaderMaterial({
@@ -351,12 +375,76 @@ function crearSistema(fecha: Date) {
   raiz.add(luna)
   liberables.push(materialLuna)
 
-  /** Pinta los mapas de la Tierra (unos 200 ms): se llama en diferido tras montar. */
+  // El relieve de la región en 3D (ver `features/cochabamba/utils/parcheRegion.ts`), hijo de la
+  // Tierra; su malla se calcula por tandas tras montar.
+  const origenRegion = puntoTierra(ORIGEN_REGION.latitud, ORIGEN_REGION.longitud)
+  const { este: esteRegion, norte: norteRegion } = esteNorte(ORIGEN_REGION.latitud, ORIGEN_REGION.longitud)
+  const [ejeCorazonX, ejeCorazonZ] = direccionRumbo(CORAZON.rumbo)
+  const materialParche = new THREE.ShaderMaterial({
+    vertexShader: PARCHE_VERT,
+    fragmentShader: PARCHE_FRAG,
+    uniforms: {
+      uCamaraValle: { value: new THREE.Vector3() },
+      // El Sol de la mañana del valle (el mismo con que se pintan el valle y las sombras de las nubes).
+      uSolValle: { value: new THREE.Vector3(...direccionSol(SOL_MANANA.rumbo, SOL_MANANA.elevacion)) },
+      uBruma: { value: 0 },
+      uRegion: { value: vacia },
+      uLadoRegion: { value: LADO_REGION },
+      uCorazon: { value: new THREE.Vector4(CORAZON.escala, ejeCorazonX, ejeCorazonZ, CORAZON.ribete) },
+      uSombrasNubes: { value: sombrasNubes },
+      uLadoSombras: { value: SOMBRAS_NUBES.lado },
+      uCampo: { value: CAMPO.semiLado },
+      uCiudad: { value: new THREE.Vector3(CIUDAD.centro[0], CIUDAD.centro[1], CIUDAD.radio) },
+      uLaguna: { value: new THREE.Vector4(LAGUNA.centro[0], LAGUNA.centro[1], LAGUNA.semiejes[0], LAGUNA.semiejes[1]) },
+    },
+  })
+  const parche = new THREE.Mesh(new THREE.BufferGeometry(), materialParche)
+  parche.frustumCulled = false
+  parche.visible = false
+  tierra?.malla.add(parche)
+  const camaraParche = new THREE.Vector3()
+  parche.onBeforeRender = (_renderer, _escena, camaraEscena) => {
+    parche.worldToLocal(camaraParche.setFromMatrixPosition(camaraEscena.matrixWorld))
+    const metros = RADIO_TIERRA_KM * 1000
+    materialParche.uniforms.uCamaraValle.value.set(
+      camaraParche.dot(esteRegion) * metros,
+      (camaraParche.length() - 1) * metros - PISO_VALLE,
+      -camaraParche.dot(norteRegion) * metros,
+    )
+  }
+  liberables.push(materialParche)
+
+  /**
+   * Pinta los mapas de la Tierra (unos 200 ms) y, por tandas sin trabar la página, la región de
+   * Cochabamba y su relieve: se llama en diferido tras montar.
+   */
+  let texturaRegion: THREE.DataTexture | null = null
+  let liberado = false
+  let parcheListo = false
+  const haciaCamaraRegion = new THREE.Vector3()
   const cargarMapasTierra = (): void => {
     if (mapasTierra || !tierra) return
     mapasTierra = crearTexturasTierra()
     tierra.material.uniforms.uMapa.value = mapasTierra.mapa
     tierra.material.uniforms.uPoblacion.value = mapasTierra.poblacion
+    void crearTexturaRegion().then((textura) => {
+      if (liberado) {
+        textura.dispose()
+        return
+      }
+      texturaRegion = textura
+      tierra.material.uniforms.uRegion.value = textura
+      tierra.material.uniforms.uRegionListo.value = 1
+    })
+    void crearParcheRegion({ origen: origenRegion, este: esteRegion, norte: norteRegion }).then((geometria) => {
+      if (liberado) {
+        geometria.dispose()
+        return
+      }
+      parche.geometry.dispose()
+      parche.geometry = geometria
+      parcheListo = true
+    })
   }
 
   // Anillos de Saturno en su plano ecuatorial, con la sombra del planeta: sólidos (los huecos se
@@ -393,11 +481,12 @@ function crearSistema(fecha: Date) {
     Math.sin(latitudCochabamba),
     -Math.cos(latitudCochabamba) * Math.sin(longitudCochabamba),
   )
-  const verticalCochabamba = new THREE.Vector3()
-  const { este: esteCochabamba, norte: norteCochabamba } = esteNorte(COCHABAMBA.latitud, COCHABAMBA.longitud)
-  const noroesteLocal = norteCochabamba.clone().sub(esteCochabamba).normalize()
-  const noroesteCochabamba = new THREE.Vector3()
-  const norteDestino = new THREE.Vector3()
+  const regionEnSistema: RegionEnSistema = {
+    vertical: new THREE.Vector3(0, 1, 0),
+    este: new THREE.Vector3(1, 0, 0),
+    norte: new THREE.Vector3(0, 0, -1),
+    distanciaNubesKm: Number.POSITIVE_INFINITY,
+  }
   const centroTierra = new THREE.Vector3()
   const solLocal = new THREE.Vector3()
   const camaraLocal = new THREE.Vector3()
@@ -470,9 +559,9 @@ function crearSistema(fecha: Date) {
       giro.setFromAxisAngle(arriba, anguloGiro)
       planeta.malla.quaternion.copy(planeta.inclinacion).multiply(giro)
       if (planeta.id === 'tierra') {
-        verticalCochabamba.copy(puntoCochabamba).applyQuaternion(planeta.malla.quaternion)
-        noroesteCochabamba.copy(noroesteLocal).applyQuaternion(planeta.malla.quaternion)
-        norteDestino.copy(norteCochabamba).applyQuaternion(planeta.malla.quaternion)
+        regionEnSistema.vertical.copy(origenRegion).applyQuaternion(planeta.malla.quaternion)
+        regionEnSistema.este.copy(esteRegion).applyQuaternion(planeta.malla.quaternion)
+        regionEnSistema.norte.copy(norteRegion).applyQuaternion(planeta.malla.quaternion)
         // El Sol y la cámara en el marco de la Tierra: las nubes y sus sombras se calculan ahí.
         planeta.malla.updateWorldMatrix(true, false)
         planeta.malla.getWorldQuaternion(giroMundo).invert()
@@ -480,13 +569,27 @@ function crearSistema(fecha: Date) {
         solLocal.copy(posicionSol).sub(centroTierra).normalize().applyQuaternion(giroMundo)
         planeta.malla.worldToLocal(camaraLocal.copy(camara))
         planeta.material.uniforms.uSolLocal.value.copy(solLocal)
-        materialNubes.uniforms.uCamara.value.copy(camaraLocal)
         materialNubes.uniforms.uSol.value.copy(solLocal)
         materialNubes.uniforms.uEscalaVista.value = planeta.malla.matrixWorld.getMaxScaleOnAxis()
         materialNubes.uniforms.uPixelesPorRadian.value = pixelesPorRadian
-        // Dentro de la nube del corazón, niebla (el pase la pinta).
-        const km = 1 / RADIO_TIERRA_KM
-        NIEBLA.globo = nieblaEn(camaraLocal, nubesTierra.corazon, (punto) => punto.length() - 1, NUBE_CORAZON.base * km, -2.2 * km, 0.4 * km)
+        // El relieve de la región: la cámara y el Sol en el marco del valle (m, x al este, y arriba,
+        // z al sur); bruma sólo ya abajo.
+        const metros = RADIO_TIERRA_KM * 1000
+        const altitud = (camaraLocal.length() - 1) * metros
+        materialParche.uniforms.uBruma.value = 0.75 * (1 - THREE.MathUtils.smoothstep(altitud, 6000, 40000))
+        // Lo que mide un píxel en la región (km): el relieve 3D sólo cuando el mapa ya la pinta
+        // entera (desde más lejos se veía como una moneda), y las nubes de la llegada crecen a la vez
+        // que la región aparece en el mapa.
+        haciaCamaraRegion.copy(camaraLocal).sub(origenRegion)
+        const kmHastaRegion = haciaCamaraRegion.length() * RADIO_TIERRA_KM
+        const incidencia = Math.max(0.15, haciaCamaraRegion.normalize().dot(origenRegion))
+        const kmPorPixelRegion = kmHastaRegion / pixelesPorRadian / incidencia
+        parche.visible = parcheListo && kmPorPixelRegion < 1.25
+        materialNubes.uniforms.uCrecer.value = 1 - THREE.MathUtils.smoothstep(kmPorPixelRegion, 1.25, 2.6)
+        // Dentro de una nube, niebla (el pase la pinta); y el plano cercano, con la nube más cercana.
+        const camaraKm = { x: camaraLocal.dot(esteRegion) * RADIO_TIERRA_KM, y: camaraLocal.dot(norteRegion) * RADIO_TIERRA_KM, alto: altitud / 1000 }
+        NIEBLA.globo = camaraKm.alto < 14 ? nieblaEnNubes(camaraKm.x, camaraKm.y, camaraKm.alto, cumulos) : 0
+        regionEnSistema.distanciaNubesKm = camaraKm.alto < 40 ? distanciaANubes(camaraKm.x, camaraKm.y, camaraKm.alto, cumulos) : camaraKm.alto - 9
       }
       const uniformes = planeta.material.uniforms
       uniformes.uSol.value.copy(posicionSol)
@@ -531,15 +634,15 @@ function crearSistema(fecha: Date) {
   return {
     raiz,
     tierra: tierra?.malla ?? null,
-    planetas: planetas.map((planeta) => ({ id: planeta.id, malla: planeta.malla })),
-    verticalCochabamba,
-    noroesteCochabamba,
-    norteDestino,
+    regionEnSistema,
     actualizar,
     cargarMapasTierra,
     liberar: () => {
+      liberado = true
+      parche.geometry.dispose()
       liberables.forEach((recurso) => recurso.dispose())
       mapasTierra?.liberar()
+      texturaRegion?.dispose()
     },
   }
 }
@@ -554,9 +657,7 @@ export function SistemaSolar({
   luna,
   tierra,
   alineacionTierra,
-  cochabamba,
-  noroeste,
-  norte,
+  region,
 }: SistemaSolarProps) {
   const sistema = useMemo(() => crearSistema(fecha ?? new Date()), [fecha])
   const relojes = useRef({ orbitas: 0, giros: 0, segundos: 0 })
@@ -570,27 +671,10 @@ export function SistemaSolar({
     return () => window.clearTimeout(espera)
   }, [sistema])
 
-  // Los nombres de los planetas, que el pase de dibujo pone bajo cada uno (ver `store/rotulos.ts`).
-  useEffect(() => {
-    const rotulos = sistema.planetas.map(({ id, malla }) => {
-      const destino = id === 'tierra'
-      const { textura, aspecto } = crearTexturaNombre(NOMBRES_PLANETAS[id], destino)
-      return { objeto: malla, textura, aspecto, prioridad: PRIORIDAD_PLANETAS[id], destino, opacidad: 0, opacidadMarca: 0 }
-    })
-    rotulos.sort((a, b) => a.prioridad - b.prioridad)
-    ROTULOS.planetas = rotulos
-    return () => {
-      ROTULOS.planetas = []
-      rotulos.forEach((rotulo) => rotulo.textura.dispose())
-    }
-  }, [sistema])
-
   useEffect(() => {
     if (tierra) tierra.current = sistema.tierra
-    if (cochabamba) cochabamba.current = sistema.verticalCochabamba
-    if (noroeste) noroeste.current = sistema.noroesteCochabamba
-    if (norte) norte.current = sistema.norteDestino
-  }, [sistema, tierra, cochabamba, noroeste, norte])
+    if (region) region.current = sistema.regionEnSistema
+  }, [sistema, tierra, region])
 
   useEffect(
     () => () => {

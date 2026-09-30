@@ -23,6 +23,8 @@ attribute vec4 aTono;
 
 uniform vec3 uCamara;
 uniform float uPixelesPorRadian;
+// Las nubes crecen desde nada al aparecer (0..1).
+uniform float uCrecer;
 
 varying vec3 vRayo;
 varying vec3 vVista;
@@ -46,7 +48,11 @@ void main() {
     return;
   }
   // Al asomar (a un píxel) la bola crece desde nada.
-  radio *= smoothstep(0.7, 2.5, pixeles);
+  radio *= smoothstep(0.7, 2.5, pixeles) * uCrecer;
+  if (radio <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
   vec3 eje = haciaBola / d;
   vec3 ayuda = abs(eje.y) < 0.95 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
   vec3 u = normalize(cross(ayuda, eje));
@@ -146,7 +152,10 @@ void main() {
   if (!esBase) {
     float e = q / (r * festones);
     float we = fwidth(e);
-    color = mix(color, sombra * mix(0.82, 0.78, rosado), smoothstep(1.0 - 2.8 * we, 1.0 - 0.9 * we, e) * 0.75);
+    // we ≈ 1/radio en píxeles: la línea se apaga en las bolas de menos de ~12 px (desde lejos, el
+    // mar de nubes parecía de palomitas).
+    float grande = 1.0 - smoothstep(0.06, 0.12, we);
+    color = mix(color, sombra * mix(0.82, 0.78, rosado), smoothstep(1.0 - 2.8 * we, 1.0 - 0.9 * we, e) * 0.75 * grande);
   }
 
   if (uBruma.y > 0.0) {

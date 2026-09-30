@@ -4,12 +4,11 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { obtenerProgresoSuave } from '@/features/narrativa/store/progresoScrollStore'
-import { SistemaSolar } from '@/features/sistema-solar/components/SistemaSolar'
+import { SistemaSolar, type RegionEnSistema } from '@/features/sistema-solar/components/SistemaSolar'
 import { direccionEcliptica } from '@/features/sistema-solar/datos/planetas'
-import { NUBE_CORAZON, RADIO_TIERRA_KM } from '@/features/cochabamba/constantes/destino'
+import { RADIO_TIERRA_KM } from '@/features/cochabamba/constantes/destino'
 import { RECORTE_ENTRADA } from '@/features/cochabamba/store/valle'
 import { CARRIL_VH, VIAJE } from '../constantes/viajeScroll'
-import { ROTULOS } from '@/features/dibujo/store/rotulos'
 import { MIRADA_ESPACIO, avanzarMirada } from '../store/miradaEspacio'
 import { interpolarMonotono } from '../utils/interpolarMonotono'
 
@@ -58,13 +57,6 @@ const ENCUADRE = {
 } as const
 const RECORRIDO_LOG_ALEJAMIENTO = ENCUADRE.recorrido.alejamiento.map(Math.log)
 
-/**
- * Rótulos (vh del carril): los nombres de los planetas aparecen cuando el sistema está casi entero
- * y se van al emprender el viaje; la Tierra (su nombre y el anillo con el corazón) sigue marcada
- * hasta el planeo, y el pase la retira cuando ya es grande en pantalla.
- */
-const ROTULOS_VH = { entrada: [890, 950], salidaNombres: [1045, 1085], salidaDestino: [1170, 1240] } as const
-
 /** Al terminar el avance, el radio de la Tierra ocupa este tanto de media pantalla. */
 const OCUPACION_TIERRA = 0.72
 
@@ -89,29 +81,45 @@ const LLEGADA = { faseMinima: 45, faseMaxima: 75 } as const
 const RITMO_ORBITAS = { panoramica: 0.35, viaje: 0.03 } as const
 
 /**
- * Entrada en la Tierra: cuánto mira la cámara por delante de su camino mientras planea y el plano
- * cercano, en fracción de la distancia a la nube más cercana (la cima de la nube del corazón).
+ * Entrada en la Tierra: cuánto mira la cámara por delante de su camino mientras planea hasta la
+ * vertical del destino.
  */
-const ENTRADA = { adelanto: 0.3, cerca: 0.2 } as const
+const ENTRADA = { adelanto: 0.3 } as const
 
 /**
- * La bajada hacia Cochabamba: altura sobre el suelo (km) en cada vh del carril, interpolada en
- * escala logarítmica (el suelo crece a ritmo parejo). Empieza donde acaba el acercamiento (la
- * Tierra a media pantalla); al terminar el planeo está a unos 1600 km (se ve Bolivia entera, con los
- * Andes y el Titicaca) y baja derecha hasta la nube del corazón (su cima a 12 km) y dentro de ella,
- * adonde llega sin frenar.
+ * La bajada hacia Cochabamba (vh del carril → km sobre el mar, en escala logarítmica: el suelo
+ * crece a ritmo parejo), después del planeo: desde 1.200 km, con los Andes, el Altiplano y el mar de
+ * nubes del Chapare a la vista, entre los cúmulos, hasta la nube de entrada sobre el valle, adonde
+ * llega sin frenar, a la altura con que empieza la escena del valle.
  */
 const BAJADA_KM: readonly (readonly [number, number])[] = [
-  [1395, 1600],
-  [1414, 330],
-  [1427, 75],
-  [1437, 20],
-  [1445, 6.5],
+  [1360, 1200],
+  [1395, 320],
+  [1425, 95],
+  [1452, 32],
+  [1472, 14],
+  [1488, 8.8],
+  [1500, 6.57],
 ]
 const BAJADA_VH = [1240, ...BAJADA_KM.map(([vh]) => vh)]
-/** Tramo (vh) en el que la cámara pasa de tener el norte arriba a tener el noroeste. */
-const GIRO_NOROESTE = [1414, 1436] as const
 const BAJADA_LOG_KM = BAJADA_KM.map(([, km]) => Math.log(km))
+
+/**
+ * La inclinación de la mirada en la bajada (grados bajo el horizonte): en picado desde lo alto y,
+ * al acercarse, cada vez más tendida (se ven las sierras y las nubes de lado), hasta la de la
+ * primera pose del valle, que mira al corazón de flores desde el sureste.
+ */
+const INCLINACION_BAJADA: readonly (readonly [number, number])[] = [
+  [1360, 90],
+  [1400, 88],
+  [1430, 76],
+  [1460, 64],
+  [1485, 56],
+  [1500, Math.atan2(4, Math.hypot(2.15, 2.15)) * (180 / Math.PI)],
+]
+
+/** Altura del corazón de flores (el punto al que se mira), km sobre el mar. */
+const ALTURA_CORAZON_KM = 2.57
 
 /**
  * La mirada del usuario en el espacio (ver `store/miradaEspacio.ts`): arrastrando orbita alrededor
@@ -182,9 +190,12 @@ export function EscenaSistemaSolar() {
   const luna = useRef(0)
   const alineacionTierra = useRef(0)
   const tierra = useRef<THREE.Object3D | null>(null)
-  const cochabamba = useRef(new THREE.Vector3(0, 1, 0))
-  const noroeste = useRef(new THREE.Vector3(1, 0, 0))
-  const norte = useRef(new THREE.Vector3(0, 1, 0))
+  const region = useRef<RegionEnSistema>({
+    vertical: new THREE.Vector3(0, 1, 0),
+    este: new THREE.Vector3(1, 0, 0),
+    norte: new THREE.Vector3(0, 0, -1),
+    distanciaNubesKm: Number.POSITIVE_INFINITY,
+  })
   const [movimientoReducido, setMovimientoReducido] = useState(false)
   const auxiliares = useRef({
     matriz: new THREE.Matrix4(),
@@ -204,6 +215,8 @@ export function EscenaSistemaSolar() {
     derechaMirada: new THREE.Vector3(),
     giroMirada: new THREE.Quaternion(),
     camaraMirada: new THREE.Vector3(),
+    noroeste: new THREE.Vector3(),
+    sureste: new THREE.Vector3(),
   })
 
   useEffect(() => {
@@ -224,9 +237,6 @@ export function EscenaSistemaSolar() {
     aparicion.current = progreso < VIAJE.nubesPleno ? suavizar(VIAJE.sistemaInicio, VIAJE.sistemaPleno, progreso) : 0
     grupo.visible = aparicion.current > 0.002
     const vh = progreso * CARRIL_VH
-    const entradaRotulos = suavizar(ROTULOS_VH.entrada[0], ROTULOS_VH.entrada[1], vh)
-    ROTULOS.nombres = grupo.visible ? entradaRotulos * (1 - suavizar(ROTULOS_VH.salidaNombres[0], ROTULOS_VH.salidaNombres[1], vh)) : 0
-    ROTULOS.destino = grupo.visible ? entradaRotulos * (1 - suavizar(ROTULOS_VH.salidaDestino[0], ROTULOS_VH.salidaDestino[1], vh)) : 0
     if (!grupo.visible) return
 
     const {
@@ -247,6 +257,8 @@ export function EscenaSistemaSolar() {
       derechaMirada,
       giroMirada,
       camaraMirada,
+      noroeste,
+      sureste,
     } = auxiliares.current
     const tramoTierra = Math.min(1, Math.max(0, (progreso - VIAJE.tierraInicio) / (VIAJE.tierraFin - VIAJE.tierraInicio)))
     const tramoPlaneo = Math.min(1, Math.max(0, (progreso - VIAJE.tierraFin) / (VIAJE.planeoFin - VIAJE.tierraFin)))
@@ -307,29 +319,41 @@ export function EscenaSistemaSolar() {
       camaraSistema.copy(malla.position).addScaledVector(direccionViaje, recorrido)
       objetivo.copy(malla.position).multiplyScalar(centrar)
       if (tramoPlaneo > 0) {
-        // Entrada: la cámara planea sobre la Tierra desde donde llegó hasta la vertical de
-        // Cochabamba y pasa de mirar al centro de la Tierra a mirar el suelo; después sigue bajando
-        // derecha hacia la nube del corazón y entra en ella. Mientras planea gira hasta tener el
-        // norte arriba (Bolivia se ve como en un mapa) y, ya cerca de la nube, el noroeste, como en
-        // el valle: el corazón queda derecho.
-        const e = suavizar(0, 1, tramoPlaneo)
-        interpolarDireccion(direccionLlegada, cochabamba.current, e, direccionEntrada)
+        const { vertical, este, norte } = region.current
+        noroeste.copy(norte).sub(este).normalize()
+        sureste.copy(noroeste).multiplyScalar(-1)
         const kmAMundo = radioTierra / RADIO_TIERRA_KM
-        // En pantallas estrechas (un móvil en vertical) la bajada va algo más alta, para que Bolivia
-        // y la nube del corazón quepan a lo ancho; la entrada en la nube, igual.
+        // En pantallas estrechas (un móvil en vertical) la bajada va algo más alta, para que la
+        // región quepa a lo ancho; la llegada a la nube de entrada, igual.
         const estrecha = Math.log(Math.max(1, Math.sqrt(16 / 9 / (perspectiva?.aspect ?? 16 / 9))))
         const logAltura = [
           Math.log(cerca - radioTierra),
-          ...BAJADA_LOG_KM.map((ln, i) => ln + Math.log(kmAMundo) + (i < BAJADA_LOG_KM.length - 1 ? estrecha : 0)),
+          ...BAJADA_LOG_KM.map((ln, i) => ln + Math.log(kmAMundo) + (i < BAJADA_LOG_KM.length - 1 ? estrecha * (1 - i / BAJADA_LOG_KM.length) : 0)),
         ]
-        const altura = Math.exp(interpolarMonotono(progreso * CARRIL_VH, BAJADA_VH, logAltura, true))
-        RECORTE_ENTRADA.cerca = ENTRADA.cerca * Math.max(altura - NUBE_CORAZON.cima * kmAMundo, 0.05 * kmAMundo)
-        const giroFinal = suavizar(GIRO_NOROESTE[0], GIRO_NOROESTE[1], progreso * CARRIL_VH)
-        arribaCamara.copy(norte.current).lerp(noroeste.current, giroFinal).normalize()
-        arribaCamara.lerp(arriba, 1 - e).normalize()
-        camaraSistema.copy(malla.position).addScaledVector(direccionEntrada, radioTierra + altura)
-        interpolarDireccion(direccionEntrada, cochabamba.current, ENTRADA.adelanto * (1 - e), direccionMirada)
-        objetivo.copy(malla.position).addScaledVector(direccionMirada, radioTierra * e)
+        const altura = Math.exp(interpolarMonotono(vh, BAJADA_VH, logAltura, true))
+        if (vh < VIAJE.planeoFin * CARRIL_VH) {
+          // El planeo: desde donde llegó hasta la vertical del corazón de flores, pasando de mirar
+          // al centro de la Tierra a mirar el suelo y girando hasta tener el noroeste arriba (como
+          // en el valle: el Tunari arriba).
+          const e = suavizar(0, 1, tramoPlaneo)
+          interpolarDireccion(direccionLlegada, vertical, e, direccionEntrada)
+          camaraSistema.copy(malla.position).addScaledVector(direccionEntrada, radioTierra + altura)
+          interpolarDireccion(direccionEntrada, vertical, ENTRADA.adelanto * (1 - e), direccionMirada)
+          objetivo.copy(malla.position).addScaledVector(direccionMirada, radioTierra * e)
+          arribaCamara.copy(arriba).lerp(noroeste, e).normalize()
+        } else {
+          // La bajada: la cámara mira al corazón de flores desde el sureste, cada vez más tendida,
+          // hasta la primera pose del valle.
+          const inclinacion = THREE.MathUtils.degToRad(interpolarMonotono(vh, INCLINACION_BAJADA.map(([v]) => v), INCLINACION_BAJADA.map(([, g]) => g)))
+          const sobreCorazon = altura / kmAMundo - ALTURA_CORAZON_KM
+          const horizontal = sobreCorazon / Math.tan(inclinacion)
+          objetivo.copy(malla.position).addScaledVector(vertical, radioTierra + ALTURA_CORAZON_KM * kmAMundo)
+          camaraSistema.copy(objetivo).addScaledVector(vertical, sobreCorazon * kmAMundo).addScaledVector(sureste, horizontal * kmAMundo)
+          arribaCamara.copy(noroeste)
+        }
+        // Plano cercano: una fracción de lo que hay hasta la nube o el suelo más cercanos.
+        const libreKm = Math.min(region.current.distanciaNubesKm, altura / kmAMundo - 3)
+        RECORTE_ENTRADA.cerca = kmAMundo * Math.max(0.02, 0.25 * libreKm)
       }
       vista.copy(camaraSistema).sub(objetivo)
       distancia = vista.length()
@@ -394,9 +418,7 @@ export function EscenaSistemaSolar() {
         luna={luna}
         tierra={tierra}
         alineacionTierra={alineacionTierra}
-        cochabamba={cochabamba}
-        noroeste={noroeste}
-        norte={norte}
+        region={region}
       />
     </group>
   )

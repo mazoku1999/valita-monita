@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import { NUBE_BOLA_FRAG, NUBE_BOLA_VERT } from '../shaders/nubesBolas'
 import { ARBOL_FRAG, ARBOL_VERT, MARIPOSA_FRAG, MARIPOSA_VERT, NUBE_VALLE_FRAG, NUBE_VALLE_VERT, PETALO_FRAG, PETALO_VERT } from '../shaders/vida'
 import { crearQuadInstanciado } from '../utils/flores'
-import { crearBolasInstanciadas, generarNubesValle } from '../utils/nubesDestino'
+import { crearBolasInstanciadas, generarCumulos, nubesEnValle } from '../utils/nubesDestino'
 import { CAJA_PETALOS, MARCO_FINAL, crearAlasInstanciadas, generarVida } from '../utils/vida'
 
 /** Uniformes que comparte con las flores (los actualiza `EscenaCochabamba` en cada fotograma). */
@@ -34,7 +34,7 @@ const crearMallasVida = (): MallasVida => {
     petalos: crearQuadInstanciado({ aAzar: [datos.petaloAzar, 4], aAzar2: [datos.petaloAzar2, 4] }, datos.petalos),
     nubes: crearQuadInstanciado({ aCentro: [datos.nubeCentro, 4], aAzar: [datos.nubeAzar, 4] }, datos.nubes),
     arboles: crearQuadInstanciado({ aBase: [datos.arbolBase, 4], aAzar: [datos.arbolAzar, 4] }, datos.arboles),
-    nubesEntrada: crearBolasInstanciadas(generarNubesValle()),
+    nubesEntrada: crearBolasInstanciadas(nubesEnValle(generarCumulos())),
   }
 }
 
@@ -73,7 +73,7 @@ export function VidaDelValle({ uniformes }: { uniformes: UniformesValle }) {
       nubesEntrada: new THREE.ShaderMaterial({
         vertexShader: NUBE_BOLA_VERT,
         fragmentShader: NUBE_BOLA_FRAG,
-        uniforms: { ...uniformes, uEscalaVista: { value: 1 }, uBruma: { value: new THREE.Vector2(17000, 0.9) } },
+        uniforms: { ...uniformes, uEscalaVista: { value: 1 }, uBruma: { value: new THREE.Vector2(17000, 0.9) }, uCrecer: { value: 1 } },
         side: THREE.DoubleSide,
       }),
     }

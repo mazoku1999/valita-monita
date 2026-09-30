@@ -16,46 +16,8 @@ import {
   PELICULA_FRAG,
   REDUCIR_FRAG,
 } from '../shaders/dibujo'
-import { ROTULO_FRAG, ROTULO_VERT } from '../shaders/rotulos'
 import { numeroDeDibujo } from '../store/ritmoDibujo'
-import { ROTULOS } from '../store/rotulos'
 import { crearGeometriaDestellos, generarDestellos } from './destellos'
-
-/**
- * Los rótulos de los planetas (en píxeles a 720 de alto): alto del letrero, separación bajo el
- * planeta (más para el destino, que lleva el anillo), holgura del anillo sobre el planeta y cuándo
- * se retiran al crecer el planeta en pantalla (radio en px).
- */
-const ROTULO = {
-  alto: 21,
-  separacion: 7,
-  separacionDestino: 19,
-  holguraAnillo: 9,
-  retirarNombre: [34, 58],
-  retirarDestino: [58, 96],
-  retirarMarca: [52, 84],
-} as const
-
-/** Rectángulo en píxeles de pantalla. */
-interface Rectangulo {
-  x0: number
-  y0: number
-  x1: number
-  y1: number
-}
-
-const seSolapan = (a: Rectangulo, b: Rectangulo): boolean => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
-
-const suavizarPx = (borde0: number, borde1: number, x: number): number => {
-  const t = Math.min(1, Math.max(0, (x - borde0) / (borde1 - borde0)))
-  return t * t * (3 - 2 * t)
-}
-
-/** Si el objeto y todos sus padres son visibles. */
-const esVisible = (objeto: THREE.Object3D): boolean => {
-  for (let o: THREE.Object3D | null = objeto; o; o = o.parent) if (!o.visible) return false
-  return true
-}
 
 /** Radio aparente de la sombra (parámetro de impacto crítico, r_s = 1). */
 const RADIO_SOMBRA = 2.598
@@ -164,10 +126,6 @@ export class PasoDibujo extends Pass {
   private readonly geometriaDestellos = crearGeometriaDestellos(generarDestellos())
   private readonly matDestellos: THREE.ShaderMaterial
   private readonly escenaDestellos = new THREE.Scene()
-  private readonly matRotulos: THREE.ShaderMaterial
-  private readonly escenaRotulos = new THREE.Scene()
-  private readonly vistaProyeccion = new THREE.Matrix4()
-  private readonly enClip = new THREE.Vector4()
 
   private anchoActual = 0
   private altoActual = 0
@@ -280,34 +238,6 @@ export class PasoDibujo extends Pass {
     const mallaDestellos = new THREE.Mesh(this.geometriaDestellos, this.matDestellos)
     mallaDestellos.frustumCulled = false
     this.escenaDestellos.add(mallaDestellos)
-
-    this.matRotulos = new THREE.ShaderMaterial({
-      glslVersion: THREE.GLSL3,
-      vertexShader: ROTULO_VERT,
-      fragmentShader: ROTULO_FRAG,
-      uniforms: {
-        uResolucion: { value: new THREE.Vector2() },
-        uCentro: { value: new THREE.Vector2() },
-        uTamano: { value: new THREE.Vector2() },
-        uTextura: { value: null },
-        uOpacidad: { value: 0 },
-        uTipo: { value: 0 },
-        uGiro: { value: 0 },
-        uTinta: { value: new THREE.Vector3(...TINTA.color) },
-      },
-      depthTest: false,
-      depthWrite: false,
-      transparent: true,
-      blending: THREE.CustomBlending,
-      blendEquation: THREE.AddEquation,
-      blendSrc: THREE.OneFactor,
-      blendDst: THREE.OneMinusSrcAlphaFactor,
-      blendSrcAlpha: THREE.OneFactor,
-      blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
-    })
-    const mallaRotulos = new THREE.Mesh(this.geometriaQuad, this.matRotulos)
-    mallaRotulos.frustumCulled = false
-    this.escenaRotulos.add(mallaRotulos)
 
     this.quad = new THREE.Mesh(this.geometriaQuad, this.matReducir)
     this.quad.frustumCulled = false
@@ -487,8 +417,6 @@ export class PasoDibujo extends Pass {
       ud.uBandaVisible.value = ud.uProfundidad.value ? this.bandaVisible * suavizar(0, 1, gasVisible) : 0
       renderer.setRenderTarget(this.dibujo)
       renderer.render(this.escenaDestellos, this.camaraQuad)
-      // Los nombres de los planetas y la marca del destino, encima.
-      this.dibujarRotulos(renderer, camara, Math.min(Math.max(deltaTime, 0), 0.25))
     }
 
     // 6. Película antigua.
@@ -500,88 +428,6 @@ export class PasoDibujo extends Pass {
     this.matPelicula.uniforms.uAberracion.value = PELICULA.aberracion * (1 - 0.65 * VALLE_EN_ESCENA.dia)
     this.dibujar(renderer, this.matPelicula, destino)
     renderer.autoClear = limpiezaPrevia
-  }
-
-  /**
-   * Nombres de los planetas bajo cada uno y, en el destino, el anillo con el corazón (ver
-   * `store/rotulos.ts`). Se colocan con las matrices de este fotograma; si un letrero se sale de la
-   * pantalla, tapa a otro de más prioridad o cae sobre el Sol, se funde en vez de aparecer a medias,
-   * y cuando su planeta ya es grande en pantalla se retira.
-   */
-  private dibujarRotulos(renderer: THREE.WebGLRenderer, camara: THREE.Camera, paso: number): void {
-    if (ROTULOS.planetas.length === 0 || !(camara instanceof THREE.PerspectiveCamera)) return
-    const ancho = this.anchoActual
-    const alto = this.altoActual
-    const escala = alto / 720
-    const u = this.matRotulos.uniforms
-    ;(u.uResolucion.value as THREE.Vector2).set(ancho, alto)
-    u.uGiro.value = this.tiempo * 0.22
-    this.vistaProyeccion.multiplyMatrices(camara.projectionMatrix, camara.matrixWorldInverse)
-    const pixelesPorUnidad = (camara.projectionMatrix.elements[5] * alto) / 2
-    const k = 1 - Math.exp(-paso * 5)
-    const ocupados: Rectangulo[] = []
-    // El Sol, que no se tapa.
-    if (SOL_EN_ESCENA.visible > 0.01) {
-      const sol = this.enClip.set(SOL_EN_ESCENA.posicion.x, SOL_EN_ESCENA.posicion.y, SOL_EN_ESCENA.posicion.z, 1).applyMatrix4(this.vistaProyeccion)
-      if (sol.w > 0) {
-        const x = (sol.x / sol.w * 0.5 + 0.5) * ancho
-        const y = (sol.y / sol.w * 0.5 + 0.5) * alto
-        const radio = (SOL_EN_ESCENA.radio * pixelesPorUnidad) / sol.w + 6 * escala
-        ocupados.push({ x0: x - radio, y0: y - radio, x1: x + radio, y1: y + radio })
-      }
-    }
-    for (const rotulo of ROTULOS.planetas) {
-      const base = rotulo.destino ? Math.max(ROTULOS.nombres, ROTULOS.destino) : ROTULOS.nombres
-      let objetivoNombre = 0
-      let objetivoMarca = 0
-      let x = 0
-      let y = 0
-      let radioPx = 0
-      let proyectado = false
-      if (base > 0.001 && esVisible(rotulo.objeto)) {
-        rotulo.objeto.getWorldPosition(this.auxiliar)
-        const clip = this.enClip.set(this.auxiliar.x, this.auxiliar.y, this.auxiliar.z, 1).applyMatrix4(this.vistaProyeccion)
-        if (clip.w > 0) {
-          proyectado = true
-          x = (clip.x / clip.w * 0.5 + 0.5) * ancho
-          y = (clip.y / clip.w * 0.5 + 0.5) * alto
-          radioPx = (rotulo.objeto.matrixWorld.getMaxScaleOnAxis() * pixelesPorUnidad) / clip.w
-          const altoLetrero = ROTULO.alto * escala
-          const anchoLetrero = altoLetrero * rotulo.aspecto
-          const centroY = y - radioPx - (rotulo.destino ? ROTULO.separacionDestino : ROTULO.separacion) * escala - altoLetrero / 2
-          const rect = { x0: x - anchoLetrero / 2, y0: centroY - altoLetrero / 2, x1: x + anchoLetrero / 2, y1: centroY + altoLetrero / 2 }
-          const enPantalla = rect.x0 > 6 && rect.x1 < ancho - 6 && rect.y0 > 6 && rect.y1 < alto - 6
-          const retirar = rotulo.destino ? ROTULO.retirarDestino : ROTULO.retirarNombre
-          const pequeno = 1 - suavizarPx(retirar[0] * escala, retirar[1] * escala, radioPx)
-          if (enPantalla && !ocupados.some((otro) => seSolapan(rect, otro))) {
-            objetivoNombre = (rotulo.destino ? base : ROTULOS.nombres) * pequeno
-            ocupados.push(rect)
-          }
-          if (rotulo.destino) objetivoMarca = ROTULOS.destino * (1 - suavizarPx(ROTULO.retirarMarca[0] * escala, ROTULO.retirarMarca[1] * escala, radioPx))
-          if (proyectado) {
-            ;(u.uCentro.value as THREE.Vector2).set(x, centroY)
-            ;(u.uTamano.value as THREE.Vector2).set(anchoLetrero, altoLetrero)
-          }
-        }
-      }
-      rotulo.opacidad += (objetivoNombre - rotulo.opacidad) * k
-      rotulo.opacidadMarca += (objetivoMarca - rotulo.opacidadMarca) * k
-      if (!proyectado) continue
-      if (rotulo.opacidad > 0.01) {
-        u.uTipo.value = 0
-        u.uTextura.value = rotulo.textura
-        u.uOpacidad.value = rotulo.opacidad
-        renderer.render(this.escenaRotulos, this.camaraQuad)
-      }
-      if (rotulo.destino && rotulo.opacidadMarca > 0.01) {
-        const lado = ((radioPx + ROTULO.holguraAnillo * escala) / 0.72) * 2
-        ;(u.uCentro.value as THREE.Vector2).set(x, y)
-        ;(u.uTamano.value as THREE.Vector2).set(lado, lado)
-        u.uTipo.value = 1
-        u.uOpacidad.value = rotulo.opacidadMarca
-        renderer.render(this.escenaRotulos, this.camaraQuad)
-      }
-    }
   }
 
   override dispose(): void {
@@ -606,7 +452,6 @@ export class PasoDibujo extends Pass {
       this.matPelicula,
       this.matCopia,
       this.matDestellos,
-      this.matRotulos,
     ])
       m.dispose()
     this.geometriaDestellos.dispose()
