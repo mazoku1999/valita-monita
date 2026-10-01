@@ -3,7 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { CARRIL_VH } from '@/features/agujero-negro/constantes/viajeScroll'
 import { obtenerProgreso, suscribirProgreso } from '@/features/narrativa/store/progresoScrollStore'
-import { CANCION } from '../constantes/cancion'
+import { CANCION, recorridoDeLaCancion } from '../constantes/cancion'
 import { cambiarFaseCancion, faseCancion, suscribirCancion } from '../store/cancion'
 import {
   alTerminarCancion,
@@ -32,6 +32,9 @@ import { LetraEnPantalla } from './LetraEnPantalla'
  */
 
 const vhActual = (): number => obtenerProgreso() * CARRIL_VH
+
+/** El recorrido del cruce: el de la canción de ahora y, en cuanto se lee la letra, el de sus tiempos. */
+let recorrido = recorridoDeLaCancion(CANCION.porDefecto.primerBloque, CANCION.porDefecto.letra)
 
 function irAVh(vh: number): void {
   const recorrido = document.documentElement.scrollHeight - window.innerHeight
@@ -67,7 +70,7 @@ function entrar(): void {
 
 /** Al final del cruce: se suelta el scroll (si suena, sigue sonando su final). */
 function soltar(): void {
-  irAVh(interpolarMonotona(CANCION.recorrido, CANCION.suelta))
+  irAVh(interpolarMonotona(recorrido.puntos, recorrido.suelta))
   soltarCancion()
   cambiarFaseCancion('libre')
 }
@@ -96,7 +99,14 @@ export function CancionDelAgujero() {
       precargarCancion(CANCION.audio)
       fetch(CANCION.letra)
         .then((respuesta) => (respuesta.ok ? respuesta.text() : ''))
-        .then((texto) => setLetra(maquetarLetra(leerSrt(texto))))
+        .then((texto) => {
+          const maqueta = maquetarLetra(leerSrt(texto))
+          if (maqueta.length > 0) {
+            const primerBloque = Math.max(...maqueta.filter((linea) => linea.seccion === 0).map((linea) => linea.fin))
+            recorrido = recorridoDeLaCancion(primerBloque, maqueta[maqueta.length - 1].fin)
+          }
+          setLetra(maqueta)
+        })
         .catch(() => setLetra([]))
       const estilos = getComputedStyle(document.documentElement)
       for (const [variable, muestra] of [
@@ -163,11 +173,11 @@ export function CancionDelAgujero() {
     let solicitud = 0
     const cuadro = (): void => {
       const t = tiempoCancion()
-      if (t >= CANCION.suelta) {
+      if (t >= recorrido.suelta) {
         soltar()
         return
       }
-      irAVh(interpolarMonotona(CANCION.recorrido, t))
+      irAVh(interpolarMonotona(recorrido.puntos, t))
       solicitud = window.requestAnimationFrame(cuadro)
     }
     solicitud = window.requestAnimationFrame(cuadro)

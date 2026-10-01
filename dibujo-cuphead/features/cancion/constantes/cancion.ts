@@ -22,28 +22,42 @@ export const CANCION = {
   /** Desde aquí se empieza a cargar el audio (y las letras de la letra). */
   precargaVh: 150,
   /**
-   * El cruce al compás de la canción: [segundo de la canción, vh del carril], con los tiempos del
-   * .srt (la letra va de 0:15 a 2:58; el audio dura 3:20).
-   * - 0–1.5 s: la canción empieza en lo negro, recién entrados en el agujero.
-   * - 1.5–7 s: durante la introducción, el iris se abre sobre el remolino.
-   * - 7–86 s: la primera estrofa (desde los 15 s) y el estribillo (50–86 s) por el remolino del
-   *   agujero de gusano; la boca del otro lado se abre al llegar el estribillo.
-   * - 86–178 s: el interludio (86–108 s), la segunda estrofa y el último estribillo (142–178 s) en
-   *   el cielo del otro lado.
-   * - 178–190 s: aparece nuestro sistema solar; a los 190 s se suelta el scroll (sigue el final).
+   * El cruce al compás de la canción (vh del carril), con los tiempos de la letra (ver
+   * `recorridoDeLaCancion`): la canción empieza en lo negro (`puertaVh`), el iris se abre sobre el
+   * remolino durante la introducción (de `negro` a `iris`), el remolino del agujero de gusano dura
+   * hasta que acaba el primer bloque de la letra (la boca del otro lado se abre en el estribillo), el
+   * cielo del otro lado hasta la última línea y, después, aparece nuestro sistema solar: se suelta
+   * el scroll `llegada` segundos más tarde (y sigue sonando lo que queda).
    */
-  recorrido: [
-    [0, 446],
-    [1.5, 484],
-    [7, 510],
-    [86, 640],
-    [178, 770],
-    [190, 830],
-  ] as readonly (readonly [number, number])[],
-  /** Cuándo se suelta el scroll (s de canción). */
-  suelta: 190,
+  vh: { negro: 484, iris: 510, remolino: 640, cielo: 770, suelta: 830 },
+  segundos: { negro: 1.5, iris: 7 },
+  llegada: 12,
+  /** Mientras se carga la letra: dónde acaban el primer bloque y la letra de la canción de ahora (s). */
+  porDefecto: { primerBloque: 88.5, letra: 175.3 },
   /** La letra respecto del audio (s; positivo: la letra va más tarde). */
   desfaseLetra: 0,
   /** Fundido del sonido (s) al saltarla o al volver atrás. */
   fundidoSalida: 1.4,
 } as const
+
+/** El recorrido del cruce ([segundo, vh]) y el segundo de la suelta, según los tiempos de la letra. */
+export function recorridoDeLaCancion(
+  finPrimerBloque: number,
+  finLetra: number,
+): { puntos: (readonly [number, number])[]; suelta: number } {
+  const { vh, segundos, llegada } = CANCION
+  const fin = Math.max(finLetra, segundos.iris + 20)
+  const remolino = Math.min(Math.max(finPrimerBloque, segundos.iris + 10), fin - 10)
+  const suelta = fin + llegada
+  return {
+    puntos: [
+      [0, CANCION.puertaVh],
+      [segundos.negro, vh.negro],
+      [segundos.iris, vh.iris],
+      [remolino, vh.remolino],
+      [fin, vh.cielo],
+      [suelta, vh.suelta],
+    ],
+    suelta,
+  }
+}

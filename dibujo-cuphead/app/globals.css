@@ -679,7 +679,6 @@
   --espaciado: 0.01em;
   font-family: var(--font-letra-condensada), 'Arial Narrow', sans-serif;
   font-weight: 600;
-  text-transform: uppercase;
   line-height: 1;
 }
 .letra-fila[data-estilo='cursiva'] {
@@ -688,23 +687,21 @@
   font-weight: 400;
 }
 .letra-fila[data-estilo='espaciada'] {
-  --espaciado: 0.24em;
+  --espaciado: 0.1em;
   font-family: var(--font-letra-sans), system-ui, sans-serif;
   font-weight: 600;
-  text-transform: uppercase;
 }
 /* Cada palabra: la luz la recorre de izquierda a derecha mientras se canta (--x), con un brillo
-   que luego baja (--e); en las notas largas se estira (--estira). */
+   que luego baja (--e). */
 .letra-palabra {
   --x: 0;
   --e: 0;
-  --estira: 0;
   --luz: #fff;
   --brillo: rgb(255 255 255 / 0.85);
   display: inline-block;
   padding: 0.1em 0.14em;
   margin: -0.1em -0.02em;
-  letter-spacing: calc(var(--espaciado) + var(--estira) * 0.06em);
+  letter-spacing: var(--espaciado);
   color: transparent;
   background-image: linear-gradient(
     90deg,

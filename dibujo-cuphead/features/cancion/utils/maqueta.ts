@@ -3,28 +3,20 @@ import type { LineaSrt } from './srt'
 /**
  * La maqueta de la letra, como en los videos de letras: cada línea en filas cortas centradas, cada
  * fila con su voz tipográfica (una palo seco gruesa en cursiva, una de pie de alto contraste, una
- * condensada en mayúsculas, una cursiva estrecha o mayúsculas espaciadas; ver `.letra-fila` en
- * `app/globals.css`), las palabras que se encienden a medida que se cantan y, en las notas largas
- * del final de una línea, la última vocal que se estira.
+ * condensada, una cursiva estrecha o una palo seco espaciada; ver `.letra-fila` en
+ * `app/globals.css`; sin cambiar mayúsculas ni minúsculas), y las palabras que se encienden a
+ * medida que se cantan.
  *
- * Todo sale del .srt (no hay nada escrito a mano para esta canción): las filas se reparten por
- * largo dentro de cada renglón del .srt (sus saltos de línea se respetan), la voz de cada línea sale de su texto (si se repite, se ve igual), el estribillo son las
- * líneas que se repiten, las secciones se separan por las pausas largas y cada palabra se enciende
- * en un tramo proporcional a sus sílabas dentro del tiempo de su línea.
+ * Todo sale del .srt, tal cual (lo pidió el usuario: sin alargar letras y con sus tiempos exactos):
+ * cada palabra se muestra como está escrita, con su puntuación; las filas se reparten por largo
+ * dentro de cada renglón del .srt; la voz de cada línea sale de su texto (si se repite, se ve
+ * igual); el estribillo son las líneas que se repiten; las secciones se separan por las pausas
+ * largas. Cada palabra se enciende en un tramo proporcional a sus sílabas (en español o en inglés)
+ * al ritmo de la canción; si la línea dura más (una nota larga al final), la última palabra se queda
+ * encendida hasta que acaba.
  */
 
 export type EstiloFila = 'sans' | 'serif' | 'condensada' | 'cursiva' | 'espaciada'
-
-/** La nota sostenida al final de una línea: la palabra partida en lo de antes, la vocal y lo de después. */
-export interface Estirada {
-  readonly antes: string
-  readonly vocal: string
-  readonly despues: string
-  /** Cuántas vocales más se añaden, una a una, de `desde` a `hasta` (s, reloj de la canción). */
-  readonly veces: number
-  readonly desde: number
-  readonly hasta: number
-}
 
 export interface PalabraMaquetada {
   readonly texto: string
@@ -33,7 +25,6 @@ export interface PalabraMaquetada {
   readonly fin: number
   /** Con el color de la sección. */
   readonly acento: boolean
-  readonly estirada: Estirada | null
 }
 
 export interface FilaMaquetada {
@@ -57,13 +48,13 @@ export interface LineaMaquetada {
 }
 
 const LETRAS_POR_FILA = 13
+/** Alto máximo del bloque de una línea, en filas de tamaño base. */
+const ALTO_MAXIMO = 5
 /** Una pausa más larga que ésta (s) empieza otra sección. */
 const PAUSA_SECCION = 4
-/** Tiempo nominal de una sílaba cantada y el respiro entre palabras (s). */
-const SILABA = 0.23
-const ENTRE_PALABRAS = 0.07
-/** Si sobra más que esto (s) al final de la línea, la última vocal se estira. */
-const SOSTENIDO_MINIMO = 1.5
+/** El ritmo de la canción: lo que dura una sílaba cantada y el respiro entre palabras (s). */
+const SILABA = 0.42
+const ENTRE_PALABRAS = 0.05
 
 const PLANTILLAS: readonly (readonly EstiloFila[])[] = [
   ['sans', 'sans', 'cursiva'],
@@ -80,14 +71,16 @@ const ANCHO_ESTILO: Record<EstiloFila, number> = {
   serif: 1.04,
   condensada: 1.24,
   cursiva: 1.2,
-  espaciada: 0.8,
+  espaciada: 0.9,
 }
+
+const QUITAR_ACENTOS = /[\u0300-\u036f]/g
 
 const normalizar = (texto: string): string =>
   texto
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(QUITAR_ACENTOS, '')
     .replace(/[^a-z0-9 ]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -101,14 +94,22 @@ const hash = (texto: string): number => {
   return h >>> 0
 }
 
-const silabas = (palabra: string): number => Math.max(1, (palabra.toLowerCase().match(/[aeiouáéíóúü]+/g) ?? []).length)
+const esEspanol = (texto: string): boolean => /[áéíóúñü¿¡]/i.test(texto)
 
-/** Las palabras de una línea, sin la puntuación de los bordes (las letras van sin ella). */
-const palabrasDe = (texto: string): string[] =>
-  texto
-    .split(/\s+/)
-    .map((palabra) => palabra.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
-    .filter(Boolean)
+/** Sílabas (aproximadas): en español, los grupos de vocales; en inglés, también, sin la e muda del final. */
+function silabas(palabra: string, espanol: boolean): number {
+  const letras = palabra.toLowerCase().normalize('NFD').replace(QUITAR_ACENTOS, '').replace(/[^a-z]/g, '')
+  if (!letras) return 1
+  if (espanol) return Math.max(1, (letras.match(/[aeiou]+/g) ?? []).length)
+  if (letras.length <= 3) return 1
+  const sinMuda = letras.replace(/(?:[^laeiouy]es|[^laeiouy]ed|[^laeiouy]e)$/, '').replace(/^y/, '')
+  return Math.max(1, (sinMuda.match(/[aeiouy]{1,2}/g) ?? []).length)
+}
+
+/** Las palabras de una línea, tal cual están escritas (con su puntuación). */
+const palabrasDe = (texto: string): string[] => texto.split(/\s+/).filter(Boolean)
+
+const letrasDe = (palabra: string): number => palabra.replace(/[^\p{L}\p{N}]/gu, '').length
 
 const largoFila = (palabras: readonly string[]): number =>
   palabras.reduce((suma, palabra) => suma + palabra.length, 0) + Math.max(0, palabras.length - 1)
@@ -139,17 +140,6 @@ function partirEnFilas(palabras: readonly string[]): string[][] {
   return mejor
 }
 
-/** Parte la palabra por su última vocal (la que se sostiene): "sol" → s · o · l; "atrás" → atrá · a · s. */
-function partirPorLaVocal(palabra: string): { antes: string; vocal: string; despues: string } | null {
-  const grupos = [...palabra.matchAll(/[aeiouáéíóúü]+/gi)]
-  const ultimo = grupos[grupos.length - 1]
-  if (!ultimo || ultimo.index === undefined) return null
-  const fin = ultimo.index + ultimo[0].length
-  const letra = palabra[fin - 1]
-  const vocal = letra.normalize('NFD').replace(/[̀-ͯ]/g, '')
-  return { antes: palabra.slice(0, fin), vocal, despues: palabra.slice(fin) }
-}
-
 function maquetarLinea(
   linea: LineaSrt,
   indice: number,
@@ -157,36 +147,26 @@ function maquetarLinea(
 ): LineaMaquetada {
   const palabras = palabrasDe(linea.texto)
   const duracion = linea.fin - linea.inicio
-  const silabasPorPalabra = palabras.map(silabas)
+  const espanol = esEspanol(linea.texto)
+  const silabasPorPalabra = palabras.map((palabra) => silabas(palabra, espanol))
+  // Lo cantado al ritmo de la canción, dentro de la línea; si sobra (una nota larga), la última
+  // palabra se queda encendida hasta el final.
   const nominal = silabasPorPalabra.reduce((a, b) => a + b, 0) * SILABA + palabras.length * ENTRE_PALABRAS
-  const cantado = Math.min(duracion * 0.9, Math.max(nominal * 1.1, duracion * 0.55))
-  const ultima = palabras.length - 1
-  const partida = ultima >= 0 ? partirPorLaVocal(palabras[ultima]) : null
-  const sostenido = duracion - cantado
-  const estira = partida !== null && sostenido >= SOSTENIDO_MINIMO
-  const tramo = estira ? cantado : duracion * 0.9
+  const tramo = Math.min(duracion * 0.94, Math.max(nominal, duracion * 0.6))
 
   // Cada palabra se enciende en un tramo proporcional a sus sílabas (y un poco por ser palabra).
   const pesos = silabasPorPalabra.map((s) => s + 0.6)
   const pesoTotal = pesos.reduce((a, b) => a + b, 0)
-  const largos = palabras.map((palabra) => palabra.length)
+  const ultima = palabras.length - 1
+  const largos = palabras.map(letrasDe)
   const masLarga = largos.indexOf(Math.max(...largos))
-  let reloj = linea.inicio + 0.05
+  let reloj = linea.inicio
   const maquetadas: PalabraMaquetada[] = palabras.map((texto, i) => {
     const inicio = reloj
     const fin = inicio + (tramo * pesos[i]) / pesoTotal
     reloj = fin
     const acento = (i === ultima && largos[i] >= 4) || (i === masLarga && largos[i] >= 7) || (datos.cierre && i === ultima)
-    const estirada: Estirada | null =
-      estira && i === ultima && partida
-        ? {
-            ...partida,
-            veces: Math.max(2, Math.min(7, Math.round(sostenido / 0.45))),
-            desde: fin,
-            hasta: linea.fin - 0.15,
-          }
-        : null
-    return { texto, inicio, fin, acento, estirada }
+    return { texto, inicio, fin, acento }
   })
 
   const plantilla = PLANTILLAS[hash(normalizar(linea.texto)) % PLANTILLAS.length]
@@ -200,11 +180,17 @@ function maquetarLinea(
     const palabrasFila = maquetadas.slice(cursor, cursor + fila.length)
     cursor += fila.length
     const estilo = f < partidas.length - 1 ? plantilla[Math.min(f, plantilla.length - 2)] : plantilla[plantilla.length - 1]
-    const extra = palabrasFila.reduce((suma, palabra) => suma + (palabra.estirada ? palabra.estirada.veces * 0.8 : 0), 0)
-    const letras = largoFila(fila) + extra
+    const letras = largoFila(fila)
     const escala = Math.min(2.1, Math.min(1.9, Math.max(0.6, 12 / Math.max(letras, 4.5))) * ANCHO_ESTILO[estilo] * (datos.cierre ? 1.12 : 1))
     return { palabras: palabrasFila, estilo, escala }
   })
+  // Las líneas largas (muchas filas) se achican para que el bloque no pase de ALTO_MAXIMO filas de
+  // tamaño base y no tape la anterior ni la siguiente.
+  const alto = filas.reduce((suma, fila) => suma + fila.escala * 1.06, 0)
+  if (alto > ALTO_MAXIMO) {
+    const factor = ALTO_MAXIMO / alto
+    return { indice, inicio: linea.inicio, fin: linea.fin, filas: filas.map((fila) => ({ ...fila, escala: fila.escala * factor })), ...datos }
+  }
 
   return { indice, inicio: linea.inicio, fin: linea.fin, filas, ...datos }
 }

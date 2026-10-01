@@ -92,12 +92,11 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
 - **El cruce al compás** (`constantes/cancion.ts`, `components/CancionDelAgujero.tsx`): la
   canción empieza sola recién al entrar en el agujero bajando (446 vh: el iris ya se cerró sobre la
   sombra), sin botón de play; el scroll se queda quieto y la cámara cruza sola moviendo la página
-  por el carril (`recorrido`: [segundo, vh], interpolado sin pasarse): la canción empieza en lo
-  negro, el iris se abre sobre el remolino durante la introducción, la primera estrofa y el
-  estribillo (hasta 1:26) van por el remolino del agujero de gusano (la boca del otro lado se abre
-  al llegar el estribillo), la pausa instrumental, la segunda estrofa y el último estribillo (hasta
-  2:58) por el cielo del otro lado, y nuestro sistema solar aparece al final; a los 190 s se suelta
-  el scroll (830 vh) y sigue sonando lo que queda. Botón de cristal
+  por el carril. El recorrido sale de los tiempos de la letra (`recorridoDeLaCancion`): la canción
+  empieza en lo negro, el iris se abre sobre el remolino durante la introducción, el remolino del
+  agujero de gusano dura hasta que acaba el primer bloque de la letra (la boca del otro lado se abre
+  en el estribillo), el cielo del otro lado hasta la última línea y después aparece nuestro sistema
+  solar; 12 s más tarde se suelta el scroll (830 vh) y sigue sonando lo que queda. Botón de cristal
   para saltarla (arriba a la izquierda, o Escape); volver fuera del agujero (400 vh) la deja lista
   para otra vez.
 - **El sonido** (`utils/audio.ts`, `components/BotonSonido.tsx`): los navegadores sólo dejan sonar
@@ -108,16 +107,18 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   para invitar); al tocarlo, el sonido se une donde va. Si ni en silencio la deja sonar el
   navegador, la lleva un reloj propio hasta que se pueda. Se empieza a cargar a 150 vh y pasa por
   Web Audio para los fundidos.
-- **La letra** (`utils/srt.ts`, `utils/maqueta.ts`, `components/LetraEnPantalla.tsx`): los tiempos
-  de cada línea son los del .srt del usuario (con sus saltos de línea, que se respetan). La línea que
-  se canta, grande en el centro, partida en filas cortas con voces distintas (palo seco gruesa en
-  cursiva, Playfair, Oswald condensada en mayúsculas, Instrument Serif en cursiva, mayúsculas
-  espaciadas); la anterior, pequeña y apagada arriba; la siguiente, pequeña abajo. Cada palabra se
-  enciende de izquierda a derecha mientras se canta (en un tramo proporcional a sus sílabas), con
-  un brillo que luego baja; en las notas largas del final de una línea la última vocal se estira.
-  El estribillo (las líneas que se repiten) va en rosa; las estrofas, en oro y en celeste. Un velo
-  oscuro detrás para que se lea sobre las bandas claras del remolino. Sigue el reloj del audio
-  (`desfaseLetra` corrige la sincronía si hace falta).
+- **La letra** (`utils/srt.ts`, `utils/maqueta.ts`, `components/LetraEnPantalla.tsx`): tal cual el
+  .srt del usuario (el de la canción, en inglés): el texto como está escrito (con su puntuación, sus
+  mayúsculas y sus saltos de línea; sin alargar letras) y cada línea de su inicio a su fin exactos.
+  La línea que se canta va grande en el centro, partida en filas cortas con voces distintas (palo
+  seco gruesa en cursiva, Playfair, Oswald condensada, Instrument Serif en cursiva, palo seco
+  espaciada); la anterior, pequeña y apagada arriba; la siguiente se asoma abajo 2.5 s antes. Cada
+  palabra se enciende de izquierda a derecha mientras se canta, en un tramo proporcional a sus
+  sílabas (en inglés o en español) al ritmo de la canción; en las notas largas la última palabra se
+  queda encendida. El estribillo (las líneas que se repiten) va en rosa; las estrofas, en oro y en
+  celeste. Las líneas largas se achican para no tapar a las vecinas. Un velo oscuro detrás para que
+  se lea sobre las bandas claras del remolino. Sigue el reloj del audio (`desfaseLetra` corrige la
+  sincronía si hiciera falta).
 
 ## La llegada a Cochabamba
 
@@ -278,7 +279,8 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.24-palanca-tactil`, `dibujo-v0.25-carta-noche-estrellada`,
 `dibujo-v0.26-sobre-y-cuadro`, `dibujo-v0.27-noche-cuphead`,
 `dibujo-v0.28-cielo-como-el-cuadro`, `dibujo-v0.29-cancion-del-agujero`,
-`dibujo-v0.30-sonido-al-inicio`, `dibujo-v0.31-letra-a-tiempo`.
+`dibujo-v0.30-sonido-al-inicio`, `dibujo-v0.31-letra-a-tiempo`,
+`dibujo-v0.32-letra-tal-cual`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
