@@ -131,7 +131,11 @@ export function CartaEstrellada() {
     setSobreFuera(false)
     setOculta(false)
     const pasos = [
-      window.setTimeout(() => setPaso('abre'), 1050),
+      // Al abrirse la carta (salta el sello, se abre la solapa), empieza la música.
+      window.setTimeout(() => {
+        setPaso('abre')
+        sonarMusicaCarta()
+      }, 1050),
       window.setTimeout(() => setPaso('sale'), 1800),
       window.setTimeout(() => {
         setPaso('carta')
@@ -146,13 +150,12 @@ export function CartaEstrellada() {
     if (fase === 'cerrada') setHojaMostrada(false)
   }, [fase])
 
-  // La música: suena al abrir la cajita (mientras cae la noche) y se para al salir.
+  // La música (empieza al abrirse el sobre, arriba) se para al salir.
   useEffect(() => {
-    if (fase === 'abriendo') sonarMusicaCarta()
-    else if (fase === 'saliendo' || fase === 'cerrada') pararMusicaCarta()
+    if (fase === 'saliendo' || fase === 'cerrada') pararMusicaCarta()
   }, [fase])
 
-  // Paseando, cada gesto la deja lista para sonar (la cajita se abre en un fotograma, no en el gesto).
+  // Paseando, cada gesto la deja lista para sonar (la carta se abre sola, después, no en un gesto).
   useEffect(() => {
     const tipos = ['pointerdown', 'keydown', 'touchend'] as const
     const alGesto = (): void => {

@@ -26,15 +26,16 @@ export const ajustarComas = (texto: string): string => texto.replace(/\s*,\s*/g,
 /**
  * La música de la carta (la pidió el usuario: "al abrir la carta quiero que suene esta canción, y al
  * cerrar se pare también, pero muy bajito, como modo ambiente"): el archivo del usuario en
- * `public/carta/`. Empieza al abrir la cajita y sube despacio mientras cae la noche; mientras se lee
- * se repite, y al salir baja y se para. Ver `utils/musicaCarta.ts`.
+ * `public/carta/`. Empieza al abrirse la carta (salta el sello y se abre la solapa del sobre; no al
+ * abrir la cajita, lo corrigió el usuario) y sube despacio mientras sale la hoja; mientras se lee se
+ * repite, y al salir baja y se para. Ver `utils/musicaCarta.ts`.
  */
 export const MUSICA_CARTA = {
   audio: '/carta/musica.mp3',
   /** Ganancia: la canción viene a unos −20 LUFS y así queda en unos −33, de fondo (la del agujero suena a −14). */
   volumen: 0.22,
-  /** Fundidos (s): de entrada, mientras cae la noche; de salida, al volver al campo. */
-  entrada: 5,
+  /** Fundidos (s): de entrada, mientras sale y se despliega la hoja; de salida, al volver al campo. */
+  entrada: 3,
   salida: 2,
 } as const
 

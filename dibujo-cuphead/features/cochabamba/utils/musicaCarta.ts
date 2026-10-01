@@ -2,13 +2,13 @@ import { cancionAudible, enlazarAudio, estadoDelSonido, reanudarAudio, terminarC
 import { MUSICA_CARTA } from '../constantes/carta'
 
 /**
- * La música de la carta, bajita y de fondo (ver `MUSICA_CARTA`): suena al abrir la cajita y se para al
- * salir. Pasa por el mismo Web Audio que la canción del agujero, con su propia ganancia (en iOS el
- * volumen del elemento no se puede cambiar). Si el sonido está apagado, no suena.
+ * La música de la carta, bajita y de fondo (ver `MUSICA_CARTA`): suena al abrirse la carta (el sobre)
+ * y se para al salir. Pasa por el mismo Web Audio que la canción del agujero, con su propia ganancia
+ * (en iOS el volumen del elemento no se puede cambiar). Si el sonido está apagado, no suena.
  *
- * Los navegadores sólo dejan sonar sin gesto lo que ya sonó en uno, y la cajita se abre en un
- * fotograma de la escena (el toque sólo se apunta): por eso los gestos del paseo la dejan lista antes,
- * con un play en silencio que se pausa enseguida (también el mismo toque que abre la cajita).
+ * Los navegadores sólo dejan sonar sin gesto lo que ya sonó en uno, y la carta se abre sola,
+ * segundos después de tocar la cajita: por eso los gestos del paseo la dejan lista antes, con un play
+ * en silencio que se pausa enseguida (también el mismo toque que abre la cajita).
  */
 
 let musica: HTMLAudioElement | null = null
@@ -48,7 +48,7 @@ function fundir(audio: HTMLAudioElement, destino: number, segundos: number): voi
   }, 40)
 }
 
-/** (En un gesto, paseando.) La deja lista para sonar sin gesto cuando se abra la cajita. */
+/** (En un gesto, paseando.) La deja lista para sonar sin gesto cuando se abra la carta. */
 export function desbloquearMusicaCarta(): void {
   const audio = obtenerMusica()
   if (!enlazada) {
@@ -70,7 +70,7 @@ export function desbloquearMusicaCarta(): void {
   )
 }
 
-/** Al abrir la cajita: desde el principio (o, si aún se apagaba, por donde iba), subiendo despacio. */
+/** Al abrirse la carta: desde el principio (o, si aún se apagaba, por donde iba), subiendo despacio. */
 export function sonarMusicaCarta(): void {
   if (estadoDelSonido() === 'silenciado') return
   const audio = obtenerMusica()
