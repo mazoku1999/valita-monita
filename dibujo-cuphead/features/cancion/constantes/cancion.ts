@@ -22,24 +22,26 @@ export const CANCION = {
   /** Desde aquí se empieza a cargar el audio (y las letras de la letra). */
   precargaVh: 150,
   /**
-   * El cruce al compás de la canción: [segundo de la canción, vh del carril].
+   * El cruce al compás de la canción: [segundo de la canción, vh del carril], con los tiempos del
+   * .srt (la letra va de 0:15 a 2:58; el audio dura 3:20).
    * - 0–1.5 s: la canción empieza en lo negro, recién entrados en el agujero.
    * - 1.5–7 s: durante la introducción, el iris se abre sobre el remolino.
-   * - 7–81 s: la primera estrofa (desde los 15 s) y el estribillo por el remolino del agujero de
-   *   gusano; la boca del otro lado se abre durante el estribillo.
-   * - 81–157 s: el interludio, la segunda estrofa y el último estribillo en el cielo del otro lado.
-   * - 157–170 s: aparece nuestro sistema solar; a los 170 s se suelta el scroll (sigue el final).
+   * - 7–86 s: la primera estrofa (desde los 15 s) y el estribillo (50–86 s) por el remolino del
+   *   agujero de gusano; la boca del otro lado se abre al llegar el estribillo.
+   * - 86–178 s: el interludio (86–108 s), la segunda estrofa y el último estribillo (142–178 s) en
+   *   el cielo del otro lado.
+   * - 178–190 s: aparece nuestro sistema solar; a los 190 s se suelta el scroll (sigue el final).
    */
   recorrido: [
     [0, 446],
     [1.5, 484],
     [7, 510],
-    [81, 640],
-    [157, 770],
-    [170, 830],
+    [86, 640],
+    [178, 770],
+    [190, 830],
   ] as readonly (readonly [number, number])[],
   /** Cuándo se suelta el scroll (s de canción). */
-  suelta: 170,
+  suelta: 190,
   /** La letra respecto del audio (s; positivo: la letra va más tarde). */
   desfaseLetra: 0,
   /** Fundido del sonido (s) al saltarla o al volver atrás. */

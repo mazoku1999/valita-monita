@@ -8,7 +8,7 @@ import type { LineaSrt } from './srt'
  * del final de una línea, la última vocal que se estira.
  *
  * Todo sale del .srt (no hay nada escrito a mano para esta canción): las filas se reparten por
- * largo, la voz de cada línea sale de su texto (si se repite, se ve igual), el estribillo son las
+ * largo dentro de cada renglón del .srt (sus saltos de línea se respetan), la voz de cada línea sale de su texto (si se repite, se ve igual), el estribillo son las
  * líneas que se repiten, las secciones se separan por las pausas largas y cada palabra se enciende
  * en un tramo proporcional a sus sílabas dentro del tiempo de su línea.
  */
@@ -190,7 +190,11 @@ function maquetarLinea(
   })
 
   const plantilla = PLANTILLAS[hash(normalizar(linea.texto)) % PLANTILLAS.length]
-  const partidas = partirEnFilas(palabras)
+  const partidas = linea.texto
+    .split('\n')
+    .map(palabrasDe)
+    .filter((renglon) => renglon.length > 0)
+    .flatMap(partirEnFilas)
   let cursor = 0
   const filas: FilaMaquetada[] = partidas.map((fila, f) => {
     const palabrasFila = maquetadas.slice(cursor, cursor + fila.length)

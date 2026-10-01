@@ -1,103 +1,113 @@
 1
-00:00:15,000 --> 00:00:19,500
-Sé que podría sonar tonto,
+00:00:15,340 --> 00:00:19,150
+Sé que podría sonar tonto
 
 2
-00:00:19,600 --> 00:00:23,000
-decir que eres mi número uno,
+00:00:19,450 --> 00:00:23,200
+decir que eres mi número uno
 
 3
-00:00:23,500 --> 00:00:26,500
-pero parece que no encuentro la manera,
+00:00:23,650 --> 00:00:27,550
+pero parece que no encuentro la manera
 
 4
-00:00:26,600 --> 00:00:30,500
-ninguna otra forma de decir realmente,
+00:00:27,850 --> 00:00:31,700
+ninguna otra forma de decir realmente
 
 5
-00:00:31,000 --> 00:00:34,500
-que trasciendes mi espacio y mi tiempo,
+00:00:32,150 --> 00:00:36,100
+que trasciendes mi espacio y mi tiempo
 
 6
-00:00:34,600 --> 00:00:38,500
-realmente no hay motivo ni razón,
+00:00:36,400 --> 00:00:40,250
+realmente no hay motivo ni razón
 
 7
-00:00:38,600 --> 00:00:42,000
-simplemente no puedo alejarme de ti,
+00:00:40,750 --> 00:00:44,550
+simplemente no puedo alejarme de ti
 
 8
-00:00:42,100 --> 00:00:46,000
-tú iluminas mi ingenuidad.
+00:00:44,850 --> 00:00:49,300
+tú iluminas mi ingenuidad
 
 9
-00:00:46,500 --> 00:00:53,500
-Quién sabe cuántas veces daremos la vuelta al sol,
+00:00:49,950 --> 00:00:56,800
+Quién sabe cuántas veces
+daremos la vuelta al sol
 
 10
-00:00:54,000 --> 00:01:00,500
-pero lo único que sé es que siempre serás la indicada.
+00:00:57,250 --> 00:01:04,150
+pero lo único que sé
+es que siempre serás la indicada
 
 11
-00:01:01,000 --> 00:01:08,000
-Incluso si algún día llegaras a dejarme atrás,
+00:01:04,650 --> 00:01:11,550
+Incluso si algún día
+llegaras a dejarme atrás
 
 12
-00:01:08,500 --> 00:01:15,500
-yo siempre seré tuyo y tú siempre serás mía.
+00:01:12,100 --> 00:01:19,250
+yo siempre seré tuyo
+y tú siempre serás mía
 
 13
-00:01:16,000 --> 00:01:21,000
-Porque eres el amor de mi vida.
+00:01:19,950 --> 00:01:25,850
+Porque eres el amor
+de mi vida
 
 14
-00:01:31,000 --> 00:01:34,500
-Aunque a veces peleemos,
+00:01:47,750 --> 00:01:51,550
+Aunque a veces peleemos
 
 15
-00:01:34,600 --> 00:01:38,500
-y te quiera lejos de mi vista,
+00:01:51,850 --> 00:01:55,700
+y te quiera lejos de mi vista
 
 16
-00:01:38,600 --> 00:01:42,000
-solo hace falta una mirada de perdón,
+00:01:56,150 --> 00:02:00,100
+solo hace falta una mirada de perdón
 
 17
-00:01:42,100 --> 00:01:45,500
-para darnos otra oportunidad.
+00:02:00,450 --> 00:02:04,300
+para darnos otra oportunidad
 
 18
-00:01:46,000 --> 00:01:49,500
-Y un día ya no seremos tan jóvenes,
+00:02:04,800 --> 00:02:08,600
+Y un día ya no seremos tan jóvenes
 
 19
-00:01:49,600 --> 00:01:53,500
-intentaremos recordar cómo era todo antes.
+00:02:08,950 --> 00:02:12,900
+intentaremos recordar cómo era todo antes
 
 20
-00:01:53,600 --> 00:01:57,000
-Y recorreré las líneas de tu rostro,
+00:02:13,350 --> 00:02:17,250
+Y recorreré las líneas de tu rostro
 
 21
-00:01:57,100 --> 00:02:00,500
-y te llamaré por tu nombre.
+00:02:17,550 --> 00:02:21,500
+y te llamaré por tu nombre
 
 22
-00:02:01,000 --> 00:02:08,000
-Quién sabe cuántas veces daremos la vuelta al sol,
+00:02:22,100 --> 00:02:28,950
+Quién sabe cuántas veces
+daremos la vuelta al sol
 
 23
-00:02:08,500 --> 00:02:15,500
-pero lo único que sé es que siempre serás la indicada.
+00:02:29,450 --> 00:02:36,350
+pero lo único que sé
+es que siempre serás la indicada
 
 24
-00:02:16,000 --> 00:02:23,000
-Incluso si algún día llegaras a dejarme atrás,
+00:02:36,800 --> 00:02:43,750
+Incluso si algún día
+llegaras a dejarme atrás
 
 25
-00:02:23,500 --> 00:02:30,500
-yo siempre seré tuyo y tú siempre serás mía.
+00:02:44,200 --> 00:02:51,250
+yo siempre seré tuyo
+y tú siempre serás mía
 
 26
-00:02:31,000 --> 00:02:37,000
-Porque eres el amor de mi vida.
+00:02:51,950 --> 00:02:58,000
+Porque eres el amor
+de mi vida

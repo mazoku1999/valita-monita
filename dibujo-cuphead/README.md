@@ -94,9 +94,10 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   sombra), sin botón de play; el scroll se queda quieto y la cámara cruza sola moviendo la página
   por el carril (`recorrido`: [segundo, vh], interpolado sin pasarse): la canción empieza en lo
   negro, el iris se abre sobre el remolino durante la introducción, la primera estrofa y el
-  estribillo van por el remolino del agujero de gusano (la boca del otro lado se abre en el
-  estribillo), la segunda parte por el cielo del otro lado y nuestro sistema solar aparece al
-  final; a los 170 s se suelta el scroll (830 vh) y sigue sonando lo que queda. Botón de cristal
+  estribillo (hasta 1:26) van por el remolino del agujero de gusano (la boca del otro lado se abre
+  al llegar el estribillo), la pausa instrumental, la segunda estrofa y el último estribillo (hasta
+  2:58) por el cielo del otro lado, y nuestro sistema solar aparece al final; a los 190 s se suelta
+  el scroll (830 vh) y sigue sonando lo que queda. Botón de cristal
   para saltarla (arriba a la izquierda, o Escape); volver fuera del agujero (400 vh) la deja lista
   para otra vez.
 - **El sonido** (`utils/audio.ts`, `components/BotonSonido.tsx`): los navegadores sólo dejan sonar
@@ -107,7 +108,8 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   para invitar); al tocarlo, el sonido se une donde va. Si ni en silencio la deja sonar el
   navegador, la lleva un reloj propio hasta que se pueda. Se empieza a cargar a 150 vh y pasa por
   Web Audio para los fundidos.
-- **La letra** (`utils/srt.ts`, `utils/maqueta.ts`, `components/LetraEnPantalla.tsx`): la línea que
+- **La letra** (`utils/srt.ts`, `utils/maqueta.ts`, `components/LetraEnPantalla.tsx`): los tiempos
+  de cada línea son los del .srt del usuario (con sus saltos de línea, que se respetan). La línea que
   se canta, grande en el centro, partida en filas cortas con voces distintas (palo seco gruesa en
   cursiva, Playfair, Oswald condensada en mayúsculas, Instrument Serif en cursiva, mayúsculas
   espaciadas); la anterior, pequeña y apagada arriba; la siguiente, pequeña abajo. Cada palabra se
@@ -276,7 +278,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.24-palanca-tactil`, `dibujo-v0.25-carta-noche-estrellada`,
 `dibujo-v0.26-sobre-y-cuadro`, `dibujo-v0.27-noche-cuphead`,
 `dibujo-v0.28-cielo-como-el-cuadro`, `dibujo-v0.29-cancion-del-agujero`,
-`dibujo-v0.30-sonido-al-inicio`.
+`dibujo-v0.30-sonido-al-inicio`, `dibujo-v0.31-letra-a-tiempo`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
