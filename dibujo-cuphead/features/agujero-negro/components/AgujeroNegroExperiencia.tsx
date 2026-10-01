@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useCallback, useState } from 'react'
+import { CartaEstrellada } from '@/features/cochabamba/components/CartaEstrellada'
 import { ControlesPaseo } from '@/features/cochabamba/components/ControlesPaseo'
 import { NarrativaOverlay } from '@/features/narrativa/components/NarrativaOverlay'
 
@@ -31,6 +32,8 @@ export function AgujeroNegroExperiencia() {
       <NarrativaOverlay />
       {/* Al final, posada la cámara en el corazón de flores: la palanca y los botones del paseo. */}
       <ControlesPaseo />
+      {/* Y al abrir la cajita, la carta en el cielo de la noche estrellada. */}
+      <CartaEstrellada />
     </>
   )
 }

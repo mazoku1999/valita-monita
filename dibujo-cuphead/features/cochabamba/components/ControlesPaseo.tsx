@@ -1,14 +1,16 @@
 'use client'
 
 import { type ReactNode, useEffect, useRef, useSyncExternalStore } from 'react'
+import { abrirCajita, faseCarta, suscribirCarta } from '../store/carta'
 import { PASEO, paseoActivo, paseoMirado, suscribirPaseo } from '../store/paseo'
 
 /**
  * Los mandos a la vista del paseo por el corazón (ver `store/paseo.ts`), como en los juegos y sin
  * textos. En pantallas táctiles, la palanca abajo a la izquierda (sale donde se apoya el pulgar, en
  * la mitad izquierda); con teclado y ratón, como en los juegos de ordenador, no hay palanca (se
- * anda con las teclas): en su sitio, el dibujo de las flechas. Arriba a la derecha, volver a donde
- * se posó (la casa) y volver al viaje (la flecha: sube la página). Abajo a la derecha, hasta que se
+ * anda con las teclas): en su sitio, el dibujo de las flechas. Arriba a la derecha, abrir la cajita
+ * (el regalo: la cámara va hasta ella), volver a donde se posó (la casa) y volver al viaje (la flecha:
+ * sube la página). Abierta la cajita, se van todos: sólo queda la carta. Abajo a la derecha, hasta que se
  * mira alrededor por primera vez, la pista de arrastrar o deslizar para mirar (un dedo que va y
  * viene). De papel crema con tinta, como el resto del dibujo; aparecen al posarse la cámara.
  */
@@ -221,7 +223,9 @@ function PistaMirar({ visible }: { visible: boolean }) {
 }
 
 export function ControlesPaseo() {
-  const activo = useSyncExternalStore(suscribirPaseo, paseoActivo, () => false)
+  const posado = useSyncExternalStore(suscribirPaseo, paseoActivo, () => false)
+  const fase = useSyncExternalStore(suscribirCarta, faseCarta, () => 'cerrada' as const)
+  const activo = posado && fase === 'cerrada'
   const mirado = useSyncExternalStore(suscribirPaseo, paseoMirado, () => false)
   const tactil = useSyncExternalStore(suscribirTactil, esTactil, () => false)
 
@@ -249,6 +253,13 @@ export function ControlesPaseo() {
         className="fixed flex flex-col gap-3"
         style={{ top: 'calc(16px + env(safe-area-inset-top))', right: 'calc(16px + env(safe-area-inset-right))' }}
       >
+        <Boton etiqueta="Abrir la cajita" alPulsar={abrirCajita}>
+          <path d="M4.5 11 H19.5 V20 H4.5 Z" />
+          <path d="M3.5 7.5 H20.5 V11 H3.5 Z" />
+          <path d="M12 7.5 V20" />
+          <path d="M12 7.5 C10.5 4 6.5 4.2 7.6 6.4 C8.2 7.4 10 7.5 12 7.5" />
+          <path d="M12 7.5 C13.5 4 17.5 4.2 16.4 6.4 C15.8 7.4 14 7.5 12 7.5" />
+        </Boton>
         <Boton etiqueta="Volver al ramo" alPulsar={volverAlRamo}>
           <path d="M4 11.5 L12 4.5 L20 11.5" />
           <path d="M6.5 10 V19.5 H17.5 V10" />

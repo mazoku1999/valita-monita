@@ -1,6 +1,6 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { IBM_Plex_Mono, Instrument_Serif } from 'next/font/google'
+import { Cormorant_Garamond, IBM_Plex_Mono, Instrument_Serif, Pinyon_Script } from 'next/font/google'
 import './globals.css'
 
 const serifDisplay = Instrument_Serif({
@@ -15,6 +15,22 @@ const monoNarrativa = IBM_Plex_Mono({
   subsets: ['latin'],
   weight: ['400', '500'],
   variable: '--font-mono-narrativa',
+  display: 'swap',
+})
+
+// La carta del final: cursiva de libro para los párrafos y caligrafía para el saludo y la despedida.
+const letraCarta = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['500'],
+  style: ['italic'],
+  variable: '--font-carta',
+  display: 'swap',
+})
+
+const firmaCarta = Pinyon_Script({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-carta-firma',
   display: 'swap',
 })
 
@@ -54,7 +70,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${serifDisplay.variable} ${monoNarrativa.variable} dark`}>
+    <html lang="en" className={`${serifDisplay.variable} ${monoNarrativa.variable} ${letraCarta.variable} ${firmaCarta.variable} dark`}>
       <body className="min-h-screen bg-cosmos text-crema antialiased">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}

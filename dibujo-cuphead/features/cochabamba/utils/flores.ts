@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { CAJITA } from '../constantes/carta'
 import { CAMARA_VALLE, CAMPO, CORAZON } from '../constantes/valle'
 import { CAMPOS, CELDAS_CAMPOS, CULTIVO, MANZANA, SENDERO, campoEn, crearCampo, dentroDelCultivo, enGirasolar, sitioCelda } from './campos'
 import { distanciaCorazon } from './corazon'
@@ -402,6 +403,8 @@ export function generarFlores(semilla = 20260929): DatosFlores {
     // pies, flores bajas, por debajo del borde de la imagen de la cámara final (su rayo más bajo
     // baja 1 m cada 2).
     if (Math.hypot(adelante, lateral) < 0.45) continue
+    // El claro del tocón de la cajita.
+    if (Math.hypot(x - CAJITA.x, z - CAJITA.z) < CAJITA.claro) continue
     const enVista = adelante > 0.15 && adelante < 2.1 && Math.abs(lateral) < 0.35 + 0.85 * adelante
     if (enVista && adelante > 1.15) continue
     const densidad = DENSIDAD.lejos + (DENSIDAD.cerca - DENSIDAD.lejos) * Math.exp(-aCamara / DENSIDAD.alcance)

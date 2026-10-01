@@ -6,6 +6,7 @@
  */
 
 import { CIELO_ACUARELA_GLSL, CIELO_MANANA_GLSL, PALETA_EPOCA_GLSL, PAPEL_GLSL, RUIDO3_GLSL } from './acuarela'
+import { NOCHE_ESTRELLADA_GLSL } from './nocheEstrellada'
 
 export const OKLAB_GLSL = /* glsl */ `
 vec3 linealDesdeSRGB(vec3 c) {
@@ -381,6 +382,11 @@ uniform float uNieblaAvance;
 // 1 al salir de la nube (se abre desde el centro, lo que se ve hacia abajo), −1 al entrar (se
 // cierra primero en el centro).
 uniform float uNieblaSentido;
+// La noche estrellada del final (a resolución completa: sus tintas son finas): la dirección de cada
+// píxel en el valle.
+uniform mat4 uProyInversa;
+uniform mat4 uCamaraMundo;
+uniform mat3 uRotacionValle;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -390,6 +396,13 @@ ${TONO_GLSL}
 ${PALETA_EPOCA_GLSL}
 ${PAPEL_GLSL}
 ${RUIDO3_GLSL}
+${NOCHE_ESTRELLADA_GLSL}
+
+vec3 direccionEnValle(vec2 uv) {
+  vec4 ojo = uProyInversa * vec4(uv * 2.0 - 1.0, 1.0, 1.0);
+  vec3 dirVista = normalize(ojo.xyz / ojo.w);
+  return uRotacionValle * normalize((uCamaraMundo * vec4(dirVista, 0.0)).xyz);
+}
 
 vec4 texturaBicubica(sampler2D t, vec2 uv) {
   vec2 tamano = vec2(textureSize(t, 0));
@@ -459,6 +472,17 @@ void main() {
   // Lo que la escena ya dibuja en caricatura (el sistema solar) va con su color, sin aplanar.
   vec4 dibujado = texelFetch(uEscena, ivec2(vUv * vec2(textureSize(uEscena, 0))), 0);
   if (esCaricatura(dibujado.a)) c = srgbDesdeLineal(dibujado.rgb);
+
+  // La noche estrellada del final: el cielo abierto se vuelve noche como una aguada que baja desde lo
+  // alto (con su orilla) y lo demás pasa a la luz de la luna.
+  if (uNoche > 0.0005) {
+    vec3 dValle = direccionEnValle(vUv);
+    vec2 caida = caidaNoche(dValle);
+    vec3 conNoche = caida.x > 0.001 ? mix(c, nocheEstrellada(dValle), caida.x) : c;
+    conNoche *= 1.0 - 0.22 * caida.y;
+    c = mix(c, conNoche, cielo.a);
+    c = mix(c, gradoNoche(c), (1.0 - cielo.a) * smoothstep(0.0, 0.7, uNoche));
+  }
 
   // El agujero de caricatura por encima.
   vec4 gas = texture(uGasColor, vUv);
@@ -676,6 +700,8 @@ uniform sampler2D uGasColor;
 uniform float uGasVisible;
 uniform float uEstrellasVisibles;
 uniform float uBandaVisible;
+// La carta del final se escribe en el centro de la pantalla: allí no se dibujan estrellas sueltas.
+uniform float uHuecoCarta;
 
 in vec4 aPosicion;
 in vec4 aForma;
@@ -789,6 +815,8 @@ void main() {
     vFondoClaro = smoothstep(0.08, 0.25, luzGas);
   } else {
     visible = uEstrellasVisibles * luzDeCielo(uvc);
+    vec2 enHueco = (uvc - vec2(0.5, 0.47)) / vec2(0.47, 0.2);
+    visible *= 1.0 - uHuecoCarta * (1.0 - smoothstep(0.85, 1.05, length(enHueco)));
   }
   if (visible < 0.05 || any(lessThan(uv, vec2(-0.05))) || any(greaterThan(uv, vec2(1.05)))) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);

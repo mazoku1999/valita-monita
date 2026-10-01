@@ -41,6 +41,8 @@ uniform vec3 uCamara;
 uniform vec3 uSol;
 uniform float uTiempo;
 uniform float uPixelesPorRadian;
+// La noche estrellada del final: las mariposas se van.
+uniform float uNoche;
 
 varying vec2 vAla;
 varying float vEspecie;
@@ -60,7 +62,7 @@ vec3 paseo(float t) {
 void main() {
   float t = uTiempo + 50.0 * aAzar.x;
   vec3 centro = aAncla.xyz + paseo(t);
-  float tamano = aAncla.w;
+  float tamano = aAncla.w * (1.0 - smoothstep(0.0, 0.35, uNoche));
   float pixeles = tamano / max(distance(centro, uCamara), 1e-3) * uPixelesPorRadian;
   if (pixeles < 1.5) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
@@ -178,6 +180,7 @@ uniform vec3 uCajaDesde;
 uniform vec3 uCajaLado;
 uniform vec3 uViento;
 uniform vec3 uCajaPaseo;
+uniform float uNoche;
 
 varying vec2 vLocal;
 varying float vColor;
@@ -196,7 +199,7 @@ void main() {
   vec3 centro = uCajaOrigen + vec3(uCajaMarco.z, 0.0, uCajaMarco.w) * local.x + vec3(0.0, local.y, 0.0) + vec3(uCajaMarco.x, 0.0, uCajaMarco.y) * local.z;
 
   vColor = fract(aAzar.x * 13.7 + aAzar2.w * 5.3);
-  float tamano = (0.026 + 0.016 * aAzar.w) * enCaja;
+  float tamano = (0.026 + 0.016 * aAzar.w) * enCaja * (1.0 - smoothstep(0.0, 0.35, uNoche));
   float distancia = distance(centro, uCamara);
   // Pegados a la cámara también encogen: nada de manchas que tapen la vista.
   tamano *= smoothstep(0.5, 1.3, distancia);
@@ -266,6 +269,8 @@ attribute vec4 aAzar;
 uniform vec3 uCamara;
 uniform vec3 uSol;
 uniform float uTiempo;
+// La noche estrellada del final: las nubes se deshacen (en el cuadro no hay nubes).
+uniform float uNoche;
 
 varying vec2 vLocal;
 varying vec4 vAzar;
@@ -280,7 +285,7 @@ void main() {
   vDelCielo = step(1.0, aAzar.w);
   // Van despacio hacia el oeste con el viento de la mañana.
   vec3 base = aCentro.xyz + vec3(-4.0 * uTiempo, 0.0, 0.0);
-  float ancho = aCentro.w;
+  float ancho = aCentro.w * (1.0 - smoothstep(0.0, 0.45, uNoche));
   vec3 aCamara = uCamara - base;
   vec3 ejeX = normalize(vec3(aCamara.z, 0.0, -aCamara.x));
   // En unidades del medio ancho: x de -1 a 1, y de 0 (la base) a 1.4.

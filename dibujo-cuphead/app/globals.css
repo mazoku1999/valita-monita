@@ -210,3 +210,137 @@
     animation: none;
   }
 }
+
+/* La carta del final, escrita en el cielo de la noche estrellada (ver CartaEstrellada.tsx). */
+.carta-estrellada {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 7vh 6vw 13vh;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  animation: carta-aparece 1.6s ease both;
+}
+@keyframes carta-aparece {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.carta-parrafo {
+  position: relative;
+  max-width: min(88vw, 33em);
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-carta), 'Cormorant Garamond', Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(1.2rem, 0.85rem + 1.4vw, 1.85rem);
+  line-height: 1.5;
+  color: rgb(252 243 220);
+  text-shadow:
+    0 1px 0 rgb(8 12 40 / 0.85),
+    0 0 3px rgb(8 12 40 / 0.9),
+    0 0 16px rgb(8 12 40 / 0.85);
+  transform: translateY(3vh);
+  transition:
+    opacity 0.8s ease,
+    transform 0.8s ease,
+    filter 0.8s ease;
+}
+/* Una sombra suave detrás del texto: sobre las cintas de viento también se lee. */
+.carta-parrafo::before {
+  content: '';
+  position: absolute;
+  inset: -16% -10%;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgb(6 10 34 / 0.42), rgb(6 10 34 / 0));
+  pointer-events: none;
+}
+.carta-saludo,
+.carta-despedida {
+  font-family: var(--font-carta-firma), cursive;
+  font-style: normal;
+  font-weight: 400;
+  color: rgb(255 230 168);
+}
+.carta-saludo {
+  font-size: clamp(3.4rem, 2rem + 6vw, 6.4rem);
+  line-height: 1.2;
+}
+.carta-despedida {
+  font-size: clamp(2.3rem, 1.4rem + 3.6vw, 4.2rem);
+  line-height: 1.35;
+}
+.carta-palabra {
+  display: inline-block;
+  white-space: nowrap;
+}
+.carta-letra {
+  display: inline-block;
+  opacity: 0;
+  animation: carta-tinta 0.75s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  animation-delay: calc(var(--i) * 26ms);
+}
+/* Tinta dorada que se aclara al secarse. */
+@keyframes carta-tinta {
+  0% {
+    opacity: 0;
+    transform: translateY(0.22em) scale(0.92);
+    color: rgb(255 204 96);
+  }
+  55% {
+    opacity: 1;
+    color: rgb(255 238 186);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.carta-completa .carta-letra {
+  animation: none;
+  opacity: 1;
+}
+.carta-saliendo {
+  opacity: 0;
+  transform: translateY(1.5vh);
+  filter: blur(3px);
+}
+.carta-progreso {
+  position: fixed;
+  left: 50%;
+  bottom: calc(4vh + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 9px;
+  pointer-events: none;
+}
+.carta-releer {
+  position: fixed;
+  left: 50%;
+  bottom: calc(3.5vh + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 9999px;
+  border: 3px solid rgb(19 15 12);
+  background: rgb(248 238 219);
+  box-shadow: 0 3px 0 rgb(19 15 12 / 0.45);
+  animation: carta-aparece 1.2s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .carta-letra {
+    animation: none;
+    opacity: 1;
+  }
+}

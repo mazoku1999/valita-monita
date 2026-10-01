@@ -85,6 +85,8 @@ export function VidaDelValle({ uniformes }: { uniformes: UniformesValle }) {
   // Los pétalos al viento acompañan a quien pasea por el corazón (ver `store/paseo.ts`): el
   // desplazamiento, en el marco de su caja.
   useFrame(() => {
+    // La noche estrellada del final: también las nubes de bolas se deshacen.
+    materiales.nubesEntrada.uniforms.uCrecer.value = 1 - Math.min(1, (uniformes.uNoche?.value ?? 0) / 0.45)
     const { adelante, derecha } = MARCO_FINAL
     ;(materiales.petalos.uniforms.uCajaPaseo.value as THREE.Vector3).set(
       PASEO.x * derecha[0] + PASEO.z * derecha[1],

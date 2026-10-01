@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { CARTA } from '../store/carta'
 import { PASEO, marcarMirado, suscribirPaseo } from '../store/paseo'
 
 /**
@@ -21,19 +22,27 @@ const TECLAS: Readonly<Record<string, readonly [number, number, number]>> = {
 /** Mirar (rad por píxel): con el ratón y con el dedo (en el móvil, la pantalla es más pequeña). */
 const MIRAR = { raton: 0.0034, dedo: 0.0056 } as const
 
+/** Un toque (para la cajita): lo que puede moverse el puntero (px) y durar (ms). */
+const TOQUE = { movimiento: 9, duracion: 450 } as const
+
+/** Se puede pasear: la cámara posada y la cajita sin abrir (abierta, ya no hay mandos). */
+const mandosActivos = (): boolean => PASEO.activo && CARTA.fase === 'cerrada'
+
 /**
  * Los mandos del paseo por el corazón (ver `store/paseo.ts`), sólo con la cámara posada: las
  * flechas y WASD (con Mayúsculas, correr; entonces las flechas no desplazan la página) y arrastrar
  * sobre el lienzo para mirar, como en los juegos: el dedo o el ratón a la derecha gira a la derecha,
  * hacia arriba mira arriba, sin inercia. Mientras se pasea, tocar el lienzo no desplaza la página
- * (subir es un botón). Doble clic: de vuelta a donde se posó. La palanca y los botones están en
- * `components/ControlesPaseo.tsx`.
+ * (subir es un botón). Doble clic: de vuelta a donde se posó. Un toque o clic sin arrastrar deja su
+ * punto en `CARTA.toque` (si cae en la cajita, la abre: lo comprueba `EscenaCochabamba`). La palanca
+ * y los botones están en `components/ControlesPaseo.tsx`.
  */
 export function usePaseo(elemento: HTMLElement | null): void {
   useEffect(() => {
     if (!elemento) return
     const pulsadas = new Set<string>()
     let mirando: { id: number; x: number; y: number; dedo: boolean } | null = null
+    let bajada: { id: number; x: number; y: number; t: number; movido: number } | null = null
 
     const recalcular = (): void => {
       let adelante = 0
@@ -51,7 +60,7 @@ export function usePaseo(elemento: HTMLElement | null): void {
 
     const alBajarTecla = (evento: KeyboardEvent): void => {
       if (evento.key === 'Shift') PASEO.correr = true
-      if (!PASEO.activo || evento.metaKey || evento.ctrlKey || evento.altKey || !(evento.code in TECLAS)) return
+      if (!mandosActivos() || evento.metaKey || evento.ctrlKey || evento.altKey || !(evento.code in TECLAS)) return
       evento.preventDefault()
       pulsadas.add(evento.code)
       recalcular()
@@ -68,8 +77,9 @@ export function usePaseo(elemento: HTMLElement | null): void {
     }
 
     const alBajar = (evento: PointerEvent): void => {
-      if (!PASEO.activo || mirando || (evento.pointerType === 'mouse' && evento.button !== 0)) return
+      if (!mandosActivos() || mirando || (evento.pointerType === 'mouse' && evento.button !== 0)) return
       mirando = { id: evento.pointerId, x: evento.clientX, y: evento.clientY, dedo: evento.pointerType !== 'mouse' }
+      bajada = { id: evento.pointerId, x: evento.clientX, y: evento.clientY, t: evento.timeStamp, movido: 0 }
     }
     const alMover = (evento: PointerEvent): void => {
       if (!mirando || evento.pointerId !== mirando.id) return
@@ -77,7 +87,8 @@ export function usePaseo(elemento: HTMLElement | null): void {
       const dy = evento.clientY - mirando.y
       mirando.x = evento.clientX
       mirando.y = evento.clientY
-      if (!PASEO.activo) return
+      if (bajada && bajada.id === evento.pointerId) bajada.movido = Math.max(bajada.movido, Math.hypot(evento.clientX - bajada.x, evento.clientY - bajada.y))
+      if (!mandosActivos()) return
       const sensibilidad = mirando.dedo ? MIRAR.dedo : MIRAR.raton
       PASEO.giro -= dx * sensibilidad
       PASEO.cabeceo -= dy * sensibilidad
@@ -85,9 +96,18 @@ export function usePaseo(elemento: HTMLElement | null): void {
     }
     const alSoltar = (evento: PointerEvent): void => {
       if (mirando && evento.pointerId === mirando.id) mirando = null
+      // Un toque (sin arrastrar): por si cae en la cajita.
+      if (bajada && evento.pointerId === bajada.id) {
+        const esToque = evento.type === 'pointerup' && bajada.movido < TOQUE.movimiento && evento.timeStamp - bajada.t < TOQUE.duracion
+        if (esToque && mandosActivos()) {
+          const caja = elemento.getBoundingClientRect()
+          CARTA.toque = { x: ((evento.clientX - caja.left) / caja.width) * 2 - 1, y: 1 - ((evento.clientY - caja.top) / caja.height) * 2 }
+        }
+        bajada = null
+      }
     }
     const alDobleClic = (): void => {
-      if (PASEO.activo) PASEO.volver = true
+      if (mandosActivos()) PASEO.volver = true
     }
 
     // Paseando, el lienzo no desplaza la página al tocarlo (se mira arrastrando en cualquier

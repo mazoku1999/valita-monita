@@ -10,6 +10,13 @@ export const VALLE_EN_ESCENA = {
   dia: 0,
   rotacion: new THREE.Matrix3(),
   sol: new THREE.Vector3(0, 1, 0),
+  /**
+   * La noche estrellada del final (0..1, ver `store/carta.ts` y `shaders/nocheEstrellada.ts`) y la
+   * vista final de la cámara hacia el cielo, sobre la que se compone: columnas derecha, arriba y
+   * adelante, en coordenadas del valle.
+   */
+  noche: 0,
+  marcoNoche: new THREE.Matrix3(),
 }
 
 /**

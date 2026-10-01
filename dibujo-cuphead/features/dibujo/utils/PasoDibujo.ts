@@ -193,6 +193,14 @@ export class PasoDibujo extends Pass {
       uNiebla: { value: 0 },
       uNieblaAvance: { value: 0 },
       uNieblaSentido: { value: 1 },
+      uRotacionValle: { value: VALLE_EN_ESCENA.rotacion },
+      uNoche: { value: 0 },
+      uMarcoNoche: { value: VALLE_EN_ESCENA.marcoNoche },
+      uTanNoche: { value: 0.364 },
+      uAspectoNoche: { value: 16 / 9 },
+      uTiempoNoche: { value: 0 },
+      uPixelNoche: { value: 1 / 360 },
+      ...this.uCamara,
     })
     this.matPelicula = material(PELICULA_FRAG, {
       uImagen: { value: this.dibujo.texture },
@@ -223,6 +231,7 @@ export class PasoDibujo extends Pass {
         uGasVisible: { value: 1 },
         uEstrellasVisibles: { value: 1 },
         uBandaVisible: { value: 1 },
+        uHuecoCarta: { value: 0 },
         uTinta: { value: new THREE.Vector3(...TINTA.color) },
       },
       depthTest: false,
@@ -263,6 +272,8 @@ export class PasoDibujo extends Pass {
     this.matCielo.uniforms.uAspecto.value = ancho / alto
     for (const m of [this.matContorno, this.matComponer, this.matPelicula, this.matDestellos])
       (m.uniforms.uResolucion.value as THREE.Vector2).set(ancho, alto)
+    this.matComponer.uniforms.uAspectoNoche.value = ancho / alto
+    this.matComponer.uniforms.uPixelNoche.value = 2 / alto
     this.matComponer.uniforms.uEscalaPapel.value = ACUARELA.escalaPapel * Math.max(1, alto / 720)
   }
 
@@ -398,6 +409,9 @@ export class PasoDibujo extends Pass {
     u.uNiebla.value = this.niebla
     u.uNieblaAvance.value = this.nieblaAvance
     u.uNieblaSentido.value = this.nieblaSentido
+    u.uNoche.value = VALLE_EN_ESCENA.noche
+    u.uTiempoNoche.value = this.tiempo
+    if (camara instanceof THREE.PerspectiveCamera) u.uTanNoche.value = Math.tan(THREE.MathUtils.degToRad(camara.fov) / 2)
     u.uAPantalla.value = 1
     ;(u.uHervor.value as THREE.Vector3).set(hervorX, hervorY, HERVOR.amplitud)
     this.dibujar(renderer, this.matComponer, this.dibujo)
@@ -412,8 +426,9 @@ export class PasoDibujo extends Pass {
       ud.uPulsaciones.value = this.pulsaciones
       ud.uGasColor.value = gas ? gas.textures[0] : null
       ud.uGasVisible.value = gasVisible
-      // De día no hay estrellas.
-      ud.uEstrellasVisibles.value = uc.uCieloPintado.value * (1 - VALLE_EN_ESCENA.dia)
+      // De día no hay estrellas; en la noche estrellada del final, sí (cuando la noche ya cubre el cielo).
+      ud.uEstrellasVisibles.value = Math.max(uc.uCieloPintado.value * (1 - VALLE_EN_ESCENA.dia), suavizar(0.6, 0.95, VALLE_EN_ESCENA.noche))
+      ud.uHuecoCarta.value = suavizar(0.6, 0.95, VALLE_EN_ESCENA.noche)
       ud.uBandaVisible.value = ud.uProfundidad.value ? this.bandaVisible * suavizar(0, 1, gasVisible) : 0
       renderer.setRenderTarget(this.dibujo)
       renderer.render(this.escenaDestellos, this.camaraQuad)

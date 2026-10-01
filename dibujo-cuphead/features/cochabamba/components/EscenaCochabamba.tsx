@@ -14,12 +14,16 @@ import { CABEZA_FRAG, CABEZA_VERT, HOJA_FRAG, HOJA_VERT, TALLO_FRAG, TALLO_VERT 
 import { VALLE_SUELO_FRAG, VALLE_SUELO_VERT } from '../shaders/suelo'
 import { NIEBLA } from '@/features/dibujo/store/niebla'
 import { RECORTE_ENTRADA, VALLE_EN_ESCENA } from '../store/valle'
+import { CENTRO_CAJITA, COREOGRAFIA } from '../constantes/carta'
 import { usePaseo } from '../hooks/usePaseo'
+import { CARTA, abrirCajita, empezarLectura, segundosCarta } from '../store/carta'
 import { PASEO, RITMO_PASEO, alturaPaseo, avanzarPaseo, reiniciarPaseo } from '../store/paseo'
 import { crearQuadInstanciado, generarFlores } from '../utils/flores'
 import { SOMBRAS_NUBES, crearTexturaSombras, generarCumulos, nieblaEnNubes } from '../utils/nubesDestino'
 import { PISO_VALLE } from '../utils/region'
+import { type Coreografia, marcoVistaCielo, poseCoreografia, prepararCoreografia } from '../utils/coreografia'
 import { crearTerreno } from '../utils/terreno'
+import { Cajita } from './Cajita'
 import { type UniformesValle, VidaDelValle } from './VidaDelValle'
 
 /**
@@ -111,7 +115,16 @@ export function EscenaCochabamba() {
     rotacion: new THREE.Matrix4(),
     /** Cuánto sigue la mirada al cursor (se apaga al posarse: paseando manda la cabeza del paseo). */
     pesoCursor: 1,
+    /** La cámara al abrir la cajita (ver `utils/coreografia.ts`), desde el primer fotograma abierta. */
+    coreografia: null as Coreografia | null,
+    direccionCarta: new THREE.Vector3(),
+    rayo: new THREE.Raycaster(),
+    puntoToque: new THREE.Vector2(),
+    inversaGrupo: new THREE.Matrix4(),
+    origenRayo: new THREE.Vector3(),
+    direccionRayo: new THREE.Vector3(),
   })
+  const mallasFlores = useRef<(THREE.Mesh | null)[]>([])
 
   const material = useMemo(() => {
     const [ejeX, ejeZ] = direccionRumbo(CORAZON.rumbo)
@@ -142,9 +155,15 @@ export function EscenaCochabamba() {
       uTiempo: { value: 0 },
       uPixelesPorRadian: { value: 800 },
       uEscalaPantalla: { value: 1 },
+      // La noche estrellada del final (0..1): las nubes se deshacen y las mariposas se van.
+      uNoche: { value: 0 },
     }),
     [],
   )
+  // La vista final hacia el cielo, sobre la que el pase compone la noche estrellada.
+  useEffect(() => {
+    marcoVistaCielo(VALLE_EN_ESCENA.marcoNoche)
+  }, [])
   const materialesFlores = useMemo(
     () => ({
       cabezas: new THREE.ShaderMaterial({ vertexShader: CABEZA_VERT, fragmentShader: CABEZA_FRAG, uniforms: uniformesFlores, side: THREE.DoubleSide }),
@@ -194,6 +213,7 @@ export function EscenaCochabamba() {
     VALLE_EN_ESCENA.dia = visible ? 1 : 0
     if (!visible) {
       NIEBLA.valle = 0
+      VALLE_EN_ESCENA.noche = 0
       if (PASEO.activo || PASEO.x !== 0 || PASEO.z !== 0) reiniciarPaseo()
     }
 
@@ -215,6 +235,23 @@ export function EscenaCochabamba() {
     poseEn(progreso, posicion, mira)
     // Posada la cámara, se pasea por el corazón con los mandos de un juego (ver `store/paseo.ts`).
     const posado = progreso >= VIAJE.aterrizajeFin - 1e-3
+    const cartaAbierta = CARTA.fase !== 'cerrada'
+    // Un toque sobre la cajita la abre: el rayo del toque (con la cámara y el valle del fotograma que
+    // se vio) contra una esfera alrededor de ella.
+    const toque = CARTA.toque
+    if (toque) {
+      CARTA.toque = null
+      const { rayo, puntoToque, inversaGrupo, origenRayo, direccionRayo } = auxiliares.current
+      if (posado && !cartaAbierta) {
+        rayo.setFromCamera(puntoToque.set(toque.x, toque.y), camera)
+        inversaGrupo.copy(nodo.matrixWorld).invert()
+        origenRayo.copy(rayo.ray.origin).applyMatrix4(inversaGrupo).sub(direccionRayo.set(CENTRO_CAJITA[0], CENTRO_CAJITA[1], CENTRO_CAJITA[2]))
+        direccionRayo.copy(rayo.ray.direction).transformDirection(inversaGrupo)
+        const b = origenRayo.dot(direccionRayo)
+        const c = origenRayo.lengthSq() - 0.3 * 0.3
+        if (b * b - c >= 0 && -b + Math.sqrt(b * b - c) > 0) abrirCajita()
+      }
+    }
     // Mirar alrededor en la bajada: arrastrando se gira la cabeza como en los juegos (a la derecha,
     // se mira a la derecha; hacia abajo, abajo) hasta unos límites, y el cursor la inclina un poco.
     // Al posarse, lo girado pasa a la cabeza del paseo, que manda desde entonces (el arrastre de la
@@ -244,8 +281,9 @@ export function EscenaCochabamba() {
     const cursorGiro = cursor.x * MIRAR.cursor.giro * auxiliar.pesoCursor
     const cursorAlzar = cursor.y * MIRAR.cursor.alzar * auxiliar.pesoCursor
     const horizontal = Math.atan2(direccion.x, direccion.z) + mirada.azimut + PASEO.giro - cursorGiro
-    // El paseo: la cámara anda (dentro del corazón) y se pone de pie, mirando algo más abajo.
-    avanzarPaseo(paso, posado, horizontal, FINAL.x, FINAL.z)
+    // El paseo: la cámara anda (dentro del corazón) y se pone de pie, mirando algo más abajo. Con la
+    // cajita abierta se queda donde estaba (sin mandos).
+    if (!cartaAbierta) avanzarPaseo(paso, posado, horizontal, FINAL.x, FINAL.z)
     const dePie = alturaPaseo()
     const bajarDePie = RITMO_PASEO.bajarMirada * dePie
     if (posado) PASEO.cabeceo = Math.min(MIRAR.alzarPaseo - inclinacion + bajarDePie, Math.max(-MIRAR.bajarPaseo - inclinacion + bajarDePie, PASEO.cabeceo))
@@ -254,6 +292,29 @@ export function EscenaCochabamba() {
     posicion.z += PASEO.z
     posicion.y += (RITMO_PASEO.altura - FINAL.y) * dePie
     mira.set(Math.sin(horizontal) * Math.cos(nueva), Math.sin(nueva), Math.cos(horizontal) * Math.cos(nueva)).multiplyScalar(largo).add(posicion)
+    // La cajita abierta: la cámara la mira, se alza hacia el cielo y cae la noche (ver
+    // `utils/coreografia.ts`); después, la carta.
+    let noche = 0
+    let floresOcultas = false
+    const auxiliar2 = auxiliares.current
+    if (cartaAbierta) {
+      if (!auxiliar2.coreografia) {
+        auxiliar2.coreografia = prepararCoreografia(posicion, auxiliar2.direccionCarta.copy(mira).sub(posicion))
+        CARTA.llegada = auxiliar2.coreografia.llegada
+      }
+      const t = segundosCarta()
+      noche = poseCoreografia(auxiliar2.coreografia, t, posicion, auxiliar2.direccionCarta)
+      mira.copy(posicion).addScaledVector(auxiliar2.direccionCarta, 50)
+      const s = t - auxiliar2.coreografia.llegada
+      if (s >= COREOGRAFIA.carta) empezarLectura()
+      // Mirando ya al cielo, las flores no se ven: no se dibujan (en un móvil, se nota).
+      floresOcultas = s > COREOGRAFIA.inclinarDesde + 3.6
+    } else {
+      auxiliar2.coreografia = null
+    }
+    VALLE_EN_ESCENA.noche = noche
+    uniformesFlores.uNoche.value = noche
+    for (const malla of mallasFlores.current) if (malla) malla.visible = !floresOcultas
     // Dentro de la nube de entrada, niebla (el pase la pinta).
     NIEBLA.valle = nieblaEnNubes(posicion.x / 1000, -posicion.z / 1000, (posicion.y + PISO_VALLE) / 1000, NUBES_CERCANAS)
     matriz.lookAt(posicion, mira, ARRIBA)
@@ -280,11 +341,12 @@ export function EscenaCochabamba() {
       {terreno && <mesh geometry={terreno} material={material} frustumCulled={false} />}
       {flores && (
         <>
-          <mesh geometry={flores.tallos} material={materialesFlores.tallos} frustumCulled={false} />
-          <mesh geometry={flores.hojas} material={materialesFlores.hojas} frustumCulled={false} />
-          <mesh geometry={flores.cabezas} material={materialesFlores.cabezas} frustumCulled={false} />
+          <mesh ref={(m) => void (mallasFlores.current[0] = m)} geometry={flores.tallos} material={materialesFlores.tallos} frustumCulled={false} />
+          <mesh ref={(m) => void (mallasFlores.current[1] = m)} geometry={flores.hojas} material={materialesFlores.hojas} frustumCulled={false} />
+          <mesh ref={(m) => void (mallasFlores.current[2] = m)} geometry={flores.cabezas} material={materialesFlores.cabezas} frustumCulled={false} />
         </>
       )}
+      <Cajita uniformes={uniformesFlores} />
       <VidaDelValle uniformes={uniformesFlores} />
     </group>
   )
