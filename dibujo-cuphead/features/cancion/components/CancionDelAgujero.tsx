@@ -4,28 +4,31 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { CARRIL_VH } from '@/features/agujero-negro/constantes/viajeScroll'
 import { obtenerProgreso, suscribirProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { CANCION } from '../constantes/cancion'
-import { cambiarFaseCancion, cancionPideToque, faseCancion, pedirToque, suscribirCancion } from '../store/cancion'
+import { cambiarFaseCancion, faseCancion, suscribirCancion } from '../store/cancion'
 import {
   alTerminarCancion,
-  cancionSonando,
-  desbloquearCancion,
-  pararCancion,
+  cancionAudible,
+  empezarCancion,
+  estadoDelSonido,
+  permitirSonido,
   precargarCancion,
   saltarCancionA,
-  sonarCancionDesde,
+  soltarCancion,
+  terminarCancion,
   tiempoCancion,
 } from '../utils/audio'
 import { type LineaMaquetada, maquetarLetra } from '../utils/maqueta'
 import { interpolarMonotona } from '../utils/recorrido'
 import { leerSrt } from '../utils/srt'
+import { BotonSonido } from './BotonSonido'
 import { LetraEnPantalla } from './LetraEnPantalla'
 
 /**
- * La canción del agujero negro (ver `constantes/cancion.ts`): al llegar al agujero bajando, el
- * scroll se queda quieto y empieza la canción; la cámara cruza sola a su compás (se mueve la página
- * por el carril, así todo lo demás sigue igual) con la letra en pantalla, y a su final se suelta el
- * scroll ya en el sistema solar. Botón de cristal para saltarla (o Escape); si el navegador no la
- * deja sonar sin un gesto, un botón para escucharla.
+ * La canción del agujero negro (ver `constantes/cancion.ts`): al entrar en el agujero bajando, el
+ * scroll se queda quieto y empieza la canción, sin pedir nada (con sonido si ya se activó al inicio;
+ * si no, en silencio hasta que se active); la cámara cruza sola a su compás (se mueve la página por
+ * el carril, así todo lo demás sigue igual) con la letra en pantalla, y a su final se suelta el
+ * scroll ya en el sistema solar. Botón de cristal para saltarla (o Escape).
  */
 
 const vhActual = (): number => obtenerProgreso() * CARRIL_VH
@@ -55,39 +58,33 @@ function bloquearScroll(): () => void {
   }
 }
 
-function empezar(): void {
-  void sonarCancionDesde(CANCION.audio, 0, CANCION.fundidoEntrada).then((sono) => {
-    if (faseCancion() !== 'esperando') {
-      if (sono) pararCancion(0.3)
-      return
-    }
-    if (sono) cambiarFaseCancion('sonando')
-    else pedirToque()
-  })
+/** Al entrar en el agujero: quieta la página en la puerta y empieza la canción. */
+function entrar(): void {
+  cambiarFaseCancion('sonando')
+  if (vhActual() > CANCION.puertaVh + 1) irAVh(CANCION.puertaVh)
+  empezarCancion(CANCION.audio)
 }
 
-/** Al llegar al agujero: quieta la página en la puerta e intenta sonar. */
-function entrar(): void {
-  cambiarFaseCancion('esperando')
-  if (vhActual() > CANCION.puertaVh + 1) irAVh(CANCION.puertaVh)
-  empezar()
+/** Al final del cruce: se suelta el scroll (si suena, sigue sonando su final). */
+function soltar(): void {
+  irAVh(interpolarMonotona(CANCION.recorrido, CANCION.suelta))
+  soltarCancion()
+  cambiarFaseCancion('libre')
 }
 
 function saltar(): void {
-  const fase = faseCancion()
-  if (fase !== 'esperando' && fase !== 'sonando') return
-  pararCancion(CANCION.fundidoSalida)
+  if (faseCancion() !== 'sonando') return
+  terminarCancion(CANCION.fundidoSalida)
   cambiarFaseCancion('libre')
 }
 
 function rearmar(): void {
-  if (cancionSonando()) pararCancion(CANCION.fundidoSalida)
+  terminarCancion(CANCION.fundidoSalida)
   cambiarFaseCancion('armada')
 }
 
 export function CancionDelAgujero() {
   const fase = useSyncExternalStore(suscribirCancion, faseCancion, () => 'armada' as const)
-  const pideToque = useSyncExternalStore(suscribirCancion, cancionPideToque, () => false)
   const [letra, setLetra] = useState<LineaMaquetada[] | null>(null)
 
   // Al acercarse al agujero: se cargan la canción, su letra y sus letras (las tipografías).
@@ -117,21 +114,23 @@ export function CancionDelAgujero() {
     return suscribirProgreso(revisar)
   }, [])
 
-  // El primer gesto en cualquier parte (clic, tecla o toque) desbloquea el sonido para después.
+  // Cualquier gesto (clic, tecla o toque) también activa el sonido para después; el del botón del
+  // sonido lo decide él.
   useEffect(() => {
     const tipos = ['pointerdown', 'keydown', 'touchend'] as const
     const quitar = (): void => {
       for (const tipo of tipos) window.removeEventListener(tipo, alGesto, true)
     }
-    const alGesto = (): void => {
+    const alGesto = (evento: Event): void => {
+      if (evento.target instanceof Element && evento.target.closest('.boton-sonido')) return
       quitar()
-      desbloquearCancion(CANCION.audio)
+      permitirSonido(CANCION.audio)
     }
     for (const tipo of tipos) window.addEventListener(tipo, alGesto, { capture: true, passive: true })
     return quitar
   }, [])
 
-  // La puerta: llegar al agujero bajando la empieza; volver por encima, después, la arma otra vez.
+  // La puerta: entrar en el agujero bajando la empieza; volver fuera, después, la arma otra vez.
   useEffect(() => {
     const revisar = (): void => {
       const vh = vhActual()
@@ -143,30 +142,29 @@ export function CancionDelAgujero() {
     return suscribirProgreso(revisar)
   }, [])
 
-  // Mientras espera o suena, el scroll quieto; Escape la salta.
-  const quieta = fase === 'esperando' || fase === 'sonando'
+  // Mientras suena, el scroll quieto; Escape la salta.
+  const sonando = fase === 'sonando'
   useEffect(() => {
-    if (!quieta) return
-    const soltar = bloquearScroll()
+    if (!sonando) return
+    const soltarScroll = bloquearScroll()
     const alTecla = (evento: KeyboardEvent): void => {
       if (evento.key === 'Escape') saltar()
     }
     window.addEventListener('keydown', alTecla)
     return () => {
-      soltar()
+      soltarScroll()
       window.removeEventListener('keydown', alTecla)
     }
-  }, [quieta])
+  }, [sonando])
 
   // El cruce: la página avanza por el carril al compás de la canción hasta soltarse.
   useEffect(() => {
-    if (fase !== 'sonando') return
+    if (!sonando) return
     let solicitud = 0
     const cuadro = (): void => {
       const t = tiempoCancion()
       if (t >= CANCION.suelta) {
-        irAVh(interpolarMonotona(CANCION.recorrido, CANCION.suelta))
-        cambiarFaseCancion('libre')
+        soltar()
         return
       }
       irAVh(interpolarMonotona(CANCION.recorrido, t))
@@ -174,19 +172,21 @@ export function CancionDelAgujero() {
     }
     solicitud = window.requestAnimationFrame(cuadro)
     const quitarFin = alTerminarCancion(() => {
-      if (faseCancion() === 'sonando') cambiarFaseCancion('libre')
+      if (faseCancion() === 'sonando') soltar()
     })
     return () => {
       window.cancelAnimationFrame(solicitud)
       quitarFin()
     }
-  }, [fase])
+  }, [sonando])
 
   // En desarrollo: saltar por la canción y forzar fases desde la consola o las capturas.
   useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return
     ;(window as unknown as { __cancion?: unknown }).__cancion = {
       fase: faseCancion,
+      sonido: estadoDelSonido,
+      audible: cancionAudible,
       tiempo: tiempoCancion,
       saltarA: saltarCancionA,
       saltar,
@@ -196,8 +196,8 @@ export function CancionDelAgujero() {
 
   return (
     <>
-      <LetraEnPantalla letra={letra} activa={fase === 'sonando'} />
-      {quieta && (
+      <LetraEnPantalla letra={letra} activa={sonando} />
+      {sonando && (
         <button type="button" className="boton-cristal boton-saltar-cancion" aria-label="Saltar la canción" onClick={saltar}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M4.5 6.5 L11 12 L4.5 17.5 Z" />
@@ -206,13 +206,7 @@ export function CancionDelAgujero() {
           </svg>
         </button>
       )}
-      {fase === 'esperando' && pideToque && (
-        <button type="button" className="boton-cristal boton-escuchar" aria-label="Escuchar la canción" onClick={empezar}>
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M8.5 5.8 L18.5 12 L8.5 18.2 Z" />
-          </svg>
-        </button>
-      )}
+      <BotonSonido />
     </>
   )
 }

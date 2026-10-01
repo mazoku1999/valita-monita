@@ -89,19 +89,24 @@ El usuario pidió la letra de una canción mientras se cruza el agujero negro, c
 letras (`features/cancion`). El audio y la letra son archivos suyos en `public/cancion/`
 (`cancion.mp3` y `cancion.srt`): la letra se lee del .srt al vuelo, no está escrita en el código.
 
-- **El cruce al compás** (`constantes/cancion.ts`, `components/CancionDelAgujero.tsx`): al llegar
-  bajando al comienzo de la caída (300 vh) el scroll se queda quieto y empieza la canción; la
-  cámara cruza sola moviendo la página por el carril (`recorrido`: [segundo, vh], interpolado sin
-  pasarse): la introducción en la caída, el iris se cierra y la primera línea llega en lo negro, el
-  remolino del agujero de gusano durante la primera estrofa y el estribillo (la boca del otro lado
-  se abre en el estribillo), el cielo del otro lado durante la segunda parte y nuestro sistema solar
-  al final; a los 170 s se suelta el scroll (830 vh) y sigue sonando lo que queda. Botón de cristal
-  para saltarla (arriba a la izquierda, o Escape); volver por encima del agujero la deja lista
+- **El cruce al compás** (`constantes/cancion.ts`, `components/CancionDelAgujero.tsx`): la
+  canción empieza sola recién al entrar en el agujero bajando (446 vh: el iris ya se cerró sobre la
+  sombra), sin botón de play; el scroll se queda quieto y la cámara cruza sola moviendo la página
+  por el carril (`recorrido`: [segundo, vh], interpolado sin pasarse): la canción empieza en lo
+  negro, el iris se abre sobre el remolino durante la introducción, la primera estrofa y el
+  estribillo van por el remolino del agujero de gusano (la boca del otro lado se abre en el
+  estribillo), la segunda parte por el cielo del otro lado y nuestro sistema solar aparece al
+  final; a los 170 s se suelta el scroll (830 vh) y sigue sonando lo que queda. Botón de cristal
+  para saltarla (arriba a la izquierda, o Escape); volver fuera del agujero (400 vh) la deja lista
   para otra vez.
-- **El sonido** (`utils/audio.ts`): un elemento de audio que se empieza a cargar a 150 vh y pasa
-  por Web Audio para los fundidos. Los navegadores sólo dejan sonar tras un gesto (clic, tecla o
-  toque; la rueda no cuenta): el primer gesto en cualquier parte lo desbloquea y, si al llegar al
-  agujero aún no lo hubo, aparece un botón de escuchar sobre el agujero.
+- **El sonido** (`utils/audio.ts`, `components/BotonSonido.tsx`): los navegadores sólo dejan sonar
+  tras un gesto (clic, tecla o toque; la rueda no cuenta), así que al inicio hay un botón de
+  cristal bajo el agujero para activar el sonido (cualquier otro gesto también lo activa); al bajar
+  se queda pequeño arriba a la derecha para apagarlo o encenderlo. Si al entrar en el agujero aún
+  no se activó, la canción empieza igual, en silencio, con la letra y el cruce (el botón brilla
+  para invitar); al tocarlo, el sonido se une donde va. Si ni en silencio la deja sonar el
+  navegador, la lleva un reloj propio hasta que se pueda. Se empieza a cargar a 150 vh y pasa por
+  Web Audio para los fundidos.
 - **La letra** (`utils/srt.ts`, `utils/maqueta.ts`, `components/LetraEnPantalla.tsx`): la línea que
   se canta, grande en el centro, partida en filas cortas con voces distintas (palo seco gruesa en
   cursiva, Playfair, Oswald condensada en mayúsculas, Instrument Serif en cursiva, mayúsculas
@@ -256,7 +261,7 @@ doble clic vuelve al camino. Al final, en el corazón: W/S o ↑/↓ (andar), A/
 (girar) y Mayúsculas (correr); arrastrar mira alrededor. En pantallas táctiles, la palanca. En la
 carta, Escape sale. En desarrollo, `window.__carta.abrir()` / `salir()` abren y cierran la cajita y
 `window.__carta.saltar(s)` adelanta su reloj; `window.__cancion.saltarA(s)` lleva la canción del
-agujero a otro segundo (y `fase()`, `tiempo()`, `saltar()`).
+agujero a otro segundo (y `fase()`, `sonido()`, `audible()`, `tiempo()`, `saltar()`).
 
 ## Versiones
 
@@ -270,7 +275,8 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.21-flores-del-ramo`, `dibujo-v0.22-paseo-corazon`, `dibujo-v0.23-girasolar-y-mandos`,
 `dibujo-v0.24-palanca-tactil`, `dibujo-v0.25-carta-noche-estrellada`,
 `dibujo-v0.26-sobre-y-cuadro`, `dibujo-v0.27-noche-cuphead`,
-`dibujo-v0.28-cielo-como-el-cuadro`, `dibujo-v0.29-cancion-del-agujero`.
+`dibujo-v0.28-cielo-como-el-cuadro`, `dibujo-v0.29-cancion-del-agujero`,
+`dibujo-v0.30-sonido-al-inicio`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

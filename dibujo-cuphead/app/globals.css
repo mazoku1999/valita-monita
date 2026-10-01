@@ -737,35 +737,62 @@
     opacity: 0.5;
   }
 }
-/* Si el navegador no deja sonar sin un gesto: un botón para escucharla, en el centro. */
-.boton-escuchar {
-  top: 50%;
-  left: 50%;
-  width: 86px;
-  height: 86px;
+/* El sonido de la canción: al inicio, un botón bajo el agujero para activarlo; luego, pequeño arriba
+   a la derecha (con un brillo que invita mientras no se haya activado). */
+.boton-sonido {
+  left: calc(100% - 16px - env(safe-area-inset-right) - 23px);
+  top: calc(16px + env(safe-area-inset-top) + 23px);
+  width: 46px;
+  height: 46px;
   transform: translate(-50%, -50%);
+  transition:
+    left 0.9s cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 0.9s cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 0.9s cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 0.9s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.6s ease,
+    transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+    background-color 0.25s ease;
+  animation: sonido-aparece 0.9s ease 1.6s backwards;
+}
+.boton-sonido svg {
+  width: 21px;
+  height: 21px;
+  transition:
+    width 0.9s ease,
+    height 0.9s ease;
+}
+.boton-sonido[data-lugar='inicio'] {
+  left: 50%;
+  top: 79%;
+  width: 76px;
+  height: 76px;
   box-shadow:
     0 0 0 10px rgb(255 255 255 / 0.06),
-    0 0 46px rgb(255 214 150 / 0.35),
+    0 0 46px rgb(255 214 150 / 0.4),
     0 12px 32px rgb(4 10 40 / 0.45),
     inset 0 1px 0 rgb(255 255 255 / 0.55);
-  animation: escuchar-aparece 0.9s ease backwards;
 }
-.boton-escuchar svg {
-  width: 34px;
-  height: 34px;
-  margin-left: 5px;
+.boton-sonido[data-lugar='inicio'] svg {
+  width: 32px;
+  height: 32px;
 }
-.boton-escuchar:hover {
+.boton-sonido[data-lugar='esquina'][data-estado='pendiente'] {
+  box-shadow:
+    0 0 0 3px rgb(255 214 150 / 0.45),
+    0 0 26px rgb(255 214 150 / 0.5),
+    0 12px 32px rgb(4 10 40 / 0.45),
+    inset 0 1px 0 rgb(255 255 255 / 0.55);
+}
+.boton-sonido:hover {
   transform: translate(-50%, -50%) scale(1.06);
 }
-.boton-escuchar:active {
+.boton-sonido:active {
   transform: translate(-50%, -50%) scale(0.94);
 }
-@keyframes escuchar-aparece {
+@keyframes sonido-aparece {
   from {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.82);
   }
 }
 @media (prefers-reduced-motion: reduce) {

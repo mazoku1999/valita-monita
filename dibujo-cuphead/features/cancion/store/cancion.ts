@@ -1,24 +1,17 @@
 /**
  * Por dónde va la canción del agujero negro (ver `constantes/cancion.ts`):
  *
- * - `armada`: espera a que se llegue al agujero bajando.
- * - `esperando`: en la puerta, el scroll quieto; si el navegador no la deja sonar sin un gesto, se
- *   pide un toque (`pideToque`).
- * - `sonando`: la cámara cruza sola al compás de la canción, con la letra; sin scroll.
+ * - `armada`: espera a que se entre en el agujero bajando.
+ * - `sonando`: la cámara cruza sola al compás de la canción, con la letra; sin scroll (con sonido o
+ *   sin él, según se haya activado: ver `utils/audio.ts`).
  * - `libre`: se soltó el scroll (al final del cruce o porque se saltó); puede seguir sonando el final.
- *   Volver por encima del agujero la arma otra vez.
+ *   Volver fuera del agujero la arma otra vez.
  */
-export type FaseCancion = 'armada' | 'esperando' | 'sonando' | 'libre'
+export type FaseCancion = 'armada' | 'sonando' | 'libre'
 
-const estado = {
-  fase: 'armada' as FaseCancion,
-  pideToque: false,
-}
+let fase: FaseCancion = 'armada'
 
 const oyentes = new Set<() => void>()
-const avisar = (): void => {
-  for (const oyente of oyentes) oyente()
-}
 
 export function suscribirCancion(oyente: () => void): () => void {
   oyentes.add(oyente)
@@ -27,18 +20,10 @@ export function suscribirCancion(oyente: () => void): () => void {
   }
 }
 
-export const faseCancion = (): FaseCancion => estado.fase
-export const cancionPideToque = (): boolean => estado.pideToque
+export const faseCancion = (): FaseCancion => fase
 
-export function cambiarFaseCancion(fase: FaseCancion): void {
-  if (estado.fase === fase && !estado.pideToque) return
-  estado.fase = fase
-  estado.pideToque = false
-  avisar()
-}
-
-export function pedirToque(): void {
-  if (estado.fase !== 'esperando' || estado.pideToque) return
-  estado.pideToque = true
-  avisar()
+export function cambiarFaseCancion(siguiente: FaseCancion): void {
+  if (fase === siguiente) return
+  fase = siguiente
+  for (const oyente of oyentes) oyente()
 }

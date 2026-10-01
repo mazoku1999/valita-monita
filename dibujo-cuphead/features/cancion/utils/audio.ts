@@ -1,27 +1,56 @@
 /**
- * El sonido de la canción: un elemento <audio> (se carga mientras suena) que, si el navegador lo
- * deja, pasa por Web Audio para los fundidos (en iOS el volumen del elemento no se puede cambiar).
+ * El sonido de la canción: un elemento <audio> (se carga mientras suena) que, desde el primer
+ * gesto, pasa por Web Audio para los fundidos (en iOS el volumen del elemento no se puede cambiar).
  *
  * Los navegadores sólo dejan sonar después de un gesto del usuario (un clic, una tecla o un toque;
- * la rueda y el scroll no cuentan). El primer gesto en cualquier parte lo desbloquea (un play en
- * silencio que se pausa enseguida); si al llegar al agujero aún no lo hubo, la escena pide un toque.
+ * la rueda y el scroll no cuentan). Por eso al inicio hay un botón para activar el sonido (y
+ * cualquier gesto vale igual). La canción empieza siempre al entrar en el agujero, sin pedir nada:
+ * con sonido si ya se activó; si no, en silencio (y la letra y el cruce siguen igual), y en cuanto
+ * se activa el sonido se une donde va. Si ni siquiera en silencio la deja sonar el navegador, la
+ * lleva un reloj propio hasta que se pueda.
+ *
+ * Estado del sonido: `pendiente` (aún no hubo gesto), `activo` o `silenciado` (lo apagó el usuario).
  */
+
+export type EstadoSonido = 'pendiente' | 'activo' | 'silenciado'
 
 type VentanaConWebkit = Window & { webkitAudioContext?: typeof AudioContext }
 
 let elemento: HTMLAudioElement | null = null
 let contexto: AudioContext | null = null
 let ganancia: GainNode | null = null
+let estadoSonido: EstadoSonido = 'pendiente'
+/** La canción va (el cruce): aunque el audio no pueda sonar, su reloj corre. */
+let enCurso = false
+/** Reloj propio mientras el audio no suena: desde cuándo (ms de la página) y desde qué segundo. */
+let relojPropio: { inicio: number; desde: number } | null = null
 let rampaVolumen = 0
 let pausaPendiente = 0
-/** Hay que sonar de verdad (no sólo desbloquear): el desbloqueo no debe pausarla. */
-let pedidaDeVerdad = false
+
+const oyentes = new Set<() => void>()
+const avisar = (): void => {
+  for (const oyente of oyentes) oyente()
+}
+
+export function suscribirSonido(oyente: () => void): () => void {
+  oyentes.add(oyente)
+  return () => {
+    oyentes.delete(oyente)
+  }
+}
+
+export const estadoDelSonido = (): EstadoSonido => estadoSonido
+
+/** Suena de verdad (con sonido y sin pausa). */
+export const cancionAudible = (): boolean =>
+  elemento !== null && !elemento.paused && !elemento.ended && estadoSonido === 'activo'
 
 function obtenerElemento(url: string): HTMLAudioElement {
   if (!elemento) {
     elemento = new Audio()
     elemento.preload = 'metadata'
     elemento.src = url
+    for (const evento of ['play', 'pause', 'ended']) elemento.addEventListener(evento, avisar)
   }
   return elemento
 }
@@ -47,7 +76,7 @@ function fijarGanancia(valor: number): void {
 }
 
 /** Lleva el volumen a `destino` en `segundos`. */
-export function fundirCancion(destino: number, segundos: number): void {
+function fundir(destino: number, segundos: number): void {
   if (contexto && ganancia) {
     const ahora = contexto.currentTime
     ganancia.gain.cancelScheduledValues(ahora)
@@ -67,12 +96,8 @@ export function fundirCancion(destino: number, segundos: number): void {
   }, 40)
 }
 
-/**
- * En un gesto del usuario: prepara Web Audio (para los fundidos) y desbloquea el elemento con un
- * play en silencio que se pausa enseguida (salvo que mientras tanto se haya pedido sonar).
- */
-export function desbloquearCancion(url: string): void {
-  const audio = obtenerElemento(url)
+/** (En un gesto.) Web Audio para los fundidos: se crea una vez y el elemento pasa por ella. */
+function conectarWebAudio(audio: HTMLAudioElement): void {
   if (!contexto) {
     const Constructor = window.AudioContext ?? (window as VentanaConWebkit).webkitAudioContext
     if (Constructor) {
@@ -80,7 +105,7 @@ export function desbloquearCancion(url: string): void {
         contexto = new Constructor()
         const fuente = contexto.createMediaElementSource(audio)
         ganancia = contexto.createGain()
-        ganancia.gain.value = 0
+        ganancia.gain.value = audio.paused || audio.muted ? 0 : 1
         fuente.connect(ganancia).connect(contexto.destination)
       } catch {
         contexto = null
@@ -89,71 +114,133 @@ export function desbloquearCancion(url: string): void {
     }
   }
   if (contexto && contexto.state !== 'running') void contexto.resume().catch(() => undefined)
+}
+
+/** El segundo de la canción por donde va (con el audio o con el reloj propio). */
+export function tiempoCancion(): number {
+  if (relojPropio) return relojPropio.desde + (performance.now() - relojPropio.inicio) / 1000
+  return elemento ? elemento.currentTime : 0
+}
+
+/** Que el audio suene desde el segundo `t` (con o sin sonido) y deje de hacer falta el reloj propio. */
+function arrancarAudio(audio: HTMLAudioElement, t: number, conSonido: boolean): Promise<boolean> {
+  window.clearTimeout(pausaPendiente)
+  try {
+    audio.currentTime = t
+  } catch {
+    // Sin metadatos aún: el navegador lo toma como el punto de partida.
+  }
+  fijarGanancia(0)
+  // Sin Web Audio no hay ganancia: en silencio, el elemento va mudo.
+  audio.muted = !conSonido && !ganancia
+  return audio.play().then(
+    () => {
+      if (!enCurso) {
+        audio.pause()
+        return false
+      }
+      relojPropio = null
+      if (conSonido) fundir(1, 1.2)
+      return true
+    },
+    () => false,
+  )
+}
+
+/** (En un gesto.) Si la canción va, se une el sonido donde va. */
+function unirSonido(): void {
+  const audio = elemento
+  if (!audio || !enCurso) return
+  conectarWebAudio(audio)
+  audio.muted = false
+  if (audio.paused) void arrancarAudio(audio, tiempoCancion(), true)
+  else fundir(1, 1.2)
+}
+
+/**
+ * (En un gesto: el botón del inicio o cualquier clic, tecla o toque.) El sonido queda permitido y,
+ * salvo que el usuario lo haya apagado, activo. Si la canción no va, el elemento se desbloquea con
+ * un play sin volumen que se pausa enseguida (iOS sólo deja sonar más tarde lo que sonó en un gesto).
+ */
+export function permitirSonido(url: string): void {
+  const audio = obtenerElemento(url)
+  conectarWebAudio(audio)
+  if (estadoSonido === 'pendiente') {
+    estadoSonido = 'activo'
+    avisar()
+  }
+  if (enCurso) {
+    if (estadoSonido === 'activo') unirSonido()
+    return
+  }
   if (!audio.paused) return
   fijarGanancia(0)
   if (!ganancia) audio.muted = true
   void audio
     .play()
     .then(() => {
-      if (!pedidaDeVerdad) audio.pause()
+      if (!enCurso) audio.pause()
     })
     .catch(() => undefined)
     .finally(() => {
-      audio.muted = false
+      if (!enCurso) audio.muted = false
     })
 }
 
-/**
- * Suena desde el segundo `t` con un fundido de entrada. Devuelve si el navegador la dejó sonar.
- * (El play va en la misma pila que el gesto, sin esperas antes: Safari lo exige.)
- */
-export function sonarCancionDesde(url: string, t: number, fundido: number): Promise<boolean> {
-  const audio = obtenerElemento(url)
-  window.clearTimeout(pausaPendiente)
-  pedidaDeVerdad = true
-  audio.muted = false
-  try {
-    audio.currentTime = t
-  } catch {
-    // Sin metadatos aún: empieza desde el principio, que es lo que se pide casi siempre.
+/** (En un gesto: el botón del sonido.) Activa o apaga el sonido. */
+export function alternarSonido(url: string): void {
+  if (estadoSonido === 'activo') {
+    estadoSonido = 'silenciado'
+    avisar()
+    if (enCurso) fundir(0, 0.6)
+    return
   }
-  fijarGanancia(0)
-  const intento = audio.play()
-  if (contexto && contexto.state !== 'running') void contexto.resume().catch(() => undefined)
-  return intento.then(
-    () => {
-      fundirCancion(1, fundido)
-      return true
-    },
-    () => {
-      pedidaDeVerdad = false
-      return false
-    },
-  )
+  estadoSonido = 'activo'
+  avisar()
+  permitirSonido(url)
 }
 
-/** Apaga la canción con un fundido y la pausa al terminar. */
-export function pararCancion(fundido: number): void {
+/**
+ * Al entrar en el agujero (sin gesto): la canción empieza desde el principio, con sonido si está
+ * activo; si no (o si el navegador aún no lo deja), en silencio; y si ni así, con el reloj propio.
+ */
+export function empezarCancion(url: string): void {
+  const audio = obtenerElemento(url)
+  enCurso = true
+  relojPropio = { inicio: performance.now(), desde: 0 }
+  const conSonido = estadoSonido === 'activo'
+  void arrancarAudio(audio, 0, conSonido).then((sono) => {
+    // Con sonido no la dejó (aún no hubo un gesto que valga): en silencio, por donde vaya.
+    if (!sono && enCurso && conSonido) void arrancarAudio(audio, tiempoCancion(), false)
+  })
+}
+
+/** Termina la canción (al saltarla o al volver atrás) con un fundido. */
+export function terminarCancion(fundido: number): void {
+  enCurso = false
+  relojPropio = null
   const audio = elemento
   if (!audio) return
-  pedidaDeVerdad = false
-  fundirCancion(0, fundido)
+  fundir(0, fundido)
   window.clearTimeout(pausaPendiente)
   pausaPendiente = window.setTimeout(() => audio.pause(), fundido * 1000 + 60)
 }
 
-/** El segundo de la canción que suena (0 si aún no hay audio). */
-export function tiempoCancion(): number {
-  return elemento ? elemento.currentTime : 0
-}
-
-export function cancionSonando(): boolean {
-  return elemento !== null && !elemento.paused && !elemento.ended
+/** Se suelta el cruce: si suena, sigue sonando su final; si va en silencio, se apaga. */
+export function soltarCancion(): void {
+  if (estadoSonido === 'activo' && elemento && !elemento.paused) {
+    enCurso = false
+    relojPropio = null
+    return
+  }
+  terminarCancion(0.3)
 }
 
 /** Para pruebas y desarrollo: salta a otro segundo. */
 export function saltarCancionA(t: number): void {
-  if (elemento) elemento.currentTime = Math.max(0, t)
+  const segundo = Math.max(0, t)
+  if (relojPropio) relojPropio = { inicio: performance.now(), desde: segundo }
+  if (elemento) elemento.currentTime = segundo
 }
 
 export function alTerminarCancion(oyente: () => void): () => void {
