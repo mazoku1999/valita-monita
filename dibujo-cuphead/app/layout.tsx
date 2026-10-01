@@ -1,6 +1,6 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Caveat, IBM_Plex_Mono, Instrument_Serif } from 'next/font/google'
+import { Caveat, IBM_Plex_Mono, Instrument_Serif, Montserrat, Oswald, Playfair_Display } from 'next/font/google'
 import './globals.css'
 
 const serifDisplay = Instrument_Serif({
@@ -23,6 +23,35 @@ const letraCarta = Caveat({
   subsets: ['latin', 'latin-ext'],
   variable: '--font-carta',
   display: 'swap',
+})
+
+// La letra de la canción del agujero negro, como en los videos de letras (ver `features/cancion`):
+// una palo seco gruesa en cursiva (y en mayúsculas espaciadas), una de pie de alto contraste y una
+// condensada en mayúsculas, con la Instrument Serif en cursiva. Sin precarga: se piden al
+// acercarse al agujero.
+const letraSans = Montserrat({
+  subsets: ['latin', 'latin-ext'],
+  weight: ['600', '800'],
+  style: ['normal', 'italic'],
+  variable: '--font-letra-sans',
+  display: 'swap',
+  preload: false,
+})
+
+const letraSerif = Playfair_Display({
+  subsets: ['latin', 'latin-ext'],
+  weight: '500',
+  variable: '--font-letra-serif',
+  display: 'swap',
+  preload: false,
+})
+
+const letraCondensada = Oswald({
+  subsets: ['latin', 'latin-ext'],
+  weight: '600',
+  variable: '--font-letra-condensada',
+  display: 'swap',
+  preload: false,
 })
 
 export const metadata: Metadata = {
@@ -61,7 +90,10 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${serifDisplay.variable} ${monoNarrativa.variable} ${letraCarta.variable} dark`}>
+    <html
+      lang="en"
+      className={`${serifDisplay.variable} ${monoNarrativa.variable} ${letraCarta.variable} ${letraSans.variable} ${letraSerif.variable} ${letraCondensada.variable} dark`}
+    >
       <body className="min-h-screen bg-cosmos text-crema antialiased">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}

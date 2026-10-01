@@ -83,6 +83,35 @@ El dibujo es un pase al final del posproceso (`features/agujero-negro/components
 - **Estrellas detrás de los planetas**: cada píxel de una estrella comprueba si el cielo está
   abierto (antes bastaba con su centro y alguna se dibujaba encima de un planeta).
 
+## La canción del agujero negro
+
+El usuario pidió la letra de una canción mientras se cruza el agujero negro, como en un video de
+letras (`features/cancion`). El audio y la letra son archivos suyos en `public/cancion/`
+(`cancion.mp3` y `cancion.srt`): la letra se lee del .srt al vuelo, no está escrita en el código.
+
+- **El cruce al compás** (`constantes/cancion.ts`, `components/CancionDelAgujero.tsx`): al llegar
+  bajando al comienzo de la caída (300 vh) el scroll se queda quieto y empieza la canción; la
+  cámara cruza sola moviendo la página por el carril (`recorrido`: [segundo, vh], interpolado sin
+  pasarse): la introducción en la caída, el iris se cierra y la primera línea llega en lo negro, el
+  remolino del agujero de gusano durante la primera estrofa y el estribillo (la boca del otro lado
+  se abre en el estribillo), el cielo del otro lado durante la segunda parte y nuestro sistema solar
+  al final; a los 170 s se suelta el scroll (830 vh) y sigue sonando lo que queda. Botón de cristal
+  para saltarla (arriba a la izquierda, o Escape); volver por encima del agujero la deja lista
+  para otra vez.
+- **El sonido** (`utils/audio.ts`): un elemento de audio que se empieza a cargar a 150 vh y pasa
+  por Web Audio para los fundidos. Los navegadores sólo dejan sonar tras un gesto (clic, tecla o
+  toque; la rueda no cuenta): el primer gesto en cualquier parte lo desbloquea y, si al llegar al
+  agujero aún no lo hubo, aparece un botón de escuchar sobre el agujero.
+- **La letra** (`utils/srt.ts`, `utils/maqueta.ts`, `components/LetraEnPantalla.tsx`): la línea que
+  se canta, grande en el centro, partida en filas cortas con voces distintas (palo seco gruesa en
+  cursiva, Playfair, Oswald condensada en mayúsculas, Instrument Serif en cursiva, mayúsculas
+  espaciadas); la anterior, pequeña y apagada arriba; la siguiente, pequeña abajo. Cada palabra se
+  enciende de izquierda a derecha mientras se canta (en un tramo proporcional a sus sílabas), con
+  un brillo que luego baja; en las notas largas del final de una línea la última vocal se estira.
+  El estribillo (las líneas que se repiten) va en rosa; las estrofas, en oro y en celeste. Un velo
+  oscuro detrás para que se lea sobre las bandas claras del remolino. Sigue el reloj del audio
+  (`desfaseLetra` corrige la sincronía si hace falta).
+
 ## La llegada a Cochabamba
 
 El final del viaje es un regalo: la entrada en la Tierra lleva a un sitio lleno de girasoles y de
@@ -226,7 +255,8 @@ Con el ratón: arrastrar orbita (o, en el valle, gira la cabeza), Ctrl + rueda o
 doble clic vuelve al camino. Al final, en el corazón: W/S o ↑/↓ (andar), A/D (de lado), ←/→
 (girar) y Mayúsculas (correr); arrastrar mira alrededor. En pantallas táctiles, la palanca. En la
 carta, Escape sale. En desarrollo, `window.__carta.abrir()` / `salir()` abren y cierran la cajita y
-`window.__carta.saltar(s)` adelanta su reloj.
+`window.__carta.saltar(s)` adelanta su reloj; `window.__cancion.saltarA(s)` lleva la canción del
+agujero a otro segundo (y `fase()`, `tiempo()`, `saltar()`).
 
 ## Versiones
 
@@ -240,7 +270,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.21-flores-del-ramo`, `dibujo-v0.22-paseo-corazon`, `dibujo-v0.23-girasolar-y-mandos`,
 `dibujo-v0.24-palanca-tactil`, `dibujo-v0.25-carta-noche-estrellada`,
 `dibujo-v0.26-sobre-y-cuadro`, `dibujo-v0.27-noche-cuphead`,
-`dibujo-v0.28-cielo-como-el-cuadro`.
+`dibujo-v0.28-cielo-como-el-cuadro`, `dibujo-v0.29-cancion-del-agujero`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

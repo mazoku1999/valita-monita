@@ -572,3 +572,204 @@
     animation-duration: 0.01s;
   }
 }
+
+/* La canción del agujero negro: la letra como en los videos de letras (ver
+   features/cancion/components/LetraEnPantalla.tsx). La línea que se canta, grande en el centro, en
+   filas de voces distintas; la anterior, pequeña arriba; la siguiente, pequeña abajo. */
+.letras {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  overflow: hidden;
+  pointer-events: none;
+  --base: min(10.4vw, 7.6vh);
+  opacity: 0;
+  transition: opacity 1.4s ease;
+}
+.letras[data-visible] {
+  opacity: 1;
+}
+/* Un velo oscuro detrás, para que la letra se lea sobre las bandas claras del remolino. */
+.letras-velo {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 66% 52% at 50% 47%,
+    rgb(8 5 20 / 0.68),
+    rgb(8 5 20 / 0.34) 56%,
+    rgb(8 5 20 / 0) 84%
+  );
+}
+.letra-linea {
+  --acento: #f4c56c;
+  --brillo-acento: rgb(255 186 84 / 0.9);
+  --s: 1;
+  --o: 1;
+  position: absolute;
+  left: 50%;
+  top: 47%;
+  width: min(94vw, 1000px);
+  text-align: center;
+  transform: translate(-50%, -50%) scale(var(--s));
+  opacity: var(--o);
+  filter: drop-shadow(0 3px 14px rgb(0 0 0 / 0.55));
+  transition:
+    top 0.85s cubic-bezier(0.22, 0.8, 0.2, 1),
+    transform 0.85s cubic-bezier(0.22, 0.8, 0.2, 1),
+    opacity 0.7s ease;
+}
+.letra-linea[data-paleta='celeste'] {
+  --acento: #a9d9ff;
+  --brillo-acento: rgb(120 196 255 / 0.9);
+}
+.letra-linea[data-paleta='rosa'] {
+  --acento: #f8acd2;
+  --brillo-acento: rgb(255 140 200 / 0.9);
+}
+.letra-linea[data-rol='apagada'] {
+  top: 45%;
+  --s: 0.96;
+  --o: 0;
+}
+.letra-linea[data-rol='anterior'] {
+  top: 15%;
+  --s: 0.36;
+  --o: 0.34;
+}
+.letra-linea[data-rol='ida'] {
+  top: 3%;
+  --s: 0.28;
+  --o: 0;
+}
+.letra-linea[data-rol='siguiente'] {
+  top: 85%;
+  --s: 0.34;
+  --o: 0.3;
+  animation: letra-asoma 0.9s ease backwards;
+}
+.letra-linea[data-rol='oculta'] {
+  top: 93%;
+  --s: 0.3;
+  --o: 0;
+}
+@keyframes letra-asoma {
+  from {
+    opacity: 0;
+  }
+}
+.letra-fila {
+  --espaciado: 0em;
+  display: block;
+  white-space: nowrap;
+  font-size: calc(var(--base) * var(--escala, 1));
+  line-height: 1.06;
+}
+.letra-fila[data-estilo='sans'] {
+  --espaciado: -0.015em;
+  font-family: var(--font-letra-sans), system-ui, sans-serif;
+  font-weight: 800;
+  font-style: italic;
+}
+.letra-fila[data-estilo='serif'] {
+  --espaciado: -0.01em;
+  font-family: var(--font-letra-serif), Georgia, serif;
+  font-weight: 500;
+}
+.letra-fila[data-estilo='condensada'] {
+  --espaciado: 0.01em;
+  font-family: var(--font-letra-condensada), 'Arial Narrow', sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.letra-fila[data-estilo='cursiva'] {
+  font-family: var(--font-serif-display), Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+}
+.letra-fila[data-estilo='espaciada'] {
+  --espaciado: 0.24em;
+  font-family: var(--font-letra-sans), system-ui, sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+/* Cada palabra: la luz la recorre de izquierda a derecha mientras se canta (--x), con un brillo
+   que luego baja (--e); en las notas largas se estira (--estira). */
+.letra-palabra {
+  --x: 0;
+  --e: 0;
+  --estira: 0;
+  --luz: #fff;
+  --brillo: rgb(255 255 255 / 0.85);
+  display: inline-block;
+  padding: 0.1em 0.14em;
+  margin: -0.1em -0.02em;
+  letter-spacing: calc(var(--espaciado) + var(--estira) * 0.06em);
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--luz) calc(var(--x) * 106% - 6%),
+    rgb(255 255 255 / 0.34) calc(var(--x) * 106%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 0 calc(var(--e) * 0.3em) color-mix(in srgb, var(--brillo) calc(var(--e) * 100%), transparent));
+  transform: translateY(calc((1 - min(var(--e) * 3, 1)) * 0.05em));
+}
+.letra-palabra[data-acento] {
+  --luz: var(--acento);
+  --brillo: var(--brillo-acento);
+}
+/* Saltar la canción (arriba a la izquierda, o Escape): aparece y luego se queda discreto. */
+.boton-saltar-cancion {
+  left: calc(16px + env(safe-area-inset-left));
+  animation:
+    cristal-aparece 0.7s ease 0.6s backwards,
+    saltar-discreto 1.2s ease 6s forwards;
+}
+.boton-saltar-cancion:hover,
+.boton-saltar-cancion:focus-visible {
+  opacity: 1;
+  animation: none;
+}
+@keyframes saltar-discreto {
+  to {
+    opacity: 0.5;
+  }
+}
+/* Si el navegador no deja sonar sin un gesto: un botón para escucharla, en el centro. */
+.boton-escuchar {
+  top: 50%;
+  left: 50%;
+  width: 86px;
+  height: 86px;
+  transform: translate(-50%, -50%);
+  box-shadow:
+    0 0 0 10px rgb(255 255 255 / 0.06),
+    0 0 46px rgb(255 214 150 / 0.35),
+    0 12px 32px rgb(4 10 40 / 0.45),
+    inset 0 1px 0 rgb(255 255 255 / 0.55);
+  animation: escuchar-aparece 0.9s ease backwards;
+}
+.boton-escuchar svg {
+  width: 34px;
+  height: 34px;
+  margin-left: 5px;
+}
+.boton-escuchar:hover {
+  transform: translate(-50%, -50%) scale(1.06);
+}
+.boton-escuchar:active {
+  transform: translate(-50%, -50%) scale(0.94);
+}
+@keyframes escuchar-aparece {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.82);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .letra-linea {
+    transition-duration: 0.2s;
+  }
+}
