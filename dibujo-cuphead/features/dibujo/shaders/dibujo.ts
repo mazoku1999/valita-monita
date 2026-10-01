@@ -486,7 +486,9 @@ void main() {
     // (Las nubes lejanas también escriben la profundidad del cielo, a propósito: ésas sí se cubren.)
     float sinCuerpo = esCaricatura(dibujado.a) && esNube < 0.5 && texelFetch(uProfundidad, ivec2(vUv * vec2(textureSize(uProfundidad, 0))), 0).r >= 0.99999 ? 1.0 : 0.0;
     c = mix(c, gradoNoche(c), (1.0 - cielo.a * (1.0 - esNube)) * (1.0 - sinCuerpo) * smoothstep(0.0, 0.7, uNoche));
-    if (caida.x > 0.001 && cielo.a > 0.001) c = mix(c, nocheEstrellada(dValle) * (1.0 - 0.22 * caida.y), caida.x * cielo.a * (1.0 - sinCuerpo));
+    // (Fuera de ramas por píxel: las pinceladas miden sus derivadas.)
+    vec3 noche = nocheEstrellada(dValle);
+    c = mix(c, noche * (1.0 - 0.22 * caida.y), caida.x * cielo.a * (1.0 - sinCuerpo));
   }
 
   // El agujero de caricatura por encima.

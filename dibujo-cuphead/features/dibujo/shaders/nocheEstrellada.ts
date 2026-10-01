@@ -1,25 +1,26 @@
 /**
  * La noche estrellada del final (ver `features/cochabamba/store/carta.ts`): al abrir la cajita la
- * cámara mira al cielo y éste se vuelve "La noche estrellada" de Van Gogh dibujada como el resto del
- * dibujo animado, al estilo de Cuphead (lo pidió así el usuario: sólo el cielo, con las montañas de
- * verdad debajo; nada de casas ni de pinceladas de óleo):
+ * cámara mira al cielo y éste se vuelve el cielo de "La noche estrellada" de Van Gogh, como en la
+ * reproducción al pastel que mandó el usuario: sólo el cielo (sin el pueblo ni el ciprés), con las
+ * montañas de verdad debajo, a la luz de la luna.
  *
- * - Fondo de acuarela azul noche (ultramar arriba, más claro y verde agua junto al horizonte), con
- *   sus manchas, la orilla de la aguada y el grano del pigmento, y vetas claras que siguen el viento.
- * - La ola: el gran remolino doble del centro, una cinta en S (el remolino grande y su compañero, que
- *   se enrosca al revés), con las corrientes que entran y salen de ella; y más corrientes que cruzan
- *   el cielo con las puntas enroscadas (a la manera de los dibujos de los años 30). Cada cinta es de
- *   colores planos con su volumen (sombra abajo, luz arriba), trazos limpios a lo largo que fluyen
- *   despacio y su tinta.
- * - Once estrellas regordetas de cinco puntas, cada una en su halo de aguadas (dorado, amarillo
- *   pálido y verde agua) con el borde ondulado a mano y arcos de tinta que giran; y la luna en cuarto
- *   creciente (sin cara) en su gran halo.
+ * - Todo el cielo es de pinceladas largas y peinadas, de pastel, que siguen el viento. El viento es
+ *   una corriente: sus líneas van casi horizontales, con ondas; abajo siguen la franja verde que sube
+ *   hacia la derecha; rodean cada estrella como el agua una piedra; y en la ola (el gran remolino del
+ *   centro) y en su compañero, más pequeño, se enroscan en una S, como en el cuadro.
+ * - Las pinceladas van en franjas a lo largo de esas líneas (tres capas desfasadas), partidas en
+ *   tramos con su hueco: cada una entra apoyada y sale afinándose, y toma un color de su región: azules
+ *   ultramar, cobalto y añil con trazos cerúleos; la franja clara que llega desde la izquierda; los
+ *   brazos blancos y celestes de la ola; la franja verde amarilla.
+ * - Las estrellas y la luna son discos de pinceladas en redondo: un núcleo amarillo y anillos blancos,
+ *   verde agua y celestes (la luna, verde amarillo y dorado alrededor del creciente naranja), con un
+ *   aro de azul hondo que los recorta.
  *
  * Se compone sobre la vista final de la cámara (`uMarcoNoche`: derecha, arriba y adelante en
  * coordenadas del valle; `uTanNoche`: la tangente de medio campo de visión vertical), en un lienzo
- * donde la media altura de la pantalla mide 1 y el ancho llega a ±`uAspectoNoche`: cada elemento se
- * coloca respecto a los bordes y la composición se escala en pantallas estrechas, así que cabe igual
- * en un ordenador y en un móvil en vertical. Todo se mueve despacio, sin latir.
+ * donde la media altura de la pantalla mide 1 y el ancho llega a ±`uAspectoNoche`; la composición del
+ * cuadro se reparte por el ancho y se escala en pantallas estrechas (cabe en un móvil en vertical).
+ * Las pinceladas se deslizan despacio por sus líneas, sin latir.
  *
  * Necesita RUIDO3_GLSL y CAIDA_NOCHE_GLSL. La noche cae como una aguada que baja desde lo alto
  * (`uNoche` 0 → 1); sólo cubre el cielo (lo de abajo pasa a la luz de la luna, ver `gradoNoche`).
@@ -31,21 +32,6 @@ uniform float uAspectoNoche;
 uniform float uTiempoNoche;
 uniform float uPixelNoche;
 
-const vec3 TINTA_NOCHE = vec3(0.035, 0.045, 0.14);
-const float TAU_NOCHE = 6.2831853;
-// Medio grosor de la tinta, en unidades del lienzo (unos 2 px de trazo a 720 de alto, y lo mismo
-// en proporción a cualquier resolución).
-const float TINTA_MEDIA = 0.0031;
-
-// Una cinta (corriente, remolino, rizo): distancia con signo a su borde (negativa dentro), lo que
-// lleva recorrido a lo largo (en unidades del lienzo) y la posición a lo ancho (-1..1, + arriba o
-// hacia fuera).
-struct Cinta {
-  float d;
-  float s;
-  float v;
-};
-
 float hashNoche(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -56,10 +42,6 @@ vec2 giroNoche(vec2 p, float a) {
   float c = cos(a);
   float s = sin(a);
   return vec2(c * p.x - s * p.y, s * p.x + c * p.y);
-}
-
-vec2 dirNoche(float a) {
-  return vec2(cos(a), sin(a));
 }
 
 // Escala de la composición (en pantallas estrechas, algo menor) y el medio ancho en el que se
@@ -79,320 +61,377 @@ vec2 lienzoNoche(vec3 d, out float delante) {
   return q.xy / max(q.z, 0.12) / uTanNoche;
 }
 
-// El salto de dibujo animado al aparecer (0 → 1 con un poco de rebote).
-float saltoNoche(float t) {
-  t = clamp(t, 0.0, 1.0);
-  float u = t - 1.0;
-  return 1.0 + 2.70158 * u * u * u + 1.70158 * u * u;
+// --- La composición del cuadro -------------------------------------------------------------------
+
+// Los discos del cuadro: las ocho estrellas (0..7), la luna (8) y los dos remolinos (9: la ola;
+// 10: su compañero, abajo a la derecha): centro (xy), radio (z) y tipo (w: 0 estrella, 1 luna,
+// 2 remolino).
+vec4 discoNoche(int i) {
+  float W = anchoNoche();
+  float s = escalaNoche();
+  if (i == 9) return vec4(-0.1 * W, 0.22, 0.34 * s, 2.0);
+  if (i == 10) return vec4(0.33 * W, -0.03, 0.18 * s, 2.0);
+  if (i == 8) return vec4(0.8 * W, 0.6, 0.29 * s, 1.0);
+  vec3 e = i == 0 ? vec3(-0.88, 0.9, 0.14)
+    : i == 1 ? vec3(-0.37, 0.93, 0.15)
+    : i == 2 ? vec3(0.19, 0.8, 0.15)
+    : i == 3 ? vec3(-0.61, 0.64, 0.12)
+    : i == 4 ? vec3(0.4, 0.5, 0.125)
+    : i == 5 ? vec3(-0.43, 0.3, 0.105)
+    : i == 6 ? vec3(-0.87, 0.02, 0.12)
+    : vec3(-0.36, -0.08, 0.2);
+  return vec4(e.x * W, e.y, e.z * s, 0.0);
 }
 
-// (WebGL no deja usar ?: con estructuras.)
-Cinta unirCintas(Cinta a, Cinta b) {
-  if (a.d < b.d) return a;
-  return b;
+// Hasta dónde llega cada disco: las estrellas y la luna, con un aro de azul hondo alrededor.
+float zonaDisco(vec4 h) {
+  return h.z * (h.w > 1.5 ? 1.0 : 1.22);
 }
 
-// Espiral de Arquímedes como cinta, definida desde su punta de fuera: en el ángulo aFin y a radio R
-// alrededor de c; al entrar (φ de 0 a phiMax) el radio baja b por radián y el ángulo gira hacia
-// -sentido (sentido -1: se enrosca en sentido antihorario). El ancho pasa de wFuera a wDentro.
-Cinta espiralNoche(vec2 p, vec2 c, float R, float b, float phiMax, float aFin, float sentido, float wFuera, float wDentro) {
-  vec2 q = p - c;
-  float r = length(q);
-  float psi = mod(sentido * (aFin - atan(q.y, q.x)), TAU_NOCHE);
-  Cinta mejor = Cinta(1e9, 0.0, 0.0);
-  for (int k = 0; k < 4; k++) {
-    float phi = psi + TAU_NOCHE * float(k);
-    if (phi > phiMax) break;
-    float rs = R - b * phi;
-    float w = mix(wFuera, wDentro, phi / phiMax);
-    float dr = r - rs;
-    float d = abs(dr) * inversesqrt(1.0 + b * b / max(rs * rs, 1e-6)) - w;
-    if (d < mejor.d) mejor = Cinta(d, R * phi - 0.5 * b * phi * phi, clamp(dr / w, -1.0, 1.0));
+// El plano enroscado: alrededor de cada remolino el plano gira un poco, más cuanto más cerca, y las
+// líneas del viento que lo rodean se curvan hacia él (como las agujas del reloj).
+vec2 enroscarNoche(vec2 p) {
+  vec2 q = p;
+  for (int i = 9; i < 11; i++) {
+    vec4 r = discoNoche(i);
+    vec2 d = q - r.xy;
+    float k = max(1.0 - length(d) / (r.z * 1.7), 0.0);
+    q = r.xy + giroNoche(d, 1.6 * k * k);
   }
-  // Las puntas, redondeadas (con su posición a lo ancho de verdad, y un poco por detrás de la cinta:
-  // si no, junto a la punta ganaban ellas y dibujaban una raya).
-  vec2 haciaFuera = dirNoche(aFin);
-  float dF = length(p - (c + R * haciaFuera)) - wFuera + 1e-4;
-  if (dF < mejor.d) mejor = Cinta(dF, 0.0, clamp((dot(q, haciaFuera) - R) / wFuera, -1.0, 1.0));
-  float rDentro = R - b * phiMax;
-  vec2 haciaDentro = dirNoche(aFin - sentido * phiMax);
-  float dD = length(p - (c + rDentro * haciaDentro)) - wDentro + 1e-4;
-  if (dD < mejor.d) mejor = Cinta(dD, R * phiMax - 0.5 * b * phiMax * phiMax, clamp((dot(q, haciaDentro) - rDentro) / wDentro, -1.0, 1.0));
-  return mejor;
+  return q;
 }
 
-// Un rizo en la punta de una corriente: la espiral sigue a la cinta desde su punta (con su
-// tangente, hacia fuera) y se enrosca hacia la izquierda (lado 1) o la derecha (lado -1).
-Cinta rizoNoche(vec2 p, vec2 punta, vec2 tangente, float R, float vueltas, float lado, float w) {
-  vec2 izquierda = vec2(-tangente.y, tangente.x);
-  vec2 c = punta + izquierda * R * lado;
-  vec2 haciaPunta = punta - c;
-  float phiMax = vueltas * TAU_NOCHE;
-  return espiralNoche(p, c, R, R * 0.72 / phiMax, phiMax, atan(haciaPunta.y, haciaPunta.x), -lado, w, w * 0.4);
+// La franja verde amarilla: sube hacia la derecha, curvándose.
+float alturaFranjaVerde(float x) {
+  float fx = x / anchoNoche();
+  return -0.31 + 0.22 * fx + 0.15 * fx * fx;
 }
 
-// Corriente: una cinta a lo largo de y(x) = yRef + amp·(cos(frec·(x − xRef) + fase) − cos(fase))
-// + pend·(x − xRef), de x0 a x1 (con fase 0 y pend 0 pasa por (xRef, yRef) en horizontal: así se
-// engancha a un remolino). 'afilar' afila la punta izquierda (x) o la derecha (y).
-float yCorriente(float x, float xRef, float yRef, float amp, float frec, float fase, float pend) {
-  return yRef + amp * (cos(frec * (x - xRef) + fase) - cos(fase)) + pend * (x - xRef);
+// La corriente del viento en el plano enroscado: sus curvas de nivel son las líneas por las que van
+// las pinceladas (casi horizontales, con ondas; abajo, paralelas a la franja verde).
+float corrienteNoche(vec2 q) {
+  float verde = alturaFranjaVerde(q.x);
+  float m = 1.0 - smoothstep(0.0, 0.7, q.y - verde);
+  return q.y - (verde + 0.31) * m + 0.055 * sin(q.x * 1.7 + 0.7) + 0.018 * sin(q.x * 4.6 - 1.3);
 }
 
-Cinta corrienteNoche(vec2 p, float x0, float x1, float xRef, float yRef, float amp, float frec, float fase, float pend, float w, vec2 afilar) {
-  float xc = clamp(p.x, x0, x1);
-  float yc = yCorriente(xc, xRef, yRef, amp, frec, fase, pend);
-  float dyc = -amp * frec * sin(frec * (xc - xRef) + fase) + pend;
-  float t = (xc - x0) / (x1 - x0);
-  float ancho = w;
-  ancho *= mix(1.0, sqrt(clamp(t / 0.22, 0.0, 1.0)), afilar.x);
-  ancho *= mix(1.0, sqrt(clamp((1.0 - t) / 0.22, 0.0, 1.0)), afilar.y);
-  ancho = max(ancho, 0.0012);
-  float dy = (p.y - yc) * inversesqrt(1.0 + dyc * dyc);
-  return Cinta(length(vec2(p.x - xc, dy)) - ancho, xc - x0, clamp(dy / ancho, -1.0, 1.0));
+// La corriente en p, rodeando los discos como el agua una piedra (cada uno desvía las líneas
+// cercanas; lejos, nada).
+float corrienteRodeando(vec2 p, vec2 q) {
+  float psi = corrienteNoche(q);
+  for (int i = 0; i < 11; i++) {
+    vec4 h = discoNoche(i);
+    float borde = zonaDisco(h);
+    float r = length(p - h.xy);
+    if (r > borde * 3.2) continue;
+    float centro = corrienteNoche(enroscarNoche(h.xy));
+    float desvio = 0.45 * borde * borde / max(r * r, borde * borde) * (1.0 - smoothstep(2.0 * borde, 3.2 * borde, r));
+    psi = centro + (psi - centro) * (1.0 - desvio);
+  }
+  return psi;
 }
 
-// La punta de una corriente en x: el punto y su tangente (hacia +x).
-vec4 puntaCorriente(float x, float xRef, float yRef, float amp, float frec, float fase, float pend) {
-  float y = yCorriente(x, xRef, yRef, amp, frec, fase, pend);
-  vec2 tg = normalize(vec2(1.0, -amp * frec * sin(frec * (x - xRef) + fase) + pend));
-  return vec4(x, y, tg);
+// --- Las pinceladas ------------------------------------------------------------------------------
+
+// Una capa de pinceladas: franjas a lo largo de las curvas de nivel de una corriente (k = corriente /
+// periodo + desfase; dk, cuánto cambia k en un píxel; clave, la de la franja para su azar), partidas
+// a lo largo (s, en tramos: una pincelada por tramo, con su hueco) y, si vueltas > 0, cerradas en
+// redondo (s da la vuelta en tantos tramos). Cada pincelada entra apoyada y sale afinándose; se
+// deslizan despacio. Presencia: en las orillas entre regiones, cada pincelada sigue mientras le toque
+// (según su azar) y se corta donde ya no.
+// Devuelve: x, cuánto cubre el píxel; y, el medio de su tramo (en s); z, w: azares.
+vec4 capaPinceladas(float k, float dk, float s, float vueltas, float clave, float semilla, float grosor, float presencia, float t) {
+  float f = abs(fract(k) - 0.5);
+  float hf = hashNoche(vec2(clave, semilla));
+  float corrimiento = hf * 13.7 + t * (0.05 + 0.06 * hf);
+  float ss = s + corrimiento;
+  float j = floor(ss);
+  float u = ss - j;
+  float jj = vueltas > 0.0 ? mod(j, vueltas) : j;
+  float h1 = hashNoche(vec2(clave + 0.37, jj + 11.0 * semilla));
+  float h2 = hashNoche(vec2(jj - 5.3, clave + 7.0 * semilla));
+  float a0 = 0.02 + 0.18 * h1;
+  float a1 = 0.72 + 0.26 * h2;
+  float h3 = hashNoche(vec2(clave * 1.7 - jj, 3.3 * semilla + 0.5));
+  float w = grosor * (0.72 + 0.28 * h2) * smoothstep(a0, a0 + 0.14, u) * (1.0 - smoothstep(a1 - 0.32, a1, u));
+  // (Sí o no, sin afinarla: las que van a lo largo de la orilla quedarían como pelos.)
+  w *= step(h3, presencia);
+  // Cuánto del píxel (dk de ancho, en franjas) cae dentro de la pincelada (2w de ancho): sin pelos
+  // donde w se acaba.
+  float cubre = clamp((min(f + 0.5 * dk, w) - max(f - 0.5 * dk, -w)) / max(dk, 1e-4), 0.0, 1.0);
+  // Si las franjas ya no caben en los píxeles, su promedio.
+  cubre = mix(cubre, 1.1 * grosor * presencia, smoothstep(0.4, 0.9, dk));
+  return vec4(cubre, j + 0.5 - corrimiento, h1, hashNoche(vec2(clave * 0.73 + semilla, jj * 1.31)));
 }
 
-// Pinta una cinta como un dibujo animado: colores planos (la sombra en un borde, una franja de luz
-// en el otro, con sus cortes netos), unos pocos trazos limpios a lo largo, en tres carriles, que
-// fluyen despacio, el moteado de la acuarela, la orilla de la aguada algo más oscura y la tinta.
-vec3 pintarCinta(vec3 c, Cinta k, vec2 p, float semilla, vec3 claro, vec3 medio, vec3 sombra) {
-  float u = uPixelNoche;
-  if (k.d > TINTA_MEDIA + 2.0 * u) return c;
-  float dentro = 1.0 - smoothstep(-u, u, k.d);
-  float v = k.v;
-  float wv = max(fwidth(v), 1e-3);
-  vec3 col = mix(sombra, medio, smoothstep(-0.42 - wv, -0.42 + wv, v));
-  col = mix(col, claro, smoothstep(0.22 - wv, 0.22 + wv, v) * (1.0 - smoothstep(0.7 - wv, 0.7 + wv, v)));
-  // Trazos a lo largo, en tres carriles (en la sombra, en medio y en la luz).
-  float carril = floor((v + 1.0) * 1.5);
-  float enCarril = fract((v + 1.0) * 1.5) - 0.5;
-  float azar = hashNoche(vec2(carril, semilla));
-  float x = k.s / (0.075 + 0.05 * azar) - uTiempoNoche * (0.25 + 0.2 * azar) + azar * 7.0;
-  float celda = floor(x);
-  float azarTrazo = hashNoche(vec2(celda, carril + semilla * 7.0));
-  float trazo = step(fract(x), 0.55 + 0.35 * azarTrazo) * (1.0 - smoothstep(0.1, 0.17, abs(enCarril))) * step(0.35, azarTrazo);
-  vec3 tono = carril > 1.5 ? mix(claro, vec3(1.0), 0.6) : carril > 0.5 ? mix(medio, claro, 0.55) : mix(sombra, medio, 0.55);
-  col = mix(col, tono, trazo * 0.8);
-  col *= 0.95 + 0.09 * ruido3(vec3(p * 9.0, semilla));
-  col *= 1.0 - 0.12 * (1.0 - smoothstep(0.0, 4.0 * u, -k.d));
-  c = mix(c, col, dentro);
-  return mix(c, TINTA_NOCHE, 1.0 - smoothstep(TINTA_MEDIA - u, TINTA_MEDIA + u, abs(k.d)));
+// --- Los colores (de la reproducción, por regiones) ----------------------------------------------
+
+vec3 colorCielo(float a) {
+  return a < 0.32 ? vec3(0.1, 0.36, 0.82)
+    : a < 0.58 ? vec3(0.12, 0.28, 0.74)
+    : a < 0.8 ? vec3(0.07, 0.16, 0.5)
+    : a < 0.95 ? vec3(0.2, 0.48, 0.88)
+    : vec3(0.38, 0.65, 0.9);
 }
 
-// La misma cinta con la luz del otro lado (para que la luz siga igual al pasar de una pieza a otra).
-Cinta volteada(Cinta k) {
-  k.v = -k.v;
-  return k;
+vec3 colorFranjaClara(float a) {
+  return a < 0.3 ? vec3(0.42, 0.74, 0.92)
+    : a < 0.55 ? vec3(0.62, 0.85, 0.94)
+    : a < 0.75 ? vec3(0.86, 0.95, 0.97)
+    : a < 0.9 ? vec3(0.3, 0.6, 0.88)
+    : vec3(0.6, 0.8, 0.62);
 }
 
-// Estrella de cinco puntas regordeta (Íñigo Quílez), como las de todo el dibujo animado.
-float estrella5Noche(vec2 p, float r, float rf) {
-  const vec2 k1 = vec2(0.809016994375, -0.587785252292);
-  const vec2 k2 = vec2(-k1.x, k1.y);
-  p.x = abs(p.x);
-  p -= 2.0 * max(dot(k1, p), 0.0) * k1;
-  p -= 2.0 * max(dot(k2, p), 0.0) * k2;
-  p.x = abs(p.x);
-  p.y -= r;
-  vec2 ba = rf * vec2(-k1.y, k1.x) - vec2(0.0, 1.0);
-  float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
-  return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+vec3 colorFranjaVerde(float a) {
+  return a < 0.28 ? vec3(0.74, 0.88, 0.5)
+    : a < 0.48 ? vec3(0.52, 0.72, 0.52)
+    : a < 0.68 ? vec3(0.86, 0.84, 0.46)
+    : a < 0.86 ? vec3(0.66, 0.86, 0.68)
+    : vec3(0.14, 0.5, 0.88);
 }
 
-// Una aguada redonda de halo: la pinta encima (radio rr, mezcla m) con la orilla algo más oscura.
-vec3 aguadaHalo(vec3 c, float r, float rr, vec3 color, float m) {
-  float u = uPixelNoche;
-  float h = 1.0 - smoothstep(rr - u, rr + u, r);
-  c = mix(c, color, h * m);
-  return c * (1.0 - 0.07 * h * (1.0 - smoothstep(0.0, 4.0 * u, rr - r)));
+// La ola: entre los brazos, azul hondo; en los brazos, celestes, blancos y algún verde agua.
+vec3 colorOla(float a, float claro) {
+  vec3 hueco = a < 0.5 ? vec3(0.13, 0.42, 0.86) : a < 0.85 ? vec3(0.1, 0.32, 0.78) : vec3(0.08, 0.18, 0.5);
+  vec3 brazo = a < 0.28 ? vec3(0.38, 0.72, 0.92) : a < 0.56 ? vec3(0.6, 0.87, 0.96) : a < 0.86 ? vec3(0.88, 0.96, 0.98) : vec3(0.64, 0.85, 0.7);
+  return a < claro ? brazo : hueco;
 }
 
-// Dos arcos de tinta opuestos, finos en las puntas, en el radio ra, que giran (las pinceladas en
-// remolino de los halos del cuadro, a la manera del dibujo animado).
-vec3 arcosHalo(vec3 c, float r, float a, float ra, float giro, float semilla) {
-  float u = uPixelNoche;
-  for (int j = 0; j < 2; j++) {
-    float ang = mod(a - giro - float(j) * 3.14159, TAU_NOCHE);
-    float largo = 1.0 + 0.5 * hashNoche(vec2(semilla, float(j) + ra * 50.0));
-    float enArco = ang / largo;
-    if (enArco > 1.0) continue;
-    float grosor = TINTA_MEDIA * 0.8 * sin(3.14159 * enArco);
-    c = mix(c, TINTA_NOCHE, (1.0 - smoothstep(grosor - u, grosor + u, abs(r - ra))) * 0.85);
+vec3 colorHalo(float f, float a, bool luna) {
+  if (f > 1.0) return a < 0.3 ? vec3(0.08, 0.2, 0.58) : a < 0.7 ? vec3(0.1, 0.3, 0.74) : vec3(0.16, 0.42, 0.84);
+  if (luna) {
+    return f < 0.5 ? (a < 0.4 ? vec3(0.92, 0.95, 0.62) : a < 0.75 ? vec3(0.86, 0.9, 0.5) : vec3(1.0, 0.9, 0.52))
+      : f < 0.7 ? (a < 0.45 ? vec3(0.82, 0.92, 0.56) : a < 0.8 ? vec3(0.72, 0.87, 0.55) : vec3(0.95, 0.84, 0.4))
+      : f < 0.87 ? (a < 0.4 ? vec3(0.58, 0.8, 0.6) : a < 0.8 ? vec3(0.5, 0.74, 0.62) : vec3(0.78, 0.9, 0.6))
+      : (a < 0.5 ? vec3(0.34, 0.62, 0.74) : vec3(0.26, 0.5, 0.78));
+  }
+  return f < 0.3 ? (a < 0.4 ? vec3(0.98, 0.86, 0.36) : a < 0.7 ? vec3(1.0, 0.95, 0.62) : vec3(0.94, 0.7, 0.26))
+    : f < 0.45 ? (a < 0.5 ? vec3(1.0, 0.97, 0.74) : vec3(0.94, 0.94, 0.58))
+    : f < 0.7 ? (a < 0.4 ? vec3(0.86, 0.98, 0.93) : a < 0.75 ? vec3(0.96, 0.99, 0.95) : vec3(0.7, 0.92, 0.88))
+    : f < 0.88 ? (a < 0.45 ? vec3(0.64, 0.89, 0.88) : a < 0.8 ? vec3(0.76, 0.9, 0.62) : vec3(0.9, 0.97, 0.9))
+    : (a < 0.5 ? vec3(0.42, 0.74, 0.86) : vec3(0.28, 0.56, 0.86));
+}
+
+// El color de una pincelada del viento: su eje va por el nivel psi; a, b: sus azares; las de
+// acento, de lo claro de cada paleta.
+vec3 colorViento(float psi, vec2 p, float a, float b, bool acento) {
+  if (acento) a = 0.55 + 0.45 * a;
+  float verde = exp(-pow((psi + 0.31) / 0.11, 2.0));
+  float clara = exp(-pow((psi - 0.43) / 0.065, 2.0));
+  // El arco claro que rodea los remolinos por arriba y por la derecha (la ola que rompe).
+  for (int i = 9; i < 11; i++) {
+    vec4 r = discoNoche(i);
+    vec2 d = p - r.xy;
+    float x = length(d) / r.z;
+    float lado = smoothstep(0.1, 0.6, dot(d / max(length(d), 1e-4), vec2(-0.2, 0.98)));
+    clara = max(clara, (1.0 - smoothstep(1.0, 1.3, x)) * lado * 0.85);
+  }
+  vec4 r0 = discoNoche(9);
+  vec4 r1 = discoNoche(10);
+  float psi1 = corrienteNoche(enroscarNoche(r1.xy));
+  float ese = exp(-pow((psi - psi1 - 0.045) / 0.04, 2.0)) * smoothstep(r0.x - 0.15, r0.x + 0.1, p.x) * (1.0 - smoothstep(r1.x + 0.05, r1.x + 0.4, p.x));
+  clara = max(clara, ese * 0.95);
+  if (b < verde * 1.5) return colorFranjaVerde(a);
+  if (b < clara * 0.9) return colorFranjaClara(a);
+  return colorCielo(a);
+}
+
+// --- El cielo ------------------------------------------------------------------------------------
+
+// Cuánto le toca al disco en su orilla (fd: distancia al centro, en zonas; borde: su borde deshecho).
+// Se mira en el eje de cada pincelada, para que sea la misma en todo su ancho.
+float presenciaDisco(float fd, float borde, bool remolino) {
+  return 1.0 - smoothstep(borde - (remolino ? 0.16 : 0.08), borde + (remolino ? 0.08 : 0.04), fd);
+}
+
+// El viento: el fondo (lo que se ve entre pinceladas) y tres capas de pinceladas peinadas.
+vec3 fondoViento(vec2 p, float psi) {
+  vec3 c = mix(vec3(0.1, 0.31, 0.74), vec3(0.08, 0.25, 0.66), smoothstep(-0.3, 0.9, p.y));
+  c = mix(c, vec3(0.5, 0.68, 0.52), exp(-pow((psi + 0.31) / 0.12, 2.0)) * 0.85);
+  return mix(c, vec3(0.28, 0.55, 0.84), exp(-pow((psi - 0.43) / 0.08, 2.0)) * 0.5);
+}
+
+// (gpsi: el gradiente de la corriente en el lienzo; disco, zona y borde: el disco cercano, para las
+// orillas.)
+vec3 vientoNoche(vec3 c, vec2 p, float psi, float dpsi, vec2 gpsi, vec2 q, vec4 disco, float zona, float borde, float t) {
+  float s = escalaNoche();
+  float P = 0.017 * s;
+  float L = 6.5 / s;
+  bool remolino = disco.w > 1.5;
+  vec2 haciaEje = gpsi / max(dot(gpsi, gpsi), 1e-8);
+  for (int capa = 0; capa < 3; capa++) {
+    float fc = float(capa);
+    bool acento = capa == 2;
+    float periodo = acento ? P * 1.6 : P;
+    float desfase = capa == 1 ? 0.5 : capa == 2 ? 0.25 : 0.0;
+    float largo = acento ? L * 0.8 : L;
+    float k = psi / periodo + desfase;
+    float id = floor(k);
+    vec2 eje = p - (fract(k) - 0.5) * periodo * haciaEje;
+    float presencia = 1.0 - presenciaDisco(length(eje - disco.xy) / zona, borde, remolino);
+    vec4 tr = capaPinceladas(k, dpsi / periodo, q.x * largo, 0.0, id, fc + 1.0, acento ? 0.26 : 0.42, presencia, t);
+    if (acento) tr.x *= step(0.5, tr.z);
+    if (tr.x <= 0.0) continue;
+    vec3 col = colorViento((id + 0.5 - desfase) * periodo, p, tr.w, tr.z, acento);
+    c = mix(c, col, tr.x);
   }
   return c;
 }
 
-vec3 estrellaNoche(vec3 c, vec2 p, vec2 centro, float R, float semilla, float aparece) {
-  float esc = R * saltoNoche(aparece);
-  vec2 q = p - centro;
-  float r = length(q);
-  if (esc < 1e-4 || r > esc * 1.12) return c;
+// Un halo: pinceladas en redondo (anillos partidos en tramos de largo parecido).
+vec3 fondoHalo(vec4 halo, float rh) {
+  float f0 = rh / halo.z;
+  return mix(vec3(0.1, 0.3, 0.74), colorHalo(f0, 0.45, halo.w > 0.5), f0 > 1.0 ? 0.3 : 0.6);
+}
+
+vec3 anillosNoche(vec3 c, vec4 halo, float rh, float drh, float ang, float zona, float borde, float t) {
+  float s = escalaNoche();
+  bool luna = halo.w > 0.5;
+  float P = 0.015 * s;
+  float tramo = 0.055 * s;
+  for (int capa = 0; capa < 3; capa++) {
+    float fc = float(capa);
+    bool acento = capa == 2;
+    float periodo = acento ? P * 1.5 : P;
+    float desfase = capa == 1 ? 0.5 : capa == 2 ? 0.25 : 0.0;
+    float k = rh / periodo + desfase;
+    float id = floor(k);
+    float radioEje = (id + 0.5 - desfase) * periodo;
+    float vueltas = max(3.0, floor(6.2831853 * radioEje / tramo));
+    float sa = (ang / 6.2831853 + 0.5) * vueltas;
+    float presencia = presenciaDisco(radioEje / zona, borde, false);
+    vec4 tr = capaPinceladas(k, drh / periodo, sa, vueltas, id, fc + 21.0, acento ? 0.3 : 0.42, presencia, t * 0.6);
+    if (acento) tr.x *= step(0.45, tr.z);
+    if (tr.x <= 0.0) continue;
+    float f = radioEje / halo.z + 0.07 * (tr.z - 0.5);
+    float a = acento ? 0.5 + 0.5 * tr.w : tr.w;
+    c = mix(c, colorHalo(f, a, luna), tr.x);
+  }
+  return c;
+}
+
+// Un remolino: pinceladas en espiral que se enroscan hacia dentro como las agujas del reloj
+// (espirales de paso fijo: la franja que da una vuelta entera cae m franjas más adentro), con dos
+// brazos claros, celestes y blancos, entre azules hondos.
+vec3 fondoRemolino(vec4 r, float rho) {
+  return mix(vec3(0.22, 0.52, 0.87), vec3(0.13, 0.38, 0.8), rho / r.z);
+}
+
+vec3 remolinoPinceladas(vec3 c, vec4 r, vec2 d, float rho, float drho, float borde, float t) {
+  float s = escalaNoche();
+  bool ola = r.z > 0.25 * s;
+  float P = 0.015 * s;
+  float m = ola ? 13.0 : 8.0;
+  float b = m * P / 6.2831853;
+  float theta = -atan(d.y, d.x);
+  float dk = drho * sqrt(1.0 + b * b / max(rho * rho, 1e-6)) / P;
+  float tramo = 0.11 * s;
+  // El brazo claro llega al borde por arriba: por ahí sale, hacia la izquierda, y sigue en el viento.
+  float brazo = 0.53 - 0.97 * r.z / (m * P);
+  for (int capa = 0; capa < 3; capa++) {
+    float fc = float(capa);
+    bool acento = capa == 2;
+    float desfase = capa == 1 ? 0.5 : capa == 2 ? 0.25 : 0.0;
+    float k = (rho + b * theta) / P + desfase;
+    float id = floor(k);
+    // La misma espiral en todas sus vueltas: su clave y el ángulo desenrollado.
+    float espiral = mod(id, m);
+    float desenrollado = theta - 6.2831853 * floor(id / m);
+    float presencia = presenciaDisco((rho - (fract(k) - 0.5) * P) / r.z, borde, true);
+    vec4 tr = capaPinceladas(k, dk, desenrollado * r.z * 0.6 / tramo, 0.0, espiral, fc + 31.0, acento ? 0.28 : 0.42, presencia, t * 0.8);
+    if (acento) tr.x *= step(0.45, tr.z);
+    if (tr.x <= 0.0) continue;
+    // El brazo: unas espirales sí y otras no (un brazo claro que se enrosca).
+    float fase = fract(espiral / m + brazo + 0.3);
+    float claro = fase < 0.68 ? 0.96 : 0.16;
+    float a = acento ? 0.5 + 0.5 * tr.w : tr.w;
+    c = mix(c, colorOla(a, claro), tr.x);
+  }
+  return c;
+}
+
+// Las luces: un resplandor suave en cada halo, el núcleo de las estrellas (un punto de pastel
+// amarillo, más claro en el centro) y la luna en cuarto creciente (sin cara), naranja.
+vec3 lucesNoche(vec3 c, vec2 p) {
   float u = uPixelNoche;
-  float t = uTiempoNoche;
-  float a = atan(q.y, q.x);
-  float sentido = fract(semilla * 7.3) < 0.5 ? 1.0 : -1.0;
-  // El borde de las aguadas, ondulado a mano (y moviéndose despacio).
-  float onda = 0.028 * sin(a * 5.0 + semilla * 3.0 + sentido * t * 0.25) + 0.012 * sin(a * 9.0 - sentido * t * 0.18 + semilla);
-  c = aguadaHalo(c, r, esc * (1.0 + onda), mix(c, vec3(0.5, 0.78, 0.76), 0.6), 1.0);
-  c = aguadaHalo(c, r, esc * (0.72 + 0.8 * onda), vec3(0.97, 0.95, 0.74), 0.9);
-  c = aguadaHalo(c, r, esc * (0.5 + 0.6 * onda), vec3(1.0, 0.86, 0.4), 1.0);
-  c = arcosHalo(c, r, a, esc * 0.61, sentido * t * 0.3 + semilla * 4.0, semilla);
-  c = arcosHalo(c, r, a, esc * 0.87, -sentido * t * 0.22 + semilla * 2.0 + 1.3, semilla + 1.0);
-  // La estrella regordeta, crema, con su tinta y su brillo, que se mece.
-  float rs = esc * 0.45;
-  vec2 e = giroNoche(q, 0.16 * sin(t * 0.8 + semilla * 5.0) + 0.5 * (fract(semilla * 3.1) - 0.5)) / rs;
-  float dE = (estrella5Noche(e, 0.62, 0.62) - 0.06) * rs;
-  vec3 crema = mix(vec3(1.0, 0.97, 0.84), vec3(1.0, 0.82, 0.5), smoothstep(-0.2, 0.5, dot(e, vec2(0.55, -0.83))));
-  crema = mix(crema, vec3(1.0), 1.0 - smoothstep(0.05, 0.11, length((e - vec2(-0.14, 0.17)) * vec2(1.0, 1.5))));
-  c = mix(c, crema, 1.0 - smoothstep(-u, u, dE));
-  return mix(c, TINTA_NOCHE, 1.0 - smoothstep(TINTA_MEDIA - u, TINTA_MEDIA + u, abs(dE)));
+  for (int i = 0; i < 9; i++) {
+    vec4 h = discoNoche(i);
+    vec2 d = p - h.xy;
+    float r = length(d);
+    if (r > h.z * 1.6) continue;
+    float f = r / h.z;
+    bool luna = h.w > 0.5;
+    vec3 luz = luna ? vec3(0.95, 0.92, 0.55) : vec3(0.85, 0.97, 0.9);
+    c += luz * (luna ? 0.1 : 0.08) * exp(-f * f * 2.4);
+    // Vetas finas del pastel, en redondo.
+    float vetas = ruido3(vec3(f * 26.0, d / h.z * 3.0));
+    if (luna) {
+      float rm = h.z * 0.47;
+      vec2 ql = d / rm;
+      float dLuna = max(length(ql) - 1.0, -(length(ql - vec2(0.4, 0.3)) - 0.97)) * rm;
+      vec3 creciente = mix(vec3(0.93, 0.6, 0.18), vec3(0.98, 0.74, 0.27), smoothstep(-0.8, 0.6, dot(ql, vec2(-0.6, 0.8))));
+      creciente *= 0.9 + 0.16 * vetas;
+      c = mix(c, creciente, 1.0 - smoothstep(-u, u, dLuna));
+    } else {
+      float rn = h.z * 0.2 * (0.9 + 0.2 * ruido3(vec3(d / h.z * 7.0, float(i))));
+      vec3 nucleo = mix(vec3(1.0, 0.97, 0.8), vec3(0.97, 0.8, 0.3), smoothstep(0.0, 1.0, r / rn));
+      nucleo *= 0.93 + 0.1 * vetas;
+      c = mix(c, nucleo, (1.0 - smoothstep(rn * 0.7, rn, r)) * 0.9);
+    }
+  }
+  return c;
 }
 
-// La luna en cuarto creciente (sin cara) en su gran halo: verde agua, amarillo pálido y el naranja
-// dorado de dentro, con sus arcos; el creciente naranja con su brillo y su tinta.
-vec3 lunaNoche(vec3 c, vec2 p, vec2 centro, float rm, float aparece) {
-  float esc = rm * saltoNoche(aparece);
-  vec2 q = p - centro;
-  float r = length(q);
-  if (esc < 1e-4 || r > esc * 2.8) return c;
-  float u = uPixelNoche;
-  float t = uTiempoNoche;
-  float a = atan(q.y, q.x);
-  float onda = 0.022 * sin(a * 6.0 + t * 0.2) + 0.01 * sin(a * 11.0 - t * 0.15);
-  c = aguadaHalo(c, r, esc * 2.65 * (1.0 + onda), mix(c, vec3(0.56, 0.8, 0.74), 0.55), 1.0);
-  c = aguadaHalo(c, r, esc * 1.95 * (1.0 + 0.8 * onda), vec3(0.98, 0.93, 0.66), 0.9);
-  c = aguadaHalo(c, r, esc * 1.38 * (1.0 + 0.6 * onda), vec3(1.0, 0.76, 0.3), 1.0);
-  c = arcosHalo(c, r, a, esc * 1.66, t * 0.2, 3.0);
-  c = arcosHalo(c, r, a, esc * 2.32, -t * 0.15 + 1.0, 4.0);
-  vec2 ql = q / esc;
-  float dLuna = max(length(ql) - 1.0, -(length(ql - vec2(0.42, 0.3)) - 0.92)) * esc;
-  vec3 luna = mix(vec3(0.97, 0.58, 0.14), vec3(1.0, 0.86, 0.38), smoothstep(-0.8, 0.4, dot(ql, vec2(-0.6, 0.8))));
-  luna = mix(luna, vec3(1.0, 0.96, 0.74), (1.0 - smoothstep(0.06, 0.2, length(ql - vec2(-0.62, 0.22)))) * 0.7);
-  c = mix(c, luna, 1.0 - smoothstep(-u, u, dLuna));
-  return mix(c, TINTA_NOCHE, 1.0 - smoothstep(TINTA_MEDIA - u, TINTA_MEDIA + u, abs(dLuna)));
-}
-
-// Fondo de acuarela azul noche: ultramar arriba, cobalto en medio y más claro y verde agua junto al
-// horizonte, con sus manchas, la orilla de la aguada y el grano del pigmento.
-vec3 fondoNoche(vec3 d) {
-  float y = d.y;
-  vec3 c = mix(vec3(0.27, 0.46, 0.62), vec3(0.14, 0.29, 0.58), smoothstep(0.0, 0.2, y));
-  c = mix(c, vec3(0.08, 0.17, 0.44), smoothstep(0.2, 0.55, y));
-  c = mix(c, vec3(0.045, 0.09, 0.28), smoothstep(0.55, 0.95, y));
-  float campo = fbm3(d * 2.3 + vec3(3.0, 1.0, 7.0)) + 0.3 * (fbm3(d * 5.2 + vec3(1.0, 9.0, 2.0)) - 0.5);
-  float mancha = smoothstep(0.575, 0.6, campo);
-  c = mix(c, c * 1.15 + vec3(0.0, 0.02, 0.035), 0.5 * mancha);
-  float x = (campo - 0.59) / 0.012;
-  c *= 1.0 - 0.08 * exp(-x * x);
-  return c * (0.95 + 0.07 * ruido3(d * 31.0));
-}
-
-// Vetas claras en el fondo que siguen el viento (y rodean la ola), rotas a trozos, como pinceladas
-// de acuarela.
-vec3 vetasNoche(vec3 c, vec2 p, vec2 c1, vec2 c2, float s) {
-  float t = uTiempoNoche;
-  float psi = p.y + 0.035 * sin(p.x * 1.7 + 0.5 + t * 0.03) + 0.015 * sin(p.x * 4.3 - t * 0.02);
-  psi += 0.16 * s * exp(-dot(p - c1, p - c1) / (0.09 * s * s)) + 0.09 * s * exp(-dot(p - c2, p - c2) / (0.04 * s * s));
-  float banda = 0.5 + 0.5 * sin(psi * TAU_NOCHE / 0.045);
-  float rota = ruido3(vec3(psi * 22.0, p.x * 3.5 + p.y, 3.0));
-  float veta = smoothstep(0.72, 0.95, banda) * smoothstep(0.45, 0.7, rota);
-  return mix(c, c * 1.18 + vec3(0.01, 0.03, 0.04), veta * 0.55);
+vec3 cieloNoche(vec2 p, float t) {
+  // El disco más cercano (en lo que mide su zona).
+  vec4 disco = discoNoche(0);
+  float fd = 1e3;
+  for (int i = 0; i < 11; i++) {
+    vec4 h = discoNoche(i);
+    float f = length(p - h.xy) / zonaDisco(h);
+    if (f < fd) {
+      fd = f;
+      disco = h;
+    }
+  }
+  vec2 dh = p - disco.xy;
+  float rh = length(dh);
+  vec2 q = enroscarNoche(p);
+  float psi = corrienteRodeando(p, q);
+  // Las derivadas, antes de elegir (fuera de las ramas); el gradiente de la corriente, en el lienzo.
+  float dpsi = fwidth(psi);
+  float drh = fwidth(rh);
+  vec2 px = dFdx(p);
+  vec2 py = dFdy(p);
+  float det = px.x * py.y - px.y * py.x;
+  det = det < 0.0 ? min(det, -1e-12) : max(det, 1e-12);
+  vec2 gpsi = vec2(py.y * dFdx(psi) - px.y * dFdy(psi), px.x * dFdy(psi) - py.x * dFdx(psi)) / det;
+  // El borde del disco, deshecho; en la orilla, unas pinceladas son del viento y otras del disco.
+  bool remolino = disco.w > 1.5;
+  float borde = 1.0 + (remolino ? 0.12 : 0.05) * (ruido3(vec3(dh / max(rh, 1e-4) * 2.2, disco.x * 3.0)) - 0.5);
+  float zona = zonaDisco(disco);
+  float enDisco = presenciaDisco(fd, borde, remolino);
+  vec3 fondoD = remolino ? fondoRemolino(disco, rh) : fondoHalo(disco, rh);
+  vec3 c = mix(fondoViento(p, psi), fondoD, enDisco);
+  // (Con un margen: las pinceladas de la orilla se miran por su eje, que puede caer al otro lado.)
+  float margen = 0.06 * zona / max(disco.z, 1e-4);
+  if (presenciaDisco(fd + margen, borde, remolino) < 1.0) c = vientoNoche(c, p, psi, dpsi, gpsi, q, disco, zona, borde, t);
+  if (presenciaDisco(fd - margen, borde, remolino) > 0.0) {
+    if (remolino) c = remolinoPinceladas(c, disco, dh, rh, drh, borde, t);
+    else c = anillosNoche(c, disco, rh, drh, atan(dh.y, dh.x), zona, borde, t);
+  }
+  return lucesNoche(c, p);
 }
 
 // El cielo de la noche estrellada en la dirección d (coordenadas del valle).
 vec3 nocheEstrellada(vec3 d) {
-  float t = uTiempoNoche;
-  vec3 fondo = fondoNoche(d);
   float delante;
   vec2 p = lienzoNoche(d, delante);
+  vec3 fondo = mix(vec3(0.08, 0.22, 0.62), vec3(0.06, 0.16, 0.5), smoothstep(0.0, 0.9, d.y));
   if (delante < 0.001) return fondo;
-  float A = uAspectoNoche;
-  float W = anchoNoche();
-  float s = escalaNoche();
-
-  // La ola: el remolino grande y su compañero, en S (el compañero es el grande girado media vuelta
-  // y más pequeño alrededor de su punto de encuentro M: se unen sin costura). Se mece despacio.
-  vec2 c1 = vec2(-0.3 * W, 0.37);
-  float R1 = 0.33 * s;
-  float vueltas = 1.4 * TAU_NOCHE;
-  float b1 = (R1 - 0.045 * s) / vueltas;
-  float aM = -0.3 + 0.05 * sin(t * 0.21);
-  vec2 M = c1 + R1 * dirNoche(aM);
-  float k2 = 0.6;
-  vec2 c2 = M + k2 * R1 * dirNoche(aM);
-  float wOla = 0.066 * s;
-
-  vec3 c = vetasNoche(fondo, p, c1, c2, s);
-
-  // La franja clara sobre las montañas (cruza todo el cielo, detrás de ellas).
-  Cinta baja = corrienteNoche(p, -A - 0.3, A + 0.3, 0.0, -0.3, 0.045 * s, 1.7 / s, 0.8 + 0.05 * sin(t * 0.13), 0.03, 0.05 * s, vec2(0.0));
-  c = pintarCinta(c, baja, p, 3.0, vec3(0.92, 0.96, 0.9), vec3(0.56, 0.78, 0.87), vec3(0.3, 0.5, 0.73));
-
-  // Una corriente pequeña a la izquierda, enroscada en las dos puntas.
-  float xi0 = -0.95 * W;
-  float xi1 = -0.42 * W;
-  float yi = -0.08;
-  Cinta izq = corrienteNoche(p, xi0, xi1, xi0, yi, -0.035 * s, 3.4 / s, 0.0, 0.0, 0.03 * s, vec2(0.0));
-  vec4 pi0 = puntaCorriente(xi0, xi0, yi, -0.035 * s, 3.4 / s, 0.0, 0.0);
-  vec4 pi1 = puntaCorriente(xi1, xi0, yi, -0.035 * s, 3.4 / s, 0.0, 0.0);
-  izq = unirCintas(izq, rizoNoche(p, pi0.xy, -pi0.zw, 0.065 * s, 1.15, -1.0, 0.03 * s));
-  izq = unirCintas(izq, rizoNoche(p, pi1.xy, pi1.zw, 0.06 * s, 1.15, -1.0, 0.03 * s));
-  c = pintarCinta(c, izq, p, 4.0, vec3(0.96, 0.95, 0.72), vec3(0.58, 0.77, 0.64), vec3(0.3, 0.48, 0.58));
-
-  // Otra pequeña a la derecha, enroscada por la izquierda.
-  float xd0 = 0.36 * W;
-  float yd = -0.04;
-  Cinta der = corrienteNoche(p, xd0, A + 0.3, xd0, yd, 0.03 * s, 2.6 / s, 0.0, 0.03, 0.03 * s, vec2(0.0));
-  vec4 pd0 = puntaCorriente(xd0, xd0, yd, 0.03 * s, 2.6 / s, 0.0, 0.03);
-  der = unirCintas(der, rizoNoche(p, pd0.xy, -pd0.zw, 0.065 * s, 1.15, 1.0, 0.03 * s));
-  c = pintarCinta(c, der, p, 5.0, vec3(0.94, 0.97, 0.88), vec3(0.54, 0.76, 0.85), vec3(0.28, 0.48, 0.7));
-
-  // La corriente de arriba, que acaba enroscándose hacia abajo.
-  float xt1 = 0.42 * W;
-  float yt = 0.8;
-  Cinta tope = corrienteNoche(p, -A - 0.3, xt1, xt1, yt, 0.045 * s, 2.2 / s, 0.0, 0.0, 0.034 * s, vec2(0.0));
-  vec4 pt1 = puntaCorriente(xt1, xt1, yt, 0.045 * s, 2.2 / s, 0.0, 0.0);
-  tope = unirCintas(tope, rizoNoche(p, pt1.xy, pt1.zw, 0.085 * s, 1.2, -1.0, 0.034 * s));
-  c = pintarCinta(c, tope, p, 2.0, vec3(0.95, 0.96, 0.74), vec3(0.54, 0.78, 0.74), vec3(0.3, 0.5, 0.66));
-
-  // La ola, con la corriente que entra por debajo del remolino grande (desde la izquierda) y la que
-  // sale por encima del compañero (hacia la luna), las dos tangentes a sus vueltas. La luz va siempre
-  // del mismo lado de la cinta (en el compañero y en las corrientes, el lado contrario de su v).
-  Cinta ola = espiralNoche(p, c1, R1, b1, vueltas, aM, -1.0, wOla, 0.02 * s);
-  ola = unirCintas(ola, volteada(espiralNoche(p, c2, k2 * R1, k2 * b1, vueltas, aM + 3.14159265, -1.0, wOla, 0.014 * s)));
-  float phiJ = mod(-1.5707963 - aM, TAU_NOCHE);
-  float rJ = R1 - b1 * phiJ;
-  float wJ = mix(wOla, 0.02 * s, phiJ / vueltas);
-  vec2 jIzq = c1 + vec2(0.0, -rJ);
-  ola = unirCintas(ola, volteada(corrienteNoche(p, -A - 0.3, jIzq.x + 0.005, jIzq.x, jIzq.y, 0.06 * s, 2.0 / s, 0.0, 0.0, wJ, vec2(0.0))));
-  float wJ2 = mix(wOla, 0.014 * s, phiJ / vueltas);
-  vec2 jDer = c2 + vec2(0.0, k2 * rJ);
-  ola = unirCintas(ola, volteada(corrienteNoche(p, jDer.x - 0.005, A + 0.3, jDer.x, jDer.y, 0.06 * s, 1.8 / s, 0.0, 0.0, wJ2, vec2(0.0))));
-  c = pintarCinta(c, ola, p, 1.0, vec3(0.96, 0.97, 0.9), vec3(0.6, 0.81, 0.89), vec3(0.32, 0.53, 0.76));
-
-  // La luna, arriba a la derecha, y las once estrellas, que aparecen de una en una al caer la noche.
-  c = lunaNoche(c, p, vec2(0.8 * W, 0.66), 0.09 * s, smoothstep(0.0, 1.0, (uNoche - 0.42) / 0.2));
-  for (int i = 0; i < 11; i++) {
-    vec3 e = i == 0 ? vec3(-0.86, 0.92, 0.075)
-      : i == 1 ? vec3(-0.55, 0.96, 0.06)
-      : i == 2 ? vec3(-0.08, 0.93, 0.08)
-      : i == 3 ? vec3(0.2, 0.84, 0.065)
-      : i == 4 ? vec3(0.5, 0.95, 0.07)
-      : i == 5 ? vec3(-0.94, 0.45, 0.08)
-      : i == 6 ? vec3(-0.66, 0.12, 0.1)
-      : i == 7 ? vec3(0.3, 0.5, 0.065)
-      : i == 8 ? vec3(0.08, -0.12, 0.075)
-      : i == 9 ? vec3(0.62, 0.26, 0.085)
-      : vec3(-0.3, -0.2, 0.065);
-    float aparece = smoothstep(0.0, 1.0, (uNoche - 0.4 - 0.03 * float(i)) / 0.16);
-    c = estrellaNoche(c, p, vec2(e.x * W, e.y), e.z * s * 1.3, float(i) * 1.37 + 0.5, aparece);
-  }
+  vec3 c = cieloNoche(p, uTiempoNoche);
+  // El grano del pastel sobre el papel.
+  c *= 0.94 + 0.1 * ruido3(vec3(p * 140.0, 2.0));
   return mix(fondo, c, delante);
 }
 
@@ -405,8 +444,8 @@ vec3 gradoNoche(vec3 c) {
 `
 
 /**
- * La noche que cae (ver NOCHE_ESTRELLADA_GLSL), también para el pase de contornos: cuánto ha caído
- * (`uNoche`) y, en cada dirección del valle, si ya la cubre. Necesita RUIDO3_GLSL.
+ * La noche que cae (ver NOCHE_ESTRELLADA_GLSL): cuánto ha caído (`uNoche`) y, en cada dirección del
+ * valle, si ya la cubre. Necesita RUIDO3_GLSL.
  */
 export const CAIDA_NOCHE_GLSL = /* glsl */ `
 uniform float uNoche;
@@ -420,5 +459,4 @@ vec2 caidaNoche(vec3 d) {
   float x = (e - frente) / 0.03;
   return vec2(smoothstep(frente - w, frente + w, e), exp(-x * x) * step(0.0, e - frente));
 }
-
 `

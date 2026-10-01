@@ -425,8 +425,8 @@ export class PasoDibujo extends Pass {
       ud.uPulsaciones.value = this.pulsaciones
       ud.uGasColor.value = gas ? gas.textures[0] : null
       ud.uGasVisible.value = gasVisible
-      // De día no hay estrellas; en la noche estrellada del final, sí (cuando la noche ya cubre el cielo).
-      ud.uEstrellasVisibles.value = Math.max(uc.uCieloPintado.value * (1 - VALLE_EN_ESCENA.dia), suavizar(0.6, 0.95, noche))
+      // De día no hay estrellas (en la noche estrellada del final, las del cuadro: éstas no están en él).
+      ud.uEstrellasVisibles.value = uc.uCieloPintado.value * (1 - VALLE_EN_ESCENA.dia)
       ud.uBandaVisible.value = ud.uProfundidad.value ? this.bandaVisible * suavizar(0, 1, gasVisible) : 0
       renderer.setRenderTarget(this.dibujo)
       renderer.render(this.escenaDestellos, this.camaraQuad)
@@ -439,6 +439,8 @@ export class PasoDibujo extends Pass {
     // En el valle, con tantos bordes pequeños (flores), la separación de colores de la lente vieja
     // ensuciaba: se reduce.
     this.matPelicula.uniforms.uAberracion.value = PELICULA.aberracion * (1 - 0.65 * VALLE_EN_ESCENA.dia)
+    // En la noche estrellada, menos sepia: los azules y amarillos del cuadro, vivos.
+    ;(this.matPelicula.uniforms.uPelicula2.value as THREE.Vector3).z = PELICULA.envejecido * (1 - 0.7 * suavizar(0, 1, noche))
     this.dibujar(renderer, this.matPelicula, destino)
     renderer.autoClear = limpiezaPrevia
   }

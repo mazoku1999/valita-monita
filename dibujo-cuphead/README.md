@@ -169,18 +169,24 @@ flores como las de un ramo (gerberas, rosas, lirios, clavelinas, bocas de dragó
   abrir otra vez) y guardar o sacar la carta para ver el cielo (arriba a la derecha). El texto es
   el del usuario; sólo se ajusta el espacio de las comas.
 - **La noche estrellada** (`features/dibujo/shaders/nocheEstrellada.ts`, en el pase de dibujo):
-  el cielo de "La noche estrellada" de Van Gogh dibujado al estilo de Cuphead, sólo el cielo, sobre
-  las montañas de verdad (el Tunari, a la luz de la luna, con su tinta). Fondo de acuarela azul
-  noche con vetas claras que siguen el viento; la ola, el gran remolino doble en S (el compañero es
-  el grande girado media vuelta y más pequeño: se unen sin costura), con las corrientes que entran y
-  salen de ella; más corrientes que cruzan el cielo con las puntas enroscadas; once estrellas
-  regordetas en halos de aguadas (dorado, amarillo pálido y verde agua) con arcos de tinta que
-  giran, y la luna en cuarto creciente (sin cara) en su gran halo. Las cintas son de colores planos
-  con su luz, trazos limpios que fluyen despacio y su tinta. Se compone sobre la vista final (cada
-  elemento colocado respecto a los bordes: cabe igual en el ordenador y en un móvil en vertical),
-  cae como una aguada que baja desde lo alto y, antes, cada nube hace "puf" (se hincha un poco y se
-  encoge entera hasta desaparecer; al salir de la carta, vuelven). Las estrellitas de la cajita y
-  las del dibujo animado siguen brillando delante.
+  el cielo de "La noche estrellada" de Van Gogh como en la reproducción al pastel que mandó el
+  usuario, sólo el cielo, sobre las montañas de verdad (el Tunari, a la luz de la luna, con su
+  tinta). Todo son pinceladas largas y peinadas que siguen el viento: una corriente cuyas líneas van
+  casi horizontales con ondas, siguen abajo la franja verde amarilla que sube hacia la derecha y
+  rodean cada estrella como el agua una piedra. Las pinceladas van en franjas a lo largo de esas
+  líneas (tres capas desfasadas), partidas en tramos con su hueco: cada una entra apoyada, sale
+  afinándose, se desliza despacio y toma un color de su región (azules ultramar, cobalto y añil con
+  trazos cerúleos; la franja clara que llega desde la izquierda; la franja verde). Las ocho
+  estrellas y la luna son discos de pinceladas en redondo (núcleo amarillo, anillos blancos, verde
+  agua y celestes; la luna, verde amarilla y dorada alrededor del creciente naranja, sin cara); la
+  ola y su compañero son espirales de paso fijo que se enroscan como las agujas del reloj, con un
+  brazo claro que sale por arriba hacia el viento. En las orillas, unas pinceladas son del viento y
+  otras del disco, cada una entera (se decide por su eje). Se compone sobre la vista final (cabe
+  igual en el ordenador y en un móvil en vertical), cae como una aguada que baja desde lo alto y,
+  antes, cada nube hace "puf" (se hincha un poco y se encoge entera hasta desaparecer; al salir de
+  la carta, vuelven). De noche no salen las estrellitas del dibujo animado (no están en el cuadro)
+  y la película pierde casi todo su sepia, para que los azules y amarillos sigan vivos; las
+  estrellitas de la cajita siguen brillando delante.
 - **El ramo** (`RAMO`, `RELLENO`): delante de la cámara final, compuesto como el de las fotos (una
   gerbera, el lirio abierto con sus capullos, rosas, claveles de poeta, bocas de dragón, gipsófila,
   dianthus verdes, eucalipto y hojas de aspidistra) y rellenado, tupido y en cúpula, sin que ninguna
@@ -233,7 +239,8 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.18-flores-de-cerca`, `dibujo-v0.19-camara-espacio`, `dibujo-v0.20-region-de-verdad`,
 `dibujo-v0.21-flores-del-ramo`, `dibujo-v0.22-paseo-corazon`, `dibujo-v0.23-girasolar-y-mandos`,
 `dibujo-v0.24-palanca-tactil`, `dibujo-v0.25-carta-noche-estrellada`,
-`dibujo-v0.26-sobre-y-cuadro`, `dibujo-v0.27-noche-cuphead`.
+`dibujo-v0.26-sobre-y-cuadro`, `dibujo-v0.27-noche-cuphead`,
+`dibujo-v0.28-cielo-como-el-cuadro`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
