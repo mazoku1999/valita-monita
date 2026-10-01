@@ -16,15 +16,34 @@ import { BRUMA_GLSL } from './valle'
  * arriba de su nube y la altura de la base respecto del centro de la bola (en radios) y el tono
  * (x: rosado, y: azar, z: altura de la bola en su nube, 0 en la base y 1 en la cima).
  */
+/**
+ * Con la noche estrellada del final (`uNoche`, ver `features/cochabamba/store/carta.ts`), cada nube
+ * del valle hace "puf", como en los dibujos animados: se hincha un poco y se encoge entera hasta
+ * desaparecer, cada una a su tiempo (azar 0..1), antes de que la noche llegue al horizonte; al salir
+ * de la carta, vuelven. Devuelve la escala de la nube (1: como es; 0: no está).
+ */
+export const PUF_NUBE_GLSL = /* glsl */ `
+float pufNube(float noche, float azar) {
+  float t = clamp((smoothstep(0.02, 0.45, noche) - 0.4 * azar) / 0.6, 0.0, 1.0);
+  if (t < 0.3) return 1.0 + 0.12 * sin(3.14159265 * t / 0.3);
+  float u = (t - 0.3) / 0.7;
+  return 1.0 - u * u * (3.0 - 2.0 * u);
+}
+`
+
 export const NUBE_BOLA_VERT = /* glsl */ `
 attribute vec4 aBola;
 attribute vec4 aArriba;
 attribute vec4 aTono;
+// En el valle: el centro de su nube y el azar de la nube (en el globo no hay: vale (0, 0, 0, 1)).
+attribute vec4 aRacimo;
 
 uniform vec3 uCamara;
 uniform float uPixelesPorRadian;
 // Las nubes crecen desde nada al aparecer (0..1).
 uniform float uCrecer;
+// La noche estrellada del final (en el globo no se usa: 0).
+uniform float uNoche;
 
 varying vec3 vRayo;
 varying vec3 vVista;
@@ -36,9 +55,21 @@ varying vec3 vEjeV;
 // Términos de la proyección que dan la profundidad (el fragment shader no tiene la matriz).
 varying vec2 vProyeccion;
 
+${PUF_NUBE_GLSL}
+
 void main() {
   vec3 centro = aBola.xyz;
   float radio = aBola.w;
+  // El "puf" de la noche estrellada: la nube entera se encoge hacia su centro.
+  if (uNoche > 0.0) {
+    float puf = pufNube(uNoche, aRacimo.w);
+    centro = mix(aRacimo.xyz, centro, puf);
+    radio *= puf;
+    if (radio <= 0.0) {
+      gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+      return;
+    }
+  }
   vec3 haciaBola = centro - uCamara;
   float d = length(haciaBola);
   // Si la cámara está dentro (o rozándola), no se dibuja: se ve la niebla.
@@ -162,6 +193,6 @@ void main() {
     float distancia = t;
     color = mix(color, colorBruma(dir, uSol), uBruma.y * (1.0 - exp(-distancia / uBruma.x)));
   }
-  gl_FragColor = salidaCaricatura(color);
+  gl_FragColor = salidaNube(color);
 }
 `

@@ -54,6 +54,10 @@ export interface BolaNube {
   /** Altura de la base de su nube (km sobre el mar) y de la bola en su nube (0 abajo, 1 arriba). */
   base: number
   alto: number
+  /** El centro de su nube (km): hacia él se encoge entera cuando hace "puf" (ver PUF_NUBE_GLSL). */
+  cx: number
+  cy: number
+  cz: number
 }
 
 /** La nube de entrada: donde está la cámara al pasar del globo al valle (km) y su base (km sobre el mar). */
@@ -78,7 +82,7 @@ const racimo = (
     const lejos = radio * 0.62 * Math.sqrt(azar())
     const r = radio * (0.3 + 0.24 * azar()) * (1 - 0.3 * (lejos / radio))
     const alto = (0.3 + 0.55 * azar()) * (1 - aplastada)
-    bolas.push({ x: x + Math.cos(angulo) * lejos, y: y + Math.sin(angulo) * lejos, z: base + r * (0.25 + alto), r, base, alto: Math.min(1, alto + 0.25) })
+    bolas.push({ x: x + Math.cos(angulo) * lejos, y: y + Math.sin(angulo) * lejos, z: base + r * (0.25 + alto), r, base, alto: Math.min(1, alto + 0.25), cx: x, cy: y, cz: base + radio * 0.45 })
   }
 }
 
@@ -148,7 +152,7 @@ export function generarCumulos(semilla = 20261003): BolaNube[] {
     [1.9, -1.9, 7.1, 0.7],
     [2.6, -2.1, 7.7, 0.62],
   ]
-  for (const [x, y, z, r] of entrada) bolas.push({ x, y, z, r, base: NUBE_ENTRADA.base, alto: Math.min(1, (z - NUBE_ENTRADA.base) / 2) })
+  for (const [x, y, z, r] of entrada) bolas.push({ x, y, z, r, base: NUBE_ENTRADA.base, alto: Math.min(1, (z - NUBE_ENTRADA.base) / 2), cx: NUBE_ENTRADA.x, cy: NUBE_ENTRADA.y, cz: NUBE_ENTRADA.base + 1 })
 
   // Cúmulos a los lados del camino en el valle (por delante de la cámara al salir de la nube y más
   // abajo, hacia los bordes del cuadro), nunca a menos de 7° de la línea de vista hacia el corazón
@@ -201,6 +205,8 @@ export interface Nubes {
   bolas: Float32Array
   arriba: Float32Array
   tono: Float32Array
+  /** En el valle: el centro de la nube de cada bola y un azar de esa nube (para su "puf"). */
+  racimo?: Float32Array
   cantidad: number
 }
 
@@ -225,11 +231,19 @@ export function nubesEnGlobo(bolas: readonly BolaNube[], origen: THREE.Vector3, 
 /** Las nubes en el valle (m: x al este, y sobre el fondo del valle, z al sur), las de a menos de `radio` km. */
 export function nubesEnValle(bolas: readonly BolaNube[], radio = 70): Nubes {
   const cerca = bolas.filter((b) => Math.hypot(b.x, b.y) < radio)
-  const datos: Nubes = { bolas: new Float32Array(cerca.length * 4), arriba: new Float32Array(cerca.length * 4), tono: new Float32Array(cerca.length * 4), cantidad: cerca.length }
+  const datos: Nubes = {
+    bolas: new Float32Array(cerca.length * 4),
+    arriba: new Float32Array(cerca.length * 4),
+    tono: new Float32Array(cerca.length * 4),
+    racimo: new Float32Array(cerca.length * 4),
+    cantidad: cerca.length,
+  }
   cerca.forEach((b, i) => {
     datos.bolas.set([b.x * 1000, b.z * 1000 - PISO_VALLE, -b.y * 1000, b.r * 1000], i * 4)
     datos.arriba.set([0, 1, 0, (b.base - b.z) / b.r], i * 4)
     datos.tono.set([0, ((i * 0.61803) % 1 + 1) % 1, b.alto, 0], i * 4)
+    const azarNube = Math.abs(Math.sin(b.cx * 12.9898 + b.cy * 78.233) * 43758.5453) % 1
+    datos.racimo?.set([b.cx * 1000, b.cz * 1000 - PISO_VALLE, -b.cy * 1000, azarNube], i * 4)
   })
   return datos
 }
@@ -245,6 +259,7 @@ export const crearBolasInstanciadas = (nubes: Nubes): THREE.InstancedBufferGeome
   geometria.setAttribute('aBola', new THREE.InstancedBufferAttribute(nubes.bolas, 4))
   geometria.setAttribute('aArriba', new THREE.InstancedBufferAttribute(nubes.arriba, 4))
   geometria.setAttribute('aTono', new THREE.InstancedBufferAttribute(nubes.tono, 4))
+  if (nubes.racimo) geometria.setAttribute('aRacimo', new THREE.InstancedBufferAttribute(nubes.racimo, 4))
   geometria.instanceCount = nubes.cantidad
   return geometria
 }

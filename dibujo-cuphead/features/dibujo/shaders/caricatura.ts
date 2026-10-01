@@ -12,6 +12,12 @@ vec4 salidaCaricatura(vec3 srgb) {
   return vec4(pow(clamp(srgb, 0.0, 1.0), vec3(2.2)), 0.5);
 }
 
+// Lo mismo para las nubes del valle (alfa 0.62, también de caricatura): de noche, las que quedan
+// sobre las montañas se vuelven cielo (ver CIELO_FRAG y CRESTA_FRAG en dibujo.ts).
+vec4 salidaNube(vec3 srgb) {
+  return vec4(pow(clamp(srgb, 0.0, 1.0), vec3(2.2)), 0.62);
+}
+
 // Zona de color plano: 0 → 1 al cruzar el umbral, con el borde a un píxel.
 float zona(float x, float umbral) {
   float w = max(fwidth(x), 1e-5);

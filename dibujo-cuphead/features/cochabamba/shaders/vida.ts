@@ -1,4 +1,5 @@
 import { SALIDA_CARICATURA } from '@/features/dibujo/shaders/caricatura'
+import { PUF_NUBE_GLSL } from './nubesBolas'
 import { BRUMA_GLSL } from './valle'
 
 /**
@@ -269,7 +270,7 @@ attribute vec4 aAzar;
 uniform vec3 uCamara;
 uniform vec3 uSol;
 uniform float uTiempo;
-// (La noche estrellada del final las cubre al caer: ver COMPONER_FRAG.)
+// La noche estrellada del final: las nubes hacen "puf" (ver PUF_NUBE_GLSL).
 uniform float uNoche;
 
 varying vec2 vLocal;
@@ -281,11 +282,17 @@ varying float vDelCielo;
 
 ${BRUMA_GLSL}
 
+${PUF_NUBE_GLSL}
+
 void main() {
   vDelCielo = step(1.0, aAzar.w);
   // Van despacio hacia el oeste con el viento de la mañana.
   vec3 base = aCentro.xyz + vec3(-4.0 * uTiempo, 0.0, 0.0);
-  float ancho = aCentro.w;
+  float ancho = aCentro.w * pufNube(uNoche, aAzar.x);
+  if (ancho < 1e-3) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
   vec3 aCamara = uCamara - base;
   vec3 ejeX = normalize(vec3(aCamara.z, 0.0, -aCamara.x));
   // En unidades del medio ancho: x de -1 a 1, y de 0 (la base) a 1.4.
@@ -363,7 +370,7 @@ void main() {
   // Las del cielo se quedan con la profundidad del cielo: el pase entinta la cresta que tengan
   // delante y no les pone contorno. Las de las faldas, la suya (tapan la cresta que haya detrás).
   gl_FragDepth = vDelCielo > 0.5 ? max(gl_FragCoord.z, 0.9999905) : gl_FragCoord.z;
-  gl_FragColor = salidaCaricatura(mix(color, vColorBruma, vBruma));
+  gl_FragColor = salidaNube(mix(color, vColorBruma, vBruma));
 }
 `
 

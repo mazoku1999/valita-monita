@@ -169,17 +169,18 @@ flores como las de un ramo (gerberas, rosas, lirios, clavelinas, bocas de dragó
   abrir otra vez) y guardar o sacar la carta para ver el cielo (arriba a la derecha). El texto es
   el del usuario; sólo se ajusta el espacio de las comas.
 - **La noche estrellada** (`features/dibujo/shaders/nocheEstrellada.ts`, en el pase de dibujo):
-  compuesta como el cuadro de Van Gogh y dibujada a la manera del dibujo animado. El cielo es un
-  campo de pinceladas cortas, cada una orientada con el viento: ondas horizontales, el gran remolino
-  doble del centro (su compañero gira al revés: la ola) y uno pequeño a la derecha, y anillos
-  alrededor de las once estrellas y de la luna; su color sale de dónde están (los halos amarillos y
-  verdosos, los brazos claros de los remolinos, las franjas claras del viento, los azules de la
-  noche). Abajo, las colinas azules con pinceladas que siguen su lomo, el pueblo con sus ventanas
-  encendidas apiñado alrededor de la iglesia de aguja alta y, a la izquierda, el ciprés como una
-  llama oscura que sube hasta arriba; la luna en cuarto creciente (sin cara). Todo fluye despacio.
-  Se compone sobre la vista final (cada elemento colocado respecto a los bordes: cabe igual en el
-  ordenador y en un móvil en vertical) y cae sobre la escena como una aguada que baja desde lo
-  alto.
+  el cielo de "La noche estrellada" de Van Gogh dibujado al estilo de Cuphead, sólo el cielo, sobre
+  las montañas de verdad (el Tunari, a la luz de la luna, con su tinta). Fondo de acuarela azul
+  noche con vetas claras que siguen el viento; la ola, el gran remolino doble en S (el compañero es
+  el grande girado media vuelta y más pequeño: se unen sin costura), con las corrientes que entran y
+  salen de ella; más corrientes que cruzan el cielo con las puntas enroscadas; once estrellas
+  regordetas en halos de aguadas (dorado, amarillo pálido y verde agua) con arcos de tinta que
+  giran, y la luna en cuarto creciente (sin cara) en su gran halo. Las cintas son de colores planos
+  con su luz, trazos limpios que fluyen despacio y su tinta. Se compone sobre la vista final (cada
+  elemento colocado respecto a los bordes: cabe igual en el ordenador y en un móvil en vertical),
+  cae como una aguada que baja desde lo alto y, antes, cada nube hace "puf" (se hincha un poco y se
+  encoge entera hasta desaparecer; al salir de la carta, vuelven). Las estrellitas de la cajita y
+  las del dibujo animado siguen brillando delante.
 - **El ramo** (`RAMO`, `RELLENO`): delante de la cámara final, compuesto como el de las fotos (una
   gerbera, el lirio abierto con sus capullos, rosas, claveles de poeta, bocas de dragón, gipsófila,
   dianthus verdes, eucalipto y hojas de aspidistra) y rellenado, tupido y en cúpula, sin que ninguna
@@ -232,7 +233,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.18-flores-de-cerca`, `dibujo-v0.19-camara-espacio`, `dibujo-v0.20-region-de-verdad`,
 `dibujo-v0.21-flores-del-ramo`, `dibujo-v0.22-paseo-corazon`, `dibujo-v0.23-girasolar-y-mandos`,
 `dibujo-v0.24-palanca-tactil`, `dibujo-v0.25-carta-noche-estrellada`,
-`dibujo-v0.26-sobre-y-cuadro`.
+`dibujo-v0.26-sobre-y-cuadro`, `dibujo-v0.27-noche-cuphead`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

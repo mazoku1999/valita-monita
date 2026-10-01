@@ -6,7 +6,7 @@
  */
 
 import { CIELO_ACUARELA_GLSL, CIELO_MANANA_GLSL, PALETA_EPOCA_GLSL, PAPEL_GLSL, RUIDO3_GLSL } from './acuarela'
-import { NOCHE_ESTRELLADA_GLSL } from './nocheEstrellada'
+import { CAIDA_NOCHE_GLSL, NOCHE_ESTRELLADA_GLSL } from './nocheEstrellada'
 
 export const OKLAB_GLSL = /* glsl */ `
 vec3 linealDesdeSRGB(vec3 c) {
@@ -351,6 +351,8 @@ export const COMPONER_FRAG = /* glsl */ `
 // La escena a resolución completa: lo que ya viene dibujado en caricatura se toma tal cual.
 uniform sampler2D uEscena;
 uniform sampler2D uColorSuave;
+// La profundidad de la escena (de noche, lo que flota sin cuerpo no se oscurece).
+uniform sampler2D uProfundidad;
 // Contornos (R: tinta, G: líneas de color entre bandas), ver CONTORNO_FRAG.
 uniform sampler2D uContornos;
 // El agujero de caricatura (color lineal y cobertura en A) y cuánto se ve (fuera del horizonte).
@@ -396,6 +398,7 @@ ${TONO_GLSL}
 ${PALETA_EPOCA_GLSL}
 ${PAPEL_GLSL}
 ${RUIDO3_GLSL}
+${CAIDA_NOCHE_GLSL}
 ${NOCHE_ESTRELLADA_GLSL}
 
 vec3 direccionEnValle(vec2 uv) {
@@ -473,20 +476,17 @@ void main() {
   vec4 dibujado = texelFetch(uEscena, ivec2(vUv * vec2(textureSize(uEscena, 0))), 0);
   if (esCaricatura(dibujado.a)) c = srgbDesdeLineal(dibujado.rgb);
 
-  // La noche estrellada del final: el cuadro (cielo y paisaje) cae como una aguada que baja desde lo
-  // alto, con su orilla; lo que no cubre pasa a la luz de la luna.
-  float cubreNoche = 0.0;
+  // La noche estrellada del final: cae sobre el cielo como una aguada que baja desde lo alto, con su
+  // orilla (las nubes ya hicieron "puf"); lo de abajo pasa a la luz de la luna, salvo lo que flota sin
+  // cuerpo (las estrellitas de la cajita).
   if (uNoche > 0.0005) {
     vec3 dValle = direccionEnValle(vUv);
     vec2 caida = caidaNoche(dValle);
-    vec4 cuadro = caida.x > 0.001 ? cuadroNoche(dValle) : vec4(0.0);
-    // (Sólo lo de abajo: lo que haya en el cielo, como las estrellitas de la cajita, sigue brillando.)
-    c = mix(c, gradoNoche(c), (1.0 - cielo.a) * smoothstep(0.0, 0.7, uNoche) * (1.0 - smoothstep(-0.02, 0.1, dValle.y)));
-    // Donde ya cayó la noche, el cuadro lo cubre todo (las nubes y las estrellitas de la cajita se
-    // vuelven parte del cuadro; encogidas, las nubes parecían pompas).
-    cubreNoche = caida.x;
-    c = mix(c, cuadro.rgb, cubreNoche);
-    c *= 1.0 - 0.22 * caida.y;
+    float esNube = dibujado.a > 0.57 && dibujado.a < 0.67 ? 1.0 : 0.0;
+    // (Las nubes lejanas también escriben la profundidad del cielo, a propósito: ésas sí se cubren.)
+    float sinCuerpo = esCaricatura(dibujado.a) && esNube < 0.5 && texelFetch(uProfundidad, ivec2(vUv * vec2(textureSize(uProfundidad, 0))), 0).r >= 0.99999 ? 1.0 : 0.0;
+    c = mix(c, gradoNoche(c), (1.0 - cielo.a * (1.0 - esNube)) * (1.0 - sinCuerpo) * smoothstep(0.0, 0.7, uNoche));
+    if (caida.x > 0.001 && cielo.a > 0.001) c = mix(c, nocheEstrellada(dValle) * (1.0 - 0.22 * caida.y), caida.x * cielo.a * (1.0 - sinCuerpo));
   }
 
   // El agujero de caricatura por encima.
@@ -500,8 +500,7 @@ void main() {
   // Tinta: líneas de color entre bandas y contornos negros.
   vec2 lineas = texture(uContornos, vUv).rg;
   c = mix(c, c * 0.5, smoothstep(0.12, 0.4, lineas.g) * 0.8);
-  // (Donde ya está el cuadro, sin la tinta de la escena de debajo.)
-  c = mix(c, uTinta, smoothstep(0.08, 0.3, lineas.r) * (1.0 - cubreNoche));
+  c = mix(c, uTinta, smoothstep(0.08, 0.3, lineas.r));
 
   // Dentro de una nube: niebla de dibujo, crema rosada con volutas lilas que se abren hacia los
   // bordes al avanzar (la cámara las atraviesa). Al entrar, las volutas cierran desde los bordes;

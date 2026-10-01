@@ -57,9 +57,10 @@ export const CENTRO_CAJITA: readonly [number, number, number] = [CAJITA.x, CAJIT
 
 /**
  * La vista final, mirando al cielo: hacia el noroeste (el Tunari asoma abajo, como las colinas del
- * cuadro) y alzada `alzado` rad sobre el horizonte.
+ * cuadro: el usuario quería que se siguieran viendo las montañas) y alzada `alzado` rad sobre el
+ * horizonte.
  */
-export const VISTA_CIELO = { rumbo: [-Math.SQRT1_2, -Math.SQRT1_2] as const, alzado: 0.47 } as const
+export const VISTA_CIELO = { rumbo: [-Math.SQRT1_2, -Math.SQRT1_2] as const, alzado: 0.4 } as const
 
 /**
  * Coreografía de la apertura, en s desde que la cámara llega junto a la cajita: la tapa salta, la

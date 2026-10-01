@@ -195,6 +195,7 @@ export class PasoDibujo extends Pass {
       uNieblaSentido: { value: 1 },
       uRotacionValle: { value: VALLE_EN_ESCENA.rotacion },
       uNoche: { value: 0 },
+      uProfundidad: { value: null },
       uMarcoNoche: { value: VALLE_EN_ESCENA.marcoNoche },
       uTanNoche: { value: 0.364 },
       uAspectoNoche: { value: 16 / 9 },
@@ -277,9 +278,7 @@ export class PasoDibujo extends Pass {
   }
 
   override setDepthTexture(textura: THREE.Texture): void {
-    this.matCielo.uniforms.uProfundidad.value = textura
-    this.matContorno.uniforms.uProfundidad.value = textura
-    this.matDestellos.uniforms.uProfundidad.value = textura
+    for (const m of [this.matCielo, this.matContorno, this.matDestellos, this.matComponer]) m.uniforms.uProfundidad.value = textura
   }
 
   private dibujar(renderer: THREE.WebGLRenderer, materialQuad: THREE.ShaderMaterial, destino: THREE.WebGLRenderTarget | null): void {
@@ -380,6 +379,7 @@ export class PasoDibujo extends Pass {
     this.desenfocar(renderer, this.aguadaIntermedia, { x: 0, y: pasoA / this.cuarto.height }, this.aguada)
 
     // 2. Cielo en acuarela con los rayos de sol del agujero.
+    const noche = VALLE_EN_ESCENA.noche
     const uc = this.matCielo.uniforms
     uc.uEscena.value = inputBuffer.texture
     uc.uCieloPintado.value = uc.uProfundidad.value ? this.cieloPintado : 0
@@ -425,8 +425,8 @@ export class PasoDibujo extends Pass {
       ud.uPulsaciones.value = this.pulsaciones
       ud.uGasColor.value = gas ? gas.textures[0] : null
       ud.uGasVisible.value = gasVisible
-      // De día no hay estrellas (en la noche estrellada del final, las del cuadro: estas no están en él).
-      ud.uEstrellasVisibles.value = uc.uCieloPintado.value * (1 - VALLE_EN_ESCENA.dia)
+      // De día no hay estrellas; en la noche estrellada del final, sí (cuando la noche ya cubre el cielo).
+      ud.uEstrellasVisibles.value = Math.max(uc.uCieloPintado.value * (1 - VALLE_EN_ESCENA.dia), suavizar(0.6, 0.95, noche))
       ud.uBandaVisible.value = ud.uProfundidad.value ? this.bandaVisible * suavizar(0, 1, gasVisible) : 0
       renderer.setRenderTarget(this.dibujo)
       renderer.render(this.escenaDestellos, this.camaraQuad)
