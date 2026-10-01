@@ -231,7 +231,6 @@ export class PasoDibujo extends Pass {
         uGasVisible: { value: 1 },
         uEstrellasVisibles: { value: 1 },
         uBandaVisible: { value: 1 },
-        uHuecoCarta: { value: 0 },
         uTinta: { value: new THREE.Vector3(...TINTA.color) },
       },
       depthTest: false,
@@ -426,9 +425,8 @@ export class PasoDibujo extends Pass {
       ud.uPulsaciones.value = this.pulsaciones
       ud.uGasColor.value = gas ? gas.textures[0] : null
       ud.uGasVisible.value = gasVisible
-      // De día no hay estrellas; en la noche estrellada del final, sí (cuando la noche ya cubre el cielo).
-      ud.uEstrellasVisibles.value = Math.max(uc.uCieloPintado.value * (1 - VALLE_EN_ESCENA.dia), suavizar(0.6, 0.95, VALLE_EN_ESCENA.noche))
-      ud.uHuecoCarta.value = suavizar(0.6, 0.95, VALLE_EN_ESCENA.noche)
+      // De día no hay estrellas (en la noche estrellada del final, las del cuadro: estas no están en él).
+      ud.uEstrellasVisibles.value = uc.uCieloPintado.value * (1 - VALLE_EN_ESCENA.dia)
       ud.uBandaVisible.value = ud.uProfundidad.value ? this.bandaVisible * suavizar(0, 1, gasVisible) : 0
       renderer.setRenderTarget(this.dibujo)
       renderer.render(this.escenaDestellos, this.camaraQuad)

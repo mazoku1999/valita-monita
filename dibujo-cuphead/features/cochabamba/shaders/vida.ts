@@ -269,7 +269,7 @@ attribute vec4 aAzar;
 uniform vec3 uCamara;
 uniform vec3 uSol;
 uniform float uTiempo;
-// La noche estrellada del final: las nubes se deshacen (en el cuadro no hay nubes).
+// (La noche estrellada del final las cubre al caer: ver COMPONER_FRAG.)
 uniform float uNoche;
 
 varying vec2 vLocal;
@@ -285,7 +285,7 @@ void main() {
   vDelCielo = step(1.0, aAzar.w);
   // Van despacio hacia el oeste con el viento de la mañana.
   vec3 base = aCentro.xyz + vec3(-4.0 * uTiempo, 0.0, 0.0);
-  float ancho = aCentro.w * (1.0 - smoothstep(0.0, 0.45, uNoche));
+  float ancho = aCentro.w;
   vec3 aCamara = uCamara - base;
   vec3 ejeX = normalize(vec3(aCamara.z, 0.0, -aCamara.x));
   // En unidades del medio ancho: x de -1 a 1, y de 0 (la base) a 1.4.

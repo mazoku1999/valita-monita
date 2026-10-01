@@ -6,7 +6,7 @@ import * as THREE from 'three'
 import { CAJITA, CENTRO_CAJITA, COREOGRAFIA, VISTA_CIELO } from '../constantes/carta'
 import { CAMARA_VALLE } from '../constantes/valle'
 import { CAJITA_FRAG, CAJITA_VERT, DESTELLO_CAJITA_FRAG, DESTELLO_CAJITA_VERT } from '../shaders/cajita'
-import { CARTA, desdeLlegada } from '../store/carta'
+import { CARTA, desdeLlegada, segundosSalida } from '../store/carta'
 import { crearQuadInstanciado } from '../utils/flores'
 import type { UniformesValle } from './VidaDelValle'
 
@@ -15,7 +15,8 @@ import type { UniformesValle } from './VidaDelValle'
  * lazo dorados, sobre un tocón entre las flores, a la derecha del lirio del ramo. Cerrada, de vez en
  * cuando se menea (como un regalo que quiere que lo abran) y titilan unas estrellitas a su alrededor.
  * Al abrirla se encoge un instante, la tapa salta por los aires dando vueltas, de dentro sale luz y
- * una lluvia de estrellitas sube en espiral hacia el cielo (la cámara la sigue con la mirada).
+ * una lluvia de estrellitas sube en espiral hacia el cielo (la cámara la sigue con la mirada). Al
+ * salir de la carta, la tapa vuelve a caer en su sitio con un rebote: se puede abrir otra vez.
  * Va en las coordenadas del valle (dentro de su grupo).
  */
 
@@ -149,8 +150,9 @@ export function Cajita({ uniformes }: { uniformes: UniformesValle }) {
     const tapaGrupo = grupoTapa.current
     if (!caja || !tapaGrupo) return
     const t = clock.getElapsedTime()
-    const s = desdeLlegada()
-    const abierta = CARTA.fase !== 'cerrada' && s >= COREOGRAFIA.tapa
+    const salida = segundosSalida()
+    const s = CARTA.fase === 'saliendo' ? 1e3 : desdeLlegada()
+    const abierta = (CARTA.fase === 'abriendo' || CARTA.fase === 'leyendo') && s >= COREOGRAFIA.tapa
     // Cerrada: un meneo de vez en cuando; al abrirla, un temblor y se encoge antes de saltar la tapa.
     let meneo = 0
     let aplastar = 0
@@ -169,8 +171,17 @@ export function Cajita({ uniformes }: { uniformes: UniformesValle }) {
     caja.rotation.z = meneo
     caja.scale.set(1 + aplastar * 0.5, 1 - aplastar, 1 + aplastar * 0.5)
 
-    // La tapa: sobre la caja o por los aires (sube, da vueltas, cae a un lado y desaparece).
-    if (!abierta) {
+    // La tapa: sobre la caja o por los aires (sube, da vueltas, cae a un lado y desaparece); al salir,
+    // vuelve a caer desde arriba y rebota en su sitio.
+    if (salida >= 0) {
+      const k = (salida - 1.3) / 0.55
+      tapaGrupo.visible = k > 0
+      const caida = Math.max(0, 1 - k)
+      const rebote = k > 1 ? 0.025 * Math.exp(-(k - 1) * 6) * Math.abs(Math.sin((k - 1) * 9)) : 0
+      tapaGrupo.position.set(0, alto + 0.55 * caida * caida + rebote, 0)
+      tapaGrupo.rotation.set(0, 1.2 * caida, 0.6 * caida)
+      caja.scale.set(1, 1, 1)
+    } else if (!abierta) {
       tapaGrupo.visible = true
       tapaGrupo.position.set(0, alto * (1 - aplastar), 0)
       tapaGrupo.rotation.set(0, 0, 0)

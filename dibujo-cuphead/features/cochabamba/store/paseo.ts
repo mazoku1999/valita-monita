@@ -1,3 +1,4 @@
+import { CAJITA } from '../constantes/carta'
 import { distanciaCorazon } from '../utils/corazon'
 
 /**
@@ -195,6 +196,22 @@ export function avanzarPaseo(paso: number, posado: boolean, rumbo: number, inici
     if (contra > 0) {
       paseo.vx -= nx * contra
       paseo.vz -= nz * contra
+    }
+  }
+  // El tocón de la cajita: no se atraviesa (uno lo rodea, deslizándose).
+  const tx = x - CAJITA.x
+  const tz = z - CAJITA.z
+  const aTocon = Math.hypot(tx, tz)
+  const radioTocon = 0.45
+  if (aTocon < radioTocon) {
+    const nx = aTocon > 1e-6 ? tx / aTocon : 1
+    const nz = aTocon > 1e-6 ? tz / aTocon : 0
+    x = CAJITA.x + nx * radioTocon
+    z = CAJITA.z + nz * radioTocon
+    const contra = -(paseo.vx * nx + paseo.vz * nz)
+    if (contra > 0) {
+      paseo.vx += nx * contra
+      paseo.vz += nz * contra
     }
   }
   paseo.x = x - inicioX

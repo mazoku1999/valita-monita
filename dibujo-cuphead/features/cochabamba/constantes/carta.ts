@@ -3,7 +3,7 @@ import { CAMARA_VALLE } from './valle'
 /**
  * La carta del final, tal como la escribió el usuario para su novia (por su aniversario), párrafo a
  * párrafo. Al mostrarla sólo se ajusta el espacio de las comas (`ajustarComas`); las palabras van tal
- * cual. El primero es el saludo y el último la despedida (con letra caligráfica).
+ * cual. El primero es el saludo y el último la despedida.
  */
 export const CARTA_PARRAFOS: readonly string[] = [
   'Amor...',
@@ -22,12 +22,6 @@ export const CARTA_PARRAFOS: readonly string[] = [
 
 /** " ,palabra" → ", palabra": el espacio de las comas, como en la letra impresa. */
 export const ajustarComas = (texto: string): string => texto.replace(/\s*,\s*/g, ', ')
-
-/**
- * Tiempos de la carta: la escritura de cada letra (s), lo que dura como mínimo cada párrafo y lo que
- * se le da por letra para leerlo (s), y el fundido entre párrafos (s).
- */
-export const RITMO_CARTA = { porLetra: 0.026, minimo: 4.8, base: 2.8, lectura: 0.056, fundido: 0.8 } as const
 
 const FINAL = CAMARA_VALLE[CAMARA_VALLE.length - 1]
 const ADELANTE = ((): [number, number] => {
@@ -75,13 +69,14 @@ export const COREOGRAFIA = {
   /** A esta distancia (m, en horizontal) o menos no hace falta acercarse; si no, hasta `acercarse`. */
   cerca: 2.5,
   acercarse: 1.9,
-  /** Velocidad al acercarse (m/s) y altura de los ojos (m). */
+  /** Velocidad al acercarse (m/s) y altura de los ojos (m: la de pie paseando, para devolver los mandos sin salto). */
   velocidad: 2.2,
-  ojos: 1.05,
+  ojos: 1.15,
   tapa: 0.6,
   inclinarDesde: 1.1,
   inclinar: 4.6,
   nocheDesde: 1.3,
   noche: 5.2,
-  carta: 6.6,
+  /** Cuándo llega el sobre (un momento después de caer la noche, para ver el cuadro). */
+  carta: 7.6,
 } as const

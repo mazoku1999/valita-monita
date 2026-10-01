@@ -89,3 +89,42 @@ export function poseCoreografia(c: Coreografia, t: number, posicion: THREE.Vecto
   direccion.set(Math.sin(rumbo) * Math.cos(alzado), Math.sin(alzado), Math.cos(rumbo) * Math.cos(alzado))
   return suave((s - COREOGRAFIA.nocheDesde) / COREOGRAFIA.noche)
 }
+
+/**
+ * La salida (botón de salir o Escape): desde donde esté la cámara (y lo que haya caído la noche), la
+ * noche se levanta como una aguada que sube y la mirada baja hasta la cajita, algo por encima de
+ * ella (se ve el campo). Al terminar, `EscenaCochabamba` devuelve los mandos con esa pose.
+ */
+export interface Salida {
+  posicion: THREE.Vector3
+  rumboDesde: number
+  alzadoDesde: number
+  nocheDesde: number
+  rumboHasta: number
+  alzadoHasta: number
+}
+
+export const DURACION_SALIDA = 3.0
+
+export function prepararSalida(posicion: THREE.Vector3, direccion: THREE.Vector3, noche: number): Salida {
+  const d = direccion.clone().normalize()
+  haciaCaja.set(CENTRO_CAJITA[0], CENTRO_CAJITA[1], CENTRO_CAJITA[2]).sub(posicion).normalize()
+  return {
+    posicion: posicion.clone(),
+    rumboDesde: Math.atan2(d.x, d.z),
+    alzadoDesde: Math.asin(Math.min(1, Math.max(-1, d.y))),
+    nocheDesde: noche,
+    rumboHasta: Math.atan2(haciaCaja.x, haciaCaja.z),
+    alzadoHasta: Math.max(-0.3, Math.asin(Math.min(1, Math.max(-1, haciaCaja.y))) * 0.55),
+  }
+}
+
+/** La pose a los `t` segundos de salir. Devuelve la noche que queda (0..1). */
+export function poseSalida(c: Salida, t: number, posicion: THREE.Vector3, direccion: THREE.Vector3): number {
+  posicion.copy(c.posicion)
+  const k = suave((t - 0.2) / (DURACION_SALIDA - 0.5))
+  const rumbo = c.rumboDesde + diferenciaAngulo(c.rumboHasta, c.rumboDesde) * k
+  const alzado = c.alzadoDesde + (c.alzadoHasta - c.alzadoDesde) * k
+  direccion.set(Math.sin(rumbo) * Math.cos(alzado), Math.sin(alzado), Math.cos(rumbo) * Math.cos(alzado))
+  return c.nocheDesde * (1 - suave(t / (DURACION_SALIDA * 0.8)))
+}

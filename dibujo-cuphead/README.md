@@ -156,26 +156,30 @@ flores como las de un ramo (gerberas, rosas, lirios, clavelinas, bocas de dragó
   final. (Con mil hojas sueltas grandes a tinta negra y pétalos caídos, el suelo se veía demasiado
   cargado.)
 - **La cajita y la carta** (`components/Cajita.tsx`, `store/carta.ts`, `constantes/carta.ts`,
-  `utils/coreografia.ts`, `components/CartaEstrellada.tsx`): entre las flores, sobre un tocón, una
-  cajita de regalo celeste con lunares y lazo dorado que de vez en cuando se menea y titila. Se abre
-  tocándola o con el botón del regalo: la cámara se acerca si hace falta, la tapa salta dando
-  vueltas, de dentro sale luz y una lluvia de estrellitas sube en espiral; la cámara la sigue hasta
-  el cielo del noroeste y ya no hay mandos (ni scroll): sólo la carta. Las nubes se deshacen, las
-  mariposas se van y el cielo se vuelve la noche estrellada; luego la carta se escribe en el cielo,
-  párrafo a párrafo, con tinta dorada que se aclara al secarse (el saludo y la despedida en
-  caligrafía, Pinyon Script; el resto en Cormorant Garamond cursiva). Tocar termina de escribir o
-  pasa al siguiente (también →, espacio, la rueda o deslizar; ← vuelve); una estrellita por párrafo
-  abajo y, al final, volver a leerla. El texto es el del usuario; sólo se ajusta el espacio de las
-  comas.
+  `utils/coreografia.ts`, `components/CartaEstrellada.tsx`): entre las flores, sobre un tocón (que
+  no se atraviesa al pasear), una cajita de regalo celeste con lunares y lazo dorado que de vez en
+  cuando se menea. Se abre tocándola o con el botón del regalo: la cámara se acerca si hace falta,
+  la tapa salta dando vueltas, sale luz y una lluvia de estrellitas sube en espiral; la cámara la
+  sigue hasta el cielo, ya sin mandos ni scroll, y cae la noche. Entonces llega un sobre de papel
+  con su sello de lacre (un girasol), se abre la solapa, la carta asoma y se despliega: papel crema
+  con su grano y sus dobleces, un girasol dibujado y el texto del usuario escrito a mano (Caveat)
+  en tinta azul, con la despedida en tinta roja; si no cabe, se desplaza dentro de la hoja (con una
+  flechita que avisa). Botones de cristal: salir (arriba a la izquierda, o Escape: la noche se
+  levanta, la mirada vuelve a la cajita, la tapa cae en su sitio y vuelven los mandos; se puede
+  abrir otra vez) y guardar o sacar la carta para ver el cielo (arriba a la derecha). El texto es
+  el del usuario; sólo se ajusta el espacio de las comas.
 - **La noche estrellada** (`features/dibujo/shaders/nocheEstrellada.ts`, en el pase de dibujo):
-  como la de Van Gogh pero dibujada como el resto del dibujo animado: fondo de acuarela azul noche,
-  cintas de viento claras con su tinta y sus rayas que se enroscan en dos remolinos (como la ola del
-  cuadro) y uno pequeño, trazos cortos que siguen el viento, la luna en cuarto creciente (sin cara)
-  con su gran halo y once estrellas regordetas de cinco puntas con halos y brazos en espiral que
-  giran despacio. Se compone sobre la vista final (cabe igual en el ordenador y en un móvil en
-  vertical), cae como una aguada que baja desde lo alto con su orilla, lo dibujado aparece de uno en
-  uno y lo que no es cielo pasa a la luz de la luna. En el centro, donde se escribe la carta, el
-  cielo está más tranquilo y sin estrellas sueltas.
+  compuesta como el cuadro de Van Gogh y dibujada a la manera del dibujo animado. El cielo es un
+  campo de pinceladas cortas, cada una orientada con el viento: ondas horizontales, el gran remolino
+  doble del centro (su compañero gira al revés: la ola) y uno pequeño a la derecha, y anillos
+  alrededor de las once estrellas y de la luna; su color sale de dónde están (los halos amarillos y
+  verdosos, los brazos claros de los remolinos, las franjas claras del viento, los azules de la
+  noche). Abajo, las colinas azules con pinceladas que siguen su lomo, el pueblo con sus ventanas
+  encendidas apiñado alrededor de la iglesia de aguja alta y, a la izquierda, el ciprés como una
+  llama oscura que sube hasta arriba; la luna en cuarto creciente (sin cara). Todo fluye despacio.
+  Se compone sobre la vista final (cada elemento colocado respecto a los bordes: cabe igual en el
+  ordenador y en un móvil en vertical) y cae sobre la escena como una aguada que baja desde lo
+  alto.
 - **El ramo** (`RAMO`, `RELLENO`): delante de la cámara final, compuesto como el de las fotos (una
   gerbera, el lirio abierto con sus capullos, rosas, claveles de poeta, bocas de dragón, gipsófila,
   dianthus verdes, eucalipto y hojas de aspidistra) y rellenado, tupido y en cúpula, sin que ninguna
@@ -213,8 +217,9 @@ Además de las del original (`?vista=canto|anillo|elevada|elevadaCercana|inferio
 
 Con el ratón: arrastrar orbita (o, en el valle, gira la cabeza), Ctrl + rueda o pellizcar acerca,
 doble clic vuelve al camino. Al final, en el corazón: W/S o ↑/↓ (andar), A/D (de lado), ←/→
-(girar) y Mayúsculas (correr); arrastrar mira alrededor. En pantallas táctiles, la palanca. En
-desarrollo, `window.__carta.abrir()` abre la cajita y `window.__carta.saltar(s)` adelanta su reloj.
+(girar) y Mayúsculas (correr); arrastrar mira alrededor. En pantallas táctiles, la palanca. En la
+carta, Escape sale. En desarrollo, `window.__carta.abrir()` / `salir()` abren y cierran la cajita y
+`window.__carta.saltar(s)` adelanta su reloj.
 
 ## Versiones
 
@@ -226,7 +231,8 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.15-flores`, `dibujo-v0.16-vida-y-destino`, `dibujo-v0.17-nubes-de-verdad`,
 `dibujo-v0.18-flores-de-cerca`, `dibujo-v0.19-camara-espacio`, `dibujo-v0.20-region-de-verdad`,
 `dibujo-v0.21-flores-del-ramo`, `dibujo-v0.22-paseo-corazon`, `dibujo-v0.23-girasolar-y-mandos`,
-`dibujo-v0.24-palanca-tactil`, `dibujo-v0.25-carta-noche-estrellada`.
+`dibujo-v0.24-palanca-tactil`, `dibujo-v0.25-carta-noche-estrellada`,
+`dibujo-v0.26-sobre-y-cuadro`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
