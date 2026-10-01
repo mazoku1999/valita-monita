@@ -96,24 +96,54 @@ function fundir(destino: number, segundos: number): void {
   }, 40)
 }
 
-/** (En un gesto.) Web Audio para los fundidos: se crea una vez y el elemento pasa por ella. */
-function conectarWebAudio(audio: HTMLAudioElement): void {
+/** (En un gesto.) El Web Audio de la página: se crea una vez (y se reanuda si se paró). */
+function asegurarContexto(): AudioContext | null {
   if (!contexto) {
     const Constructor = window.AudioContext ?? (window as VentanaConWebkit).webkitAudioContext
-    if (Constructor) {
-      try {
-        contexto = new Constructor()
-        const fuente = contexto.createMediaElementSource(audio)
-        ganancia = contexto.createGain()
-        ganancia.gain.value = audio.paused || audio.muted ? 0 : 1
-        fuente.connect(ganancia).connect(contexto.destination)
-      } catch {
-        contexto = null
-        ganancia = null
-      }
+    try {
+      contexto = Constructor ? new Constructor() : null
+    } catch {
+      contexto = null
     }
   }
+  reanudarAudio()
+  return contexto
+}
+
+/** Reanuda el Web Audio si se paró (el teléfono lo suspende al bloquearse, por ejemplo). */
+export function reanudarAudio(): void {
   if (contexto && contexto.state !== 'running') void contexto.resume().catch(() => undefined)
+}
+
+/** (En un gesto.) Web Audio para los fundidos: el elemento de la canción pasa por él (una vez). */
+function conectarWebAudio(audio: HTMLAudioElement): void {
+  const ctx = asegurarContexto()
+  if (!ctx || ganancia) return
+  try {
+    const propia = ctx.createGain()
+    propia.gain.value = audio.paused || audio.muted ? 0 : 1
+    ctx.createMediaElementSource(audio).connect(propia).connect(ctx.destination)
+    ganancia = propia
+  } catch {
+    ganancia = null
+  }
+}
+
+/**
+ * (En un gesto.) Otro audio (la música de la carta) por el mismo Web Audio, con su propia ganancia,
+ * que empieza en 0. Sin Web Audio, null: entonces manda el volumen del elemento.
+ */
+export function enlazarAudio(audio: HTMLAudioElement): GainNode | null {
+  const ctx = asegurarContexto()
+  if (!ctx) return null
+  try {
+    const propia = ctx.createGain()
+    propia.gain.value = 0
+    ctx.createMediaElementSource(audio).connect(propia).connect(ctx.destination)
+    return propia
+  } catch {
+    return null
+  }
 }
 
 /** El segundo de la canción por donde va (con el audio o con el reloj propio). */

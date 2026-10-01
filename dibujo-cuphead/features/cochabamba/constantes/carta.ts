@@ -23,6 +23,21 @@ export const CARTA_PARRAFOS: readonly string[] = [
 /** " ,palabra" → ", palabra": el espacio de las comas, como en la letra impresa. */
 export const ajustarComas = (texto: string): string => texto.replace(/\s*,\s*/g, ', ')
 
+/**
+ * La música de la carta (la pidió el usuario: "al abrir la carta quiero que suene esta canción, y al
+ * cerrar se pare también, pero muy bajito, como modo ambiente"): el archivo del usuario en
+ * `public/carta/`. Empieza al abrir la cajita y sube despacio mientras cae la noche; mientras se lee
+ * se repite, y al salir baja y se para. Ver `utils/musicaCarta.ts`.
+ */
+export const MUSICA_CARTA = {
+  audio: '/carta/musica.mp3',
+  /** Ganancia: la canción viene a unos −20 LUFS y así queda en unos −33, de fondo (la del agujero suena a −14). */
+  volumen: 0.22,
+  /** Fundidos (s): de entrada, mientras cae la noche; de salida, al volver al campo. */
+  entrada: 5,
+  salida: 2,
+} as const
+
 const FINAL = CAMARA_VALLE[CAMARA_VALLE.length - 1]
 const ADELANTE = ((): [number, number] => {
   const x = FINAL.mira[0] - FINAL.posicion[0]

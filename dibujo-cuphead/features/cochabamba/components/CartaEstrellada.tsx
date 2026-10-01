@@ -3,6 +3,8 @@
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { CARTA_PARRAFOS, ajustarComas } from '../constantes/carta'
 import { faseCarta, salirDeLaCarta, suscribirCarta } from '../store/carta'
+import { paseoActivo } from '../store/paseo'
+import { desbloquearMusicaCarta, pararMusicaCarta, sonarMusicaCarta } from '../utils/musicaCarta'
 
 /**
  * La carta del final bajo "La noche estrellada" (ver `store/carta.ts`), como una carta de verdad: un
@@ -14,7 +16,8 @@ import { faseCarta, salirDeLaCarta, suscribirCarta } from '../store/carta'
  *
  * Botones de cristal (modernos, sin textos): arriba a la izquierda, salir (de vuelta al corazón de
  * flores; también con Escape); arriba a la derecha, guardar o sacar la carta para ver el cielo.
- * Mientras tanto la página no se desplaza: la cámara ya no se mueve.
+ * Mientras tanto la página no se desplaza: la cámara ya no se mueve. Y suena, bajita, la música de
+ * la carta (ver `utils/musicaCarta.ts`).
  */
 
 const TEXTOS = CARTA_PARRAFOS.map(ajustarComas)
@@ -142,6 +145,24 @@ export function CartaEstrellada() {
   useEffect(() => {
     if (fase === 'cerrada') setHojaMostrada(false)
   }, [fase])
+
+  // La música: suena al abrir la cajita (mientras cae la noche) y se para al salir.
+  useEffect(() => {
+    if (fase === 'abriendo') sonarMusicaCarta()
+    else if (fase === 'saliendo' || fase === 'cerrada') pararMusicaCarta()
+  }, [fase])
+
+  // Paseando, cada gesto la deja lista para sonar (la cajita se abre en un fotograma, no en el gesto).
+  useEffect(() => {
+    const tipos = ['pointerdown', 'keydown', 'touchend'] as const
+    const alGesto = (): void => {
+      if (paseoActivo() && faseCarta() === 'cerrada') desbloquearMusicaCarta()
+    }
+    for (const tipo of tipos) window.addEventListener(tipo, alGesto, { capture: true, passive: true })
+    return () => {
+      for (const tipo of tipos) window.removeEventListener(tipo, alGesto, true)
+    }
+  }, [])
 
   // Abierta la cajita, la página no se desplaza (la cámara ya no se mueve), salvo dentro de la hoja;
   // Escape sale.
