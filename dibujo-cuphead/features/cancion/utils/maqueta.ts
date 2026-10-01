@@ -7,13 +7,13 @@ import type { LineaSrt } from './srt'
  * `app/globals.css`; sin cambiar mayúsculas ni minúsculas), y las palabras que se encienden a
  * medida que se cantan.
  *
- * Todo sale del .srt, tal cual (lo pidió el usuario: sin alargar letras y con sus tiempos exactos):
- * cada palabra se muestra como está escrita, con su puntuación; las filas se reparten por largo
- * dentro de cada renglón del .srt; la voz de cada línea sale de su texto (si se repite, se ve
- * igual); el estribillo son las líneas que se repiten; las secciones se separan por las pausas
- * largas. Cada palabra se enciende en un tramo proporcional a sus sílabas (en español o en inglés)
- * al ritmo de la canción; si la línea dura más (una nota larga al final), la última palabra se queda
- * encendida hasta que acaba.
+ * Todo sale del archivo de la letra, tal cual (lo pidió el usuario: sin alargar letras): cada
+ * palabra se muestra como está escrita, con su puntuación; las filas se reparten por largo dentro de
+ * cada renglón; la voz de cada línea sale de su texto (si se repite, se ve igual); el estribillo son
+ * las líneas que se repiten; las secciones se separan por las pausas largas. Si el archivo trae la
+ * hora de cada palabra (WebVTT de karaoke, ver `vtt.ts`), cada una se enciende exactamente mientras
+ * se canta; si no (un .srt, sólo por líneas), en un tramo proporcional a sus sílabas al ritmo de la
+ * canción, y en las notas largas la última palabra se queda encendida hasta que acaba.
  */
 
 export type EstiloFila = 'sans' | 'serif' | 'condensada' | 'cursiva' | 'espaciada'
@@ -145,7 +145,12 @@ function maquetarLinea(
   indice: number,
   datos: { estribillo: boolean; cierre: boolean; seccion: number },
 ): LineaMaquetada {
-  const palabras = palabrasDe(linea.texto)
+  const renglones = linea.texto
+    .split('\n')
+    .map(palabrasDe)
+    .filter((renglon) => renglon.length > 0)
+  const palabras = renglones.flat()
+  const conTiempos = linea.palabras !== undefined && linea.palabras.length === palabras.length ? linea.palabras : null
   const duracion = linea.fin - linea.inicio
   const espanol = esEspanol(linea.texto)
   const silabasPorPalabra = palabras.map((palabra) => silabas(palabra, espanol))
@@ -162,19 +167,16 @@ function maquetarLinea(
   const masLarga = largos.indexOf(Math.max(...largos))
   let reloj = linea.inicio
   const maquetadas: PalabraMaquetada[] = palabras.map((texto, i) => {
-    const inicio = reloj
-    const fin = inicio + (tramo * pesos[i]) / pesoTotal
+    // Con la hora de cada palabra, tal cual; si no, por sílabas.
+    const inicio = conTiempos ? conTiempos[i].inicio : reloj
+    const fin = conTiempos ? conTiempos[i].fin : inicio + (tramo * pesos[i]) / pesoTotal
     reloj = fin
     const acento = (i === ultima && largos[i] >= 4) || (i === masLarga && largos[i] >= 7) || (datos.cierre && i === ultima)
     return { texto, inicio, fin, acento }
   })
 
   const plantilla = PLANTILLAS[hash(normalizar(linea.texto)) % PLANTILLAS.length]
-  const partidas = linea.texto
-    .split('\n')
-    .map(palabrasDe)
-    .filter((renglon) => renglon.length > 0)
-    .flatMap(partirEnFilas)
+  const partidas = renglones.flatMap(partirEnFilas)
   let cursor = 0
   const filas: FilaMaquetada[] = partidas.map((fila, f) => {
     const palabrasFila = maquetadas.slice(cursor, cursor + fila.length)

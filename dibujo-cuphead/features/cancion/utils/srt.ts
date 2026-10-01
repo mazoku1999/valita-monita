@@ -1,8 +1,19 @@
-/** Una línea de la letra: cuándo empieza y acaba (s, reloj de la canción) y su texto (con sus saltos de línea). */
+/** Una palabra con su tiempo (s, reloj de la canción): se canta de `inicio` a `fin`. */
+export interface PalabraSrt {
+  readonly texto: string
+  readonly inicio: number
+  readonly fin: number
+}
+
+/**
+ * Una línea de la letra: cuándo empieza y acaba (s, reloj de la canción), su texto (con sus saltos de
+ * línea) y, si el archivo los trae (WebVTT con marcas por palabra), los tiempos de cada palabra.
+ */
 export interface LineaSrt {
   readonly inicio: number
   readonly fin: number
   readonly texto: string
+  readonly palabras?: readonly PalabraSrt[]
 }
 
 const MARCA = /(\d+):(\d+):(\d+)[,.](\d+)/

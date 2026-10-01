@@ -20,6 +20,7 @@ import {
 import { type LineaMaquetada, maquetarLetra } from '../utils/maqueta'
 import { interpolarMonotona } from '../utils/recorrido'
 import { leerSrt } from '../utils/srt'
+import { leerVtt } from '../utils/vtt'
 import { BotonSonido } from './BotonSonido'
 import { LetraEnPantalla } from './LetraEnPantalla'
 
@@ -100,7 +101,7 @@ export function CancionDelAgujero() {
       fetch(CANCION.letra)
         .then((respuesta) => (respuesta.ok ? respuesta.text() : ''))
         .then((texto) => {
-          const maqueta = maquetarLetra(leerSrt(texto))
+          const maqueta = maquetarLetra(/^\uFEFF?WEBVTT/.test(texto) ? leerVtt(texto) : leerSrt(texto))
           if (maqueta.length > 0) {
             const primerBloque = Math.max(...maqueta.filter((linea) => linea.seccion === 0).map((linea) => linea.fin))
             recorrido = recorridoDeLaCancion(primerBloque, maqueta[maqueta.length - 1].fin)

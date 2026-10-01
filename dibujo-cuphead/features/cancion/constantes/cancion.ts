@@ -6,13 +6,14 @@
  * compás, con la letra en pantalla; al final se suelta el scroll ya en el sistema solar, mientras
  * suena lo que queda de la canción. El sonido se activa al inicio (ver `BotonSonido`).
  *
- * El audio y la letra son archivos del usuario en `public/cancion/` (la letra es un .srt: se lee al
- * vuelo, no está escrita en el código; para cambiar de canción basta con cambiar los archivos y, si
- * hace falta, el recorrido).
+ * El audio es el archivo del usuario en `public/cancion/`; la letra, `cancion.vtt`: su texto, tal
+ * cual el .srt del usuario, con la hora de cada palabra sacada del propio audio (WebVTT de karaoke,
+ * ver `utils/vtt.ts`; también vale un .srt, sólo por líneas). Se lee al vuelo, no está escrita en el
+ * código; para cambiar de canción basta con cambiar los archivos.
  */
 export const CANCION = {
   audio: '/cancion/cancion.mp3',
-  letra: '/cancion/cancion.srt',
+  letra: '/cancion/cancion.vtt',
   /** Al llegar aquí bajando (vh del carril, ver `VIAJE`), empieza: el iris ya se cerró sobre la sombra. */
   puertaVh: 446,
   /** Si al llegar ya se había pasado el cruce (un salto con Fin o la barra), no empieza. */
@@ -33,7 +34,7 @@ export const CANCION = {
   segundos: { negro: 1.5, iris: 7 },
   llegada: 12,
   /** Mientras se carga la letra: dónde acaban el primer bloque y la letra de la canción de ahora (s). */
-  porDefecto: { primerBloque: 88.5, letra: 175.3 },
+  porDefecto: { primerBloque: 89.3, letra: 175.9 },
   /** La letra respecto del audio (s; positivo: la letra va más tarde). */
   desfaseLetra: 0,
   /** Fundido del sonido (s) al saltarla o al volver atrás. */

@@ -12,9 +12,10 @@ import type { LineaMaquetada, PalabraMaquetada } from '../utils/maqueta'
  * (con un brillo que luego baja). El color de acento cambia por sección: oro en la primera estrofa,
  * celeste en la segunda y rosa en el estribillo.
  *
- * Los tiempos son los del .srt, tal cual: cada línea llega al centro a su inicio y se va a su fin
- * (si la siguiente llega enseguida, le deja el sitio). Sigue el reloj del audio (no el de la
- * página): si el audio se detiene a cargar, la letra espera.
+ * Cada palabra se enciende exactamente mientras se canta (los tiempos de la letra, palabra por
+ * palabra). La línea llega al centro un instante antes de su primera palabra (si la anterior ya
+ * terminó: nunca la corta) y se va a su fin (si la siguiente llega enseguida, le deja el sitio).
+ * Sigue el reloj del audio (no el de la página): si el audio se detiene a cargar, la letra espera.
  */
 
 type Rol = 'actual' | 'apagada' | 'anterior' | 'ida' | 'siguiente' | 'oculta'
@@ -25,6 +26,8 @@ interface Estado {
   readonly mostrarSiguiente: boolean
 }
 
+/** Cuánto antes de su primera palabra llega una línea al centro (s), sin cortar la anterior. */
+const ANTELACION = 0.35
 /** Cuánto antes se asoma la siguiente abajo (s). */
 const ASOMO = 2.5
 /** Si la siguiente llega antes de esto (s) tras el fin de una línea, ésta sigue hasta que llegue. */
@@ -44,7 +47,14 @@ function Palabra({ palabra }: { palabra: PalabraMaquetada }) {
 
 function Linea({ linea, rol }: { linea: LineaMaquetada; rol: Rol }) {
   return (
-    <div className="letra-linea" data-rol={rol} data-paleta={paleta(linea)} data-cierre={linea.cierre ? '' : undefined} aria-hidden={rol !== 'actual'}>
+    <div
+      className="letra-linea"
+      data-indice={linea.indice}
+      data-rol={rol}
+      data-paleta={paleta(linea)}
+      data-cierre={linea.cierre ? '' : undefined}
+      aria-hidden={rol !== 'actual'}
+    >
       {linea.filas.map((fila, f) => (
         <div key={f} className="letra-fila" data-estilo={fila.estilo} style={{ '--escala': fila.escala.toFixed(3) } as CSSProperties}>
           {fila.palabras.map((palabra, p) => (
@@ -78,7 +88,10 @@ export function LetraEnPantalla({ letra, activa }: { letra: readonly LineaMaquet
     const cuadro = (): void => {
       const t = tiempoCancion() - CANCION.desfaseLetra
       let actual = -1
-      for (let i = 0; i < letra.length; i++) if (letra[i].inicio <= t) actual = i
+      for (let i = 0; i < letra.length; i++) {
+        const llegada = Math.max(letra[i].inicio - ANTELACION, i > 0 ? Math.min(letra[i - 1].fin, letra[i].inicio) : -Infinity)
+        if (llegada <= t) actual = i
+      }
       const linea = letra[actual]
       const siguiente = letra[actual + 1]
       const mostrarActual =

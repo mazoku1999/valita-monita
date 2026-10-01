@@ -107,18 +107,27 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   para invitar); al tocarlo, el sonido se une donde va. Si ni en silencio la deja sonar el
   navegador, la lleva un reloj propio hasta que se pueda. Se empieza a cargar a 150 vh y pasa por
   Web Audio para los fundidos.
-- **La letra** (`utils/srt.ts`, `utils/maqueta.ts`, `components/LetraEnPantalla.tsx`): tal cual el
-  .srt del usuario (el de la canción, en inglés): el texto como está escrito (con su puntuación, sus
-  mayúsculas y sus saltos de línea; sin alargar letras) y cada línea de su inicio a su fin exactos.
-  La línea que se canta va grande en el centro, partida en filas cortas con voces distintas (palo
-  seco gruesa en cursiva, Playfair, Oswald condensada, Instrument Serif en cursiva, palo seco
-  espaciada); la anterior, pequeña y apagada arriba; la siguiente se asoma abajo 2.5 s antes. Cada
-  palabra se enciende de izquierda a derecha mientras se canta, en un tramo proporcional a sus
-  sílabas (en inglés o en español) al ritmo de la canción; en las notas largas la última palabra se
-  queda encendida. El estribillo (las líneas que se repiten) va en rosa; las estrofas, en oro y en
-  celeste. Las líneas largas se achican para no tapar a las vecinas. Un velo oscuro detrás para que
-  se lea sobre las bandas claras del remolino. Sigue el reloj del audio (`desfaseLetra` corrige la
-  sincronía si hiciera falta).
+- **La letra, sincronizada palabra por palabra** (`public/cancion/cancion.vtt`, `utils/vtt.ts`,
+  `utils/maqueta.ts`, `components/LetraEnPantalla.tsx`): el texto es el del .srt del usuario (la
+  canción en inglés), tal cual: como está escrito, con su puntuación y sus mayúsculas, sin alargar
+  letras. La hora de cada palabra se sacó del propio audio: la voz se aísla del canal central (las
+  guitarras y el piano van a los lados), se miden sus comienzos de nota (subida de 2–4 kHz, flujo
+  espectral, sibilancia para las palabras con s, ch o f) sobre la rejilla del pulso de la canción
+  (122 BPM) y cada palabra se colocó en su nota y se comprobó sobre el espectrograma, línea por
+  línea (los dos estribillos se confirman entre sí: van 176 pulsos aparte). Se guarda como WebVTT de
+  karaoke, el formato estándar: una marca de tiempo antes de cada palabra y, si la voz respira antes
+  de la siguiente, una marca que la cierra. También queda `cancion.srt` con los mismos textos y los
+  tiempos exactos de cada línea (para usarlo en otra parte; la app lee el .vtt, y si se le diera un
+  .srt, encendería las palabras por sílabas).
+- **En pantalla**: la línea que se canta va grande en el centro, partida en filas cortas con voces
+  distintas (palo seco gruesa en cursiva, Playfair, Oswald condensada, Instrument Serif en cursiva,
+  palo seco espaciada); la anterior, pequeña y apagada arriba; la siguiente se asoma abajo 2.5 s
+  antes. Cada palabra se enciende de izquierda a derecha exactamente mientras se canta, con un
+  brillo que luego baja; la línea llega al centro 0.35 s antes de su primera palabra (sin cortar
+  nunca la anterior). El estribillo (las líneas que se repiten) va en rosa; las estrofas, en oro y
+  en celeste. Las líneas largas se achican para no tapar a las vecinas. Un velo oscuro detrás para
+  que se lea sobre las bandas claras del remolino. Sigue el reloj del audio (`desfaseLetra`
+  corregiría la sincronía si hiciera falta).
 
 ## La llegada a Cochabamba
 
@@ -280,7 +289,8 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.26-sobre-y-cuadro`, `dibujo-v0.27-noche-cuphead`,
 `dibujo-v0.28-cielo-como-el-cuadro`, `dibujo-v0.29-cancion-del-agujero`,
 `dibujo-v0.30-sonido-al-inicio`, `dibujo-v0.31-letra-a-tiempo`,
-`dibujo-v0.32-letra-tal-cual`.
+`dibujo-v0.32-letra-tal-cual`, `dibujo-v0.33-musica-de-la-carta`,
+`dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
