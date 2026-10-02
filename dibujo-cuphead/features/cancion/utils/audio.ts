@@ -96,16 +96,24 @@ function fundir(destino: number, segundos: number): void {
   }, 40)
 }
 
-/** (En un gesto.) El Web Audio de la página: se crea una vez (y se reanuda si se paró). */
-function asegurarContexto(): AudioContext | null {
-  if (!contexto) {
-    const Constructor = window.AudioContext ?? (window as VentanaConWebkit).webkitAudioContext
-    try {
-      contexto = Constructor ? new Constructor() : null
-    } catch {
-      contexto = null
-    }
+/**
+ * Crea el Web Audio de la página antes del primer gesto, con la página ya cargada: crearlo detiene
+ * la página un momento (en un móvil, más de una décima de segundo) y, hecho en el gesto, el primer
+ * deslizamiento daba un tirón. Nace suspendido; el gesto sólo lo reanuda.
+ */
+export function prepararAudio(): void {
+  if (contexto) return
+  const Constructor = window.AudioContext ?? (window as VentanaConWebkit).webkitAudioContext
+  try {
+    contexto = Constructor ? new Constructor() : null
+  } catch {
+    contexto = null
   }
+}
+
+/** (En un gesto.) El Web Audio de la página: se crea una vez (si no se preparó) y se reanuda si se paró. */
+function asegurarContexto(): AudioContext | null {
+  prepararAudio()
   reanudarAudio()
   return contexto
 }

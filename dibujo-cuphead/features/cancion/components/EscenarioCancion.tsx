@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { CARRIL_VH } from '@/features/agujero-negro/constantes/viajeScroll'
 import { EJE_GUSANO } from '@/features/agujero-negro/store/ejeGusano'
-import { tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
+import { cambiaDibujo } from '@/features/dibujo/store/ritmoDibujo'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { CANCION } from '../constantes/cancion'
 import { Escenario } from '../escenario/Escenario'
@@ -78,7 +78,8 @@ export function EscenarioCancion() {
       escena.visible = !ESCENARIO.cubre
       ocultaLaEscena.current = ESCENARIO.cubre
     }
-    if (!ESCENARIO.activo || !tocaDibujar()) return
+    // Los lienzos se repintan a 24 por segundo, como el resto de lo dibujado (la pantalla puede ir a más).
+    if (!ESCENARIO.activo || !cambiaDibujo()) return
     gl.getDrawingBufferSize(tamano)
     const escala = Math.min(1, LADO_MAXIMO / Math.max(tamano.x, tamano.y, 1))
     // Con otro tamaño, las texturas se rehacen (su memoria en la GPU es de tamaño fijo).

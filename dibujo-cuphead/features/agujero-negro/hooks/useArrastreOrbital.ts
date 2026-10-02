@@ -60,7 +60,11 @@ export function useArrastreOrbital(elemento: HTMLElement | null) {
     const alBajar = (evento: PointerEvent): void => {
       if (evento.pointerType === 'mouse' && evento.button !== 0) return
       punteros.set(evento.pointerId, { x: evento.clientX, y: evento.clientY })
-      elemento.setPointerCapture(evento.pointerId)
+      // En una pantalla táctil, un dedo es el scroll del viaje: no orbita (cada deslizamiento giraba
+      // la cámara, y con inercia). Dos dedos, el pellizco del zoom.
+      const tactil = evento.pointerType === 'touch'
+      if (!tactil) elemento.setPointerCapture(evento.pointerId)
+      if (tactil && punteros.size !== 2) return
       if (punteros.size === 2) {
         // Segundo dedo: pasa de orbitar a pellizcar.
         idPuntero = null
@@ -89,7 +93,7 @@ export function useArrastreOrbital(elemento: HTMLElement | null) {
         separacionPellizco = nueva
         return
       }
-      if (!estado.current.arrastrando || evento.pointerId !== idPuntero) return
+      if (!estado.current.arrastrando || evento.pointerId !== idPuntero || evento.pointerType === 'touch') return
       const dx = evento.clientX - ultimoX
       const dy = evento.clientY - ultimoY
       const dt = Math.max((evento.timeStamp - ultimoTiempo) / 1000, 1 / 240)

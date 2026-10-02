@@ -2,7 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from 'react'
 import { CARRIL_VH } from '@/features/agujero-negro/constantes/viajeScroll'
-import { obtenerProgreso, suscribirProgreso } from '@/features/narrativa/store/progresoScrollStore'
+import { largoDelCarril, obtenerProgreso, suscribirProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { CANCION, recorridoDeLaCancion } from '../constantes/cancion'
 import { cambiarFaseCancion, faseCancion, suscribirCancion } from '../store/cancion'
 import { empezarFinal, olvidarFinal, ponerLetraDelEscenario } from '../store/escenario'
@@ -12,6 +12,7 @@ import {
   empezarCancion,
   estadoDelSonido,
   permitirSonido,
+  prepararAudio,
   precargarCancion,
   saltarCancionA,
   soltarCancion,
@@ -40,8 +41,7 @@ const vhActual = (): number => obtenerProgreso() * CARRIL_VH
 let recorrido = recorridoDeLaCancion(CANCION.porDefecto.inicioLetra, CANCION.porDefecto.letra)
 
 function irAVh(vh: number): void {
-  const recorrido = document.documentElement.scrollHeight - window.innerHeight
-  window.scrollTo(0, (vh / CARRIL_VH) * recorrido)
+  window.scrollTo(0, (vh / CARRIL_VH) * largoDelCarril())
 }
 
 /** Quieto el scroll del usuario (la cámara la mueve la canción). */
@@ -119,19 +119,29 @@ export function CancionDelAgujero() {
   }, [])
 
   // Cualquier gesto (clic, tecla o toque) también activa el sonido para después; el del botón del
-  // sonido lo decide él.
+  // sonido lo decide él. Con el ratón cuenta al pulsar; con un dedo, al levantarlo (apoyarlo no es
+  // un gesto para el navegador, ni deslizar): así, al empezar a deslizar no se hace nada más, y se
+  // sigue esperando hasta un gesto que de verdad deje sonar. El Web Audio se crea antes, con la
+  // página ya cargada (ver `prepararAudio`).
   useEffect(() => {
-    const tipos = ['pointerdown', 'keydown', 'touchend'] as const
+    const tipos = ['pointerdown', 'pointerup', 'keydown', 'touchend'] as const
     const quitar = (): void => {
       for (const tipo of tipos) window.removeEventListener(tipo, alGesto, true)
     }
     const alGesto = (evento: Event): void => {
       if (evento.target instanceof Element && evento.target.closest('.boton-sonido')) return
+      if (evento instanceof PointerEvent && (evento.type === 'pointerdown') !== (evento.pointerType === 'mouse')) return
+      const activacion = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation
+      if (activacion && !activacion.isActive) return
       quitar()
       permitirSonido(CANCION.audio)
     }
     for (const tipo of tipos) window.addEventListener(tipo, alGesto, { capture: true, passive: true })
-    return quitar
+    const preparar = window.setTimeout(prepararAudio, 1500)
+    return () => {
+      quitar()
+      window.clearTimeout(preparar)
+    }
   }, [])
 
   // La puerta: entrar en el agujero bajando la empieza; volver fuera, después, la arma otra vez.

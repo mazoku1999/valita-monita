@@ -200,6 +200,14 @@ export function generarCumulos(semilla = 20261003): BolaNube[] {
   return bolas
 }
 
+let cumulosLlegada: readonly BolaNube[] | null = null
+
+/** Las nubes de la llegada (las mismas en el globo, en el valle y en sus sombras): se generan una vez. */
+export const cumulosDeLaLlegada = (): readonly BolaNube[] => {
+  if (!cumulosLlegada) cumulosLlegada = generarCumulos()
+  return cumulosLlegada
+}
+
 /** Las bolas para el shader: bola (centro y radio), arriba de su nube y base (en radios) y tono. */
 export interface Nubes {
   bolas: Float32Array
@@ -272,7 +280,7 @@ export const SOMBRAS_NUBES = { lado: 660, texeles: 1024 } as const
  * elipse alargada en la dirección del Sol, desplazada hacia el oeste tanto más cuanto más alta va
  * la nube sobre el suelo (a 17° de elevación, más de tres veces su altura).
  */
-export function crearTexturaSombras(bolas: readonly BolaNube[]): THREE.DataTexture {
+export function calcularSombras(bolas: readonly BolaNube[]): Uint8Array {
   const { lado, texeles } = SOMBRAS_NUBES
   const datos = new Float32Array(texeles * texeles)
   const [sx, sAlto, sz] = direccionSol(SOL_MANANA.rumbo, SOL_MANANA.elevacion)
@@ -313,6 +321,12 @@ export function crearTexturaSombras(bolas: readonly BolaNube[]): THREE.DataTextu
   }
   const bytes = new Uint8Array(texeles * texeles)
   for (let k = 0; k < bytes.length; k += 1) bytes[k] = Math.round(datos[k] * 255)
+  return bytes
+}
+
+/** La textura de las sombras (ver `calcularSombras`, que se hace en un hilo aparte). */
+export function crearTexturaSombras(bytes: Uint8Array): THREE.DataTexture {
+  const { texeles } = SOMBRAS_NUBES
   const textura = new THREE.DataTexture(bytes, texeles, texeles, THREE.RedFormat, THREE.UnsignedByteType)
   textura.minFilter = THREE.LinearFilter
   textura.magFilter = THREE.LinearFilter

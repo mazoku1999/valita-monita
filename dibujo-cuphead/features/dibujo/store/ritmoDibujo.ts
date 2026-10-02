@@ -1,34 +1,91 @@
 /**
- * Ritmo del dibujo animado: la imagen se redibuja a 24 dibujos por segundo y entre uno y otro se
- * queda quieta, como en los dibujos animados hechos a mano (y como la película que los proyectaba).
- * La cámara, el scroll y el resto del estado siguen avanzando cada fotograma de pantalla; sólo lo
- * que se VE cambia a este ritmo. De paso, los fotogramas que no toca dibujar no cuestan nada: ni el
- * trazado de rayos del agujero ni el dibujo se calculan.
+ * Ritmo del dibujo animado. Como en el propio Cuphead, lo dibujado a mano va "a dibujos" (el hervor
+ * de la tinta, el titileo de las estrellas, la película y los lienzos pintados cambian 24 veces por
+ * segundo, o 12) mientras la cámara y el scroll se mueven fluidos, a la velocidad de la pantalla.
+ * Antes todo se dibujaba a 24 por segundo, y en una pantalla de 60 Hz eso son fotogramas desparejos
+ * (unos duran tres refrescos y otros dos): al deslizar, en un móvil, el movimiento temblaba.
+ *
+ * La pantalla se dibuja a 60 por segundo (cada refresco en 60 Hz, uno de cada dos en 120 Hz). Si el
+ * aparato no llega (se pierden muchos fotogramas durante un par de segundos), baja a 30 por segundo,
+ * también parejos, y se queda ahí. Los fotogramas que no toca dibujar no cuestan nada: ni el trazado
+ * de rayos del agujero ni el dibujo se calculan.
  *
  * Un `useFrame` con prioridad negativa (el primero de cada fotograma) llama a `avanzarRitmo`; el
- * resto consulta `tocaDibujar()`.
+ * resto consulta `tocaDibujar()` (si se dibuja la pantalla) y `numeroDeDibujo()` / `cambiaDibujo()`
+ * (el dibujo animado, a 24 por segundo).
  */
 export const RITMO_DIBUJO = {
+  /** Los dibujos del dibujo animado por segundo (tinta, estrellas, película, lienzos pintados). */
   dibujosPorSegundo: 24,
+  /** Lo que se mueve en pantalla (cámara, scroll): a esto por segundo si se puede; si no, al siguiente. */
+  pantallaPorSegundo: [60, 30],
+  /** Para bajar de ritmo: tras este arranque (s), si en una ventana de este tiempo (s) se pierde esta parte de los refrescos. */
+  arranque: 4,
+  ventana: 2,
+  perdidos: 0.2,
 } as const
 
-let dibujoActual = -1
+let tiempoAnterior = -1
+let ultimoDibujo = -1
+let nivel = 0
 let toca = true
 
-export function avanzarRitmo(tiempo: number, dibujosPorSegundo: number = RITMO_DIBUJO.dibujosPorSegundo): void {
-  const dibujo = Math.floor(tiempo * dibujosPorSegundo)
-  toca = dibujo !== dibujoActual
+let dibujoActual = -1
+let cambia = true
+
+let inicioVentana = -1
+let muestras = 0
+let lentos = 0
+
+export function avanzarRitmo(tiempo: number): void {
+  const paso = tiempoAnterior < 0 || tiempoAnterior > tiempo ? 0 : tiempo - tiempoAnterior
+  tiempoAnterior = tiempo
+  const objetivo = RITMO_DIBUJO.pantallaPorSegundo[nivel]
+
+  // Se dibuja en cuanto han pasado tres cuartos del intervalo que toca: así cae siempre en el mismo
+  // refresco (cada uno en 60 Hz, uno de cada dos en 120 Hz…) aunque los fotogramas lleguen con algo
+  // de desorden (con carga, el reloj de cada fotograma no llega a intervalos exactos).
+  toca = ultimoDibujo < 0 || tiempo < ultimoDibujo || tiempo - ultimoDibujo >= 0.75 / objetivo
+  if (toca) ultimoDibujo = tiempo
+
+  // ¿Va el aparato a este ritmo? Un fotograma que tarda bastante más de lo que toca es un fotograma
+  // perdido; si se pierden muchos (a 45 por segundo en una pantalla de 60 Hz los fotogramas salen
+  // desparejos), se baja al ritmo siguiente, que sí va parejo.
+  if (tiempo > RITMO_DIBUJO.arranque && paso > 0 && paso < 0.25 && nivel < RITMO_DIBUJO.pantallaPorSegundo.length - 1) {
+    if (inicioVentana < 0) inicioVentana = tiempo
+    muestras++
+    if (paso > 1.35 / objetivo) lentos++
+    if (tiempo - inicioVentana >= RITMO_DIBUJO.ventana) {
+      if (muestras > 10 && lentos / muestras > RITMO_DIBUJO.perdidos) nivel++
+      inicioVentana = tiempo
+      muestras = 0
+      lentos = 0
+    }
+  }
+
+  const dibujo = Math.floor(tiempo * RITMO_DIBUJO.dibujosPorSegundo)
+  cambia = dibujo !== dibujoActual
   dibujoActual = dibujo
 }
 
-/** Si en este fotograma de pantalla toca un dibujo nuevo. */
+/** Si en este fotograma de pantalla toca dibujar (la cámara y lo que se mueve). */
 export function tocaDibujar(): boolean {
   return toca
 }
 
-/** Número del dibujo actual (para el temblor de la tinta y el titileo de las estrellas). */
+/** Número del dibujo del dibujo animado (24 por segundo: el temblor de la tinta, el titileo de las estrellas). */
 export function numeroDeDibujo(): number {
   return dibujoActual
+}
+
+/** Si en este fotograma empieza un dibujo nuevo del dibujo animado (para repintar los lienzos). */
+export function cambiaDibujo(): boolean {
+  return cambia
+}
+
+/** A cuántos fotogramas por segundo se quiere dibujar la pantalla ahora (para medir). */
+export function ritmoDePantalla(): number {
+  return RITMO_DIBUJO.pantallaPorSegundo[nivel]
 }
 
 /**

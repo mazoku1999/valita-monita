@@ -39,15 +39,17 @@ import { NUBE_BOLA_FRAG, NUBE_BOLA_VERT } from '@/features/cochabamba/shaders/nu
 import {
   crearBolasInstanciadas,
   crearTexturaSombras,
+  cumulosDeLaLlegada,
   distanciaANubes,
   esteNorte,
-  generarCumulos,
   nieblaEnNubes,
   nubesEnGlobo,
   puntoTierra,
   SOMBRAS_NUBES,
 } from '@/features/cochabamba/utils/nubesDestino'
+import { avisarRecursoNuevo } from '@/features/agujero-negro/store/recursosNuevos'
 import { NIEBLA } from '@/features/dibujo/store/niebla'
+import { calcularEnSegundoPlano } from '@/features/segundo-plano/calcularEnSegundoPlano'
 import { SOL_EN_ESCENA } from '../store/solEnEscena'
 import { crearTexturasTierra, type TexturasTierra } from '../utils/texturaTierra'
 
@@ -333,13 +335,10 @@ function crearSistema(fecha: Date) {
 
   // Las nubes de la llegada (el mar de nubes sobre el Chapare, cúmulos sobre sierras y valles y la
   // nube de entrada), de bolas en el espacio, hijas de la Tierra: giran con ella, y sus sombras se
-  // pintan en su mapa y en el relieve.
+  // pintan en su mapa y en el relieve (en cuanto se calculan, ver `cargarMapasTierra`).
   const baseRegion = esteNorte(ORIGEN_REGION.latitud, ORIGEN_REGION.longitud)
-  const cumulos = generarCumulos()
+  const cumulos = cumulosDeLaLlegada()
   const geometriaNubes = crearBolasInstanciadas(nubesEnGlobo(cumulos, puntoTierra(ORIGEN_REGION.latitud, ORIGEN_REGION.longitud), baseRegion.este, baseRegion.norte))
-  const sombrasNubes = crearTexturaSombras(cumulos)
-  liberables.push(sombrasNubes)
-  if (tierra) tierra.material.uniforms.uSombrasNubes.value = sombrasNubes
   const materialNubes = new THREE.ShaderMaterial({
     vertexShader: NUBE_BOLA_VERT,
     fragmentShader: NUBE_BOLA_FRAG,
@@ -397,7 +396,7 @@ function crearSistema(fecha: Date) {
       uRegion: { value: vacia },
       uLadoRegion: { value: LADO_REGION },
       uCorazon: { value: new THREE.Vector4(CORAZON.escala, ejeCorazonX, ejeCorazonZ, CORAZON.ribete) },
-      uSombrasNubes: { value: sombrasNubes },
+      uSombrasNubes: { value: vacia },
       uLadoSombras: { value: SOMBRAS_NUBES.lado },
       uCeldas: { value: obtenerTexturaCeldas() },
       uCiudad: { value: new THREE.Vector3(CIUDAD.centro[0], CIUDAD.centro[1], CIUDAD.radio) },
@@ -421,35 +420,46 @@ function crearSistema(fecha: Date) {
   liberables.push(materialParche)
 
   /**
-   * Pinta los mapas de la Tierra (unos 200 ms) y, por tandas sin trabar la página, la región de
-   * Cochabamba y su relieve: se llama en diferido tras montar.
+   * Los mapas de la Tierra, la región de Cochabamba y su relieve y las sombras de las nubes se
+   * calculan en un hilo aparte (ver `features/segundo-plano`), sin trabar la página: se piden en
+   * diferido tras montar y se ponen en cuanto llegan.
    */
   let texturaRegion: THREE.DataTexture | null = null
+  let sombrasNubes: THREE.DataTexture | null = null
   let liberado = false
+  let pedidos = false
   let parcheListo = false
   const haciaCamaraRegion = new THREE.Vector3()
   const cargarMapasTierra = (): void => {
-    if (mapasTierra || !tierra) return
-    mapasTierra = crearTexturasTierra()
-    tierra.material.uniforms.uMapa.value = mapasTierra.mapa
-    tierra.material.uniforms.uPoblacion.value = mapasTierra.poblacion
-    void crearTexturaRegion().then((textura) => {
-      if (liberado) {
-        textura.dispose()
-        return
-      }
-      texturaRegion = textura
-      tierra.material.uniforms.uRegion.value = textura
-      tierra.material.uniforms.uRegionListo.value = 1
+    if (pedidos || !tierra) return
+    pedidos = true
+    void calcularEnSegundoPlano('mapasTierra').then((datos) => {
+      if (liberado) return
+      mapasTierra = crearTexturasTierra(datos)
+      tierra.material.uniforms.uMapa.value = mapasTierra.mapa
+      tierra.material.uniforms.uPoblacion.value = mapasTierra.poblacion
+      avisarRecursoNuevo()
     })
-    void crearParcheRegion({ origen: origenRegion, este: esteRegion, norte: norteRegion }).then((geometria) => {
-      if (liberado) {
-        geometria.dispose()
-        return
-      }
+    void calcularEnSegundoPlano('texturaRegion').then((datos) => {
+      if (liberado) return
+      texturaRegion = crearTexturaRegion(datos)
+      tierra.material.uniforms.uRegion.value = texturaRegion
+      tierra.material.uniforms.uRegionListo.value = 1
+      avisarRecursoNuevo()
+    })
+    void calcularEnSegundoPlano('parcheRegion', { origen: origenRegion.toArray(), este: esteRegion.toArray(), norte: norteRegion.toArray() }).then((datos) => {
+      if (liberado) return
       parche.geometry.dispose()
-      parche.geometry = geometria
+      parche.geometry = crearParcheRegion(datos)
       parcheListo = true
+      avisarRecursoNuevo()
+    })
+    void calcularEnSegundoPlano('sombrasNubes').then((bytes) => {
+      if (liberado) return
+      sombrasNubes = crearTexturaSombras(bytes)
+      tierra.material.uniforms.uSombrasNubes.value = sombrasNubes
+      materialParche.uniforms.uSombrasNubes.value = sombrasNubes
+      avisarRecursoNuevo()
     })
   }
 
@@ -653,6 +663,7 @@ function crearSistema(fecha: Date) {
       liberables.forEach((recurso) => recurso.dispose())
       mapasTierra?.liberar()
       texturaRegion?.dispose()
+      sombrasNubes?.dispose()
     },
   }
 }
@@ -675,7 +686,7 @@ export function SistemaSolar({
 
   useEffect(() => () => sistema.liberar(), [sistema])
 
-  // Los mapas de la Tierra se pintan poco después de montar, fuera del primer fotograma.
+  // Los mapas de la Tierra se piden poco después de montar, fuera de los primeros fotogramas.
   useEffect(() => {
     const espera = window.setTimeout(() => sistema.cargarMapasTierra(), 1500)
     return () => window.clearTimeout(espera)

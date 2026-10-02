@@ -6,8 +6,10 @@ import * as THREE from 'three'
 import { CAMARA_AGUJERO } from '@/features/agujero-negro/constantes/parametrosAgujero'
 import { CARRIL_VH, VIAJE } from '@/features/agujero-negro/constantes/viajeScroll'
 import { MIRADA_ESPACIO, avanzarMirada } from '@/features/agujero-negro/store/miradaEspacio'
+import { avisarRecursoNuevo } from '@/features/agujero-negro/store/recursosNuevos'
 import { interpolarMonotono } from '@/features/agujero-negro/utils/interpolarMonotono'
 import { obtenerProgresoSuave } from '@/features/narrativa/store/progresoScrollStore'
+import { calcularEnSegundoPlano } from '@/features/segundo-plano/calcularEnSegundoPlano'
 import { CAMARA_VALLE, CIUDAD, CORAZON, LAGUNA, RECORTE_VALLE, SOL_MANANA, direccionRumbo, direccionSol } from '../constantes/valle'
 import { obtenerTexturaCeldas } from '../utils/campos'
 import { CABEZA_FRAG, CABEZA_VERT, HOJA_FRAG, HOJA_VERT, TALLO_FRAG, TALLO_VERT } from '../shaders/flores'
@@ -18,8 +20,8 @@ import { CENTRO_CAJITA, COREOGRAFIA } from '../constantes/carta'
 import { usePaseo } from '../hooks/usePaseo'
 import { CARTA, abrirCajita, empezarLectura, salirDeLaCarta, segundosCarta, segundosSalida, terminarSalida } from '../store/carta'
 import { PASEO, RITMO_PASEO, alturaPaseo, avanzarPaseo, reiniciarPaseo } from '../store/paseo'
-import { crearQuadInstanciado, generarFlores } from '../utils/flores'
-import { SOMBRAS_NUBES, crearTexturaSombras, generarCumulos, nieblaEnNubes } from '../utils/nubesDestino'
+import { type DatosFlores, crearQuadInstanciado } from '../utils/flores'
+import { SOMBRAS_NUBES, crearTexturaSombras, cumulosDeLaLlegada, nieblaEnNubes } from '../utils/nubesDestino'
 import { PISO_VALLE } from '../utils/region'
 import {
   type Coreografia,
@@ -87,8 +89,7 @@ const acotarSuave = (valor: number, minimo: number, maximo: number, k: number): 
   valor < minimo ? valor + (minimo - valor) * k : valor > maximo ? valor + (maximo - valor) * k : valor
 
 /** Las nubes de la llegada (km): las cercanas al valle, para la niebla al atravesarlas. */
-const CUMULOS = generarCumulos()
-const NUBES_CERCANAS = CUMULOS.filter((bola) => Math.hypot(bola.x, bola.y) < 40)
+const NUBES_CERCANAS = cumulosDeLaLlegada().filter((bola) => Math.hypot(bola.x, bola.y) < 40)
 
 /**
  * El valle de Cochabamba al final del viaje (ver `constantes/valle.ts`). Va dentro del marco del
@@ -104,8 +105,7 @@ interface MallasFlores {
   hojas: THREE.InstancedBufferGeometry
 }
 
-const crearMallasFlores = (): MallasFlores => {
-  const datos = generarFlores()
+const crearMallasFlores = (datos: DatosFlores): MallasFlores => {
   return {
     cabezas: crearQuadInstanciado({ aBase: [datos.cabezaBase, 4], aForma: [datos.cabezaForma, 4], aCara: [datos.cabezaCara, 2] }, datos.cabezas),
     tallos: crearQuadInstanciado({ aBase: [datos.talloBase, 4], aForma: [datos.talloForma, 3] }, datos.cabezas),
@@ -151,7 +151,8 @@ export function EscenaCochabamba() {
       vertexShader: VALLE_SUELO_VERT,
       fragmentShader: VALLE_SUELO_FRAG,
       uniforms: {
-        uSombrasNubes: { value: crearTexturaSombras(CUMULOS) },
+        // Hasta que se calculan (ver abajo), sin sombras.
+        uSombrasNubes: { value: null },
         uLadoSombras: { value: SOMBRAS_NUBES.lado },
         uRegion: { value: null },
         uLadoRegion: { value: 2400 },
@@ -192,16 +193,36 @@ export function EscenaCochabamba() {
     [uniformesFlores],
   )
 
-  // El relieve (unas decenas de miles de vértices) y las flores (decenas de miles de plantas) se
-  // calculan después de cargar la página.
+  // El relieve (unas decenas de miles de vértices), las flores (decenas de miles de plantas) y las
+  // sombras de las nubes se calculan en un hilo aparte (ver `features/segundo-plano`), poco después
+  // de cargar la página; se ponen en cuanto llegan.
   useEffect(() => {
-    const espera = window.setTimeout(() => setTerreno(crearTerreno()), 2500)
-    const esperaFlores = window.setTimeout(() => setFlores(crearMallasFlores()), 3500)
+    let vivo = true
+    let sombras: THREE.DataTexture | null = null
+    const espera = window.setTimeout(() => {
+      void calcularEnSegundoPlano('terreno').then((datos) => {
+        if (vivo) setTerreno(crearTerreno(datos))
+      })
+      void calcularEnSegundoPlano('flores').then((datos) => {
+        if (vivo) setFlores(crearMallasFlores(datos))
+      })
+      void calcularEnSegundoPlano('sombrasNubes').then((bytes) => {
+        if (!vivo) return
+        sombras = crearTexturaSombras(bytes)
+        material.uniforms.uSombrasNubes.value = sombras
+        avisarRecursoNuevo()
+      })
+    }, 2000)
     return () => {
+      vivo = false
       window.clearTimeout(espera)
-      window.clearTimeout(esperaFlores)
+      sombras?.dispose()
     }
-  }, [])
+  }, [material])
+  // Ya en la escena, se suben a la GPU (ver `PrecalentarSombreadores`).
+  useEffect(() => {
+    if (terreno || flores) avisarRecursoNuevo()
+  }, [terreno, flores])
 
   useEffect(
     () => () => {

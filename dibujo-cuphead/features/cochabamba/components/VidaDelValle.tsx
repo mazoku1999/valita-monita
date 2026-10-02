@@ -3,12 +3,14 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
+import { avisarRecursoNuevo } from '@/features/agujero-negro/store/recursosNuevos'
+import { calcularEnSegundoPlano } from '@/features/segundo-plano/calcularEnSegundoPlano'
 import { NUBE_BOLA_FRAG, NUBE_BOLA_VERT } from '../shaders/nubesBolas'
 import { ARBOL_FRAG, ARBOL_VERT, MARIPOSA_FRAG, MARIPOSA_VERT, NUBE_VALLE_FRAG, NUBE_VALLE_VERT, PETALO_FRAG, PETALO_VERT } from '../shaders/vida'
 import { PASEO } from '../store/paseo'
 import { crearQuadInstanciado } from '../utils/flores'
-import { crearBolasInstanciadas, generarCumulos, nubesEnValle } from '../utils/nubesDestino'
-import { CAJA_PETALOS, MARCO_FINAL, crearAlasInstanciadas, generarVida } from '../utils/vida'
+import { crearBolasInstanciadas, cumulosDeLaLlegada, nubesEnValle } from '../utils/nubesDestino'
+import { CAJA_PETALOS, type DatosVida, MARCO_FINAL, crearAlasInstanciadas } from '../utils/vida'
 
 /** Uniformes que comparte con las flores (los actualiza `EscenaCochabamba` en cada fotograma). */
 export interface UniformesValle {
@@ -29,14 +31,13 @@ interface MallasVida {
   nubesEntrada: THREE.InstancedBufferGeometry
 }
 
-const crearMallasVida = (): MallasVida => {
-  const datos = generarVida()
+const crearMallasVida = (datos: DatosVida): MallasVida => {
   return {
     mariposas: crearAlasInstanciadas(datos.mariposaAncla, datos.mariposaAzar, datos.mariposas),
     petalos: crearQuadInstanciado({ aAzar: [datos.petaloAzar, 4], aAzar2: [datos.petaloAzar2, 4] }, datos.petalos),
     nubes: crearQuadInstanciado({ aCentro: [datos.nubeCentro, 4], aAzar: [datos.nubeAzar, 4] }, datos.nubes),
     arboles: crearQuadInstanciado({ aBase: [datos.arbolBase, 4], aAzar: [datos.arbolAzar, 4] }, datos.arboles),
-    nubesEntrada: crearBolasInstanciadas(nubesEnValle(generarCumulos())),
+    nubesEntrada: crearBolasInstanciadas(nubesEnValle(cumulosDeLaLlegada())),
   }
 }
 
@@ -93,10 +94,24 @@ export function VidaDelValle({ uniformes }: { uniformes: UniformesValle }) {
     )
   })
 
+  // Los árboles, las mariposas y los pétalos se calculan en un hilo aparte (ver
+  // `features/segundo-plano`), poco después de cargar la página.
   useEffect(() => {
-    const espera = window.setTimeout(() => setMallas(crearMallasVida()), 4200)
-    return () => window.clearTimeout(espera)
+    let vivo = true
+    const espera = window.setTimeout(() => {
+      void calcularEnSegundoPlano('vida').then((datos) => {
+        if (vivo) setMallas(crearMallasVida(datos))
+      })
+    }, 2000)
+    return () => {
+      vivo = false
+      window.clearTimeout(espera)
+    }
   }, [])
+  // Ya en la escena, se suben a la GPU (ver `PrecalentarSombreadores`).
+  useEffect(() => {
+    if (mallas) avisarRecursoNuevo()
+  }, [mallas])
   useEffect(
     () => () => {
       for (const material of Object.values(materiales)) material.dispose()

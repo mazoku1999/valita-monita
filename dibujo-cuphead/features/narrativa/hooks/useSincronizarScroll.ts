@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { establecerProgreso } from '../store/progresoScrollStore'
+import { establecerProgreso, largoDelCarril } from '../store/progresoScrollStore'
 
 /**
  * Progreso de scroll de la narrativa (0..1). El viaje empieza siempre arriba: se desactiva la
@@ -16,8 +16,7 @@ export function useSincronizarScroll(): void {
 
     const medir = (): void => {
       solicitud = 0
-      const alturaScroll = document.documentElement.scrollHeight - window.innerHeight
-      establecerProgreso(alturaScroll > 0 ? window.scrollY / alturaScroll : 0)
+      establecerProgreso(window.scrollY / largoDelCarril())
     }
 
     const programar = (): void => {

@@ -9,7 +9,14 @@ import { CamaraNarrativa } from './CamaraNarrativa'
 import { EfectosPost } from './EfectosPost'
 import { EscenaSistemaSolar } from './EscenaSistemaSolar'
 import { LenteGravitacionalQuad } from './LenteGravitacionalQuad'
+import { PrecalentarSombreadores } from './PrecalentarSombreadores'
 import { TunelAgujeroGusano } from './TunelAgujeroGusano'
+
+/**
+ * Resolución máxima del dibujo (píxeles del lienzo por píxel de CSS): en las pantallas táctiles
+ * (móviles), algo menos, para que puedan ir fluidos (el grano de la película disimula la diferencia).
+ */
+const DPR_MAXIMO = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches ? 1.25 : 1.5
 
 interface AgujeroNegroCanvasProps {
   onListo?: () => void
@@ -19,7 +26,7 @@ export function AgujeroNegroCanvas({ onListo }: AgujeroNegroCanvasProps) {
   return (
     <Canvas
       flat
-      dpr={[1, 1.5]}
+      dpr={[1, DPR_MAXIMO]}
       camera={{
         fov: CAMARA_AGUJERO.fov,
         near: CAMARA_AGUJERO.cerca,
@@ -45,6 +52,8 @@ export function AgujeroNegroCanvas({ onListo }: AgujeroNegroCanvasProps) {
       {/* El escenario de la canción, antes del posproceso que lo compone. */}
       <EscenarioCancion />
       <EfectosPost />
+      {/* Los programas de la GPU de lo que aún no se ve, preparados de antemano (sin tirones luego). */}
+      <PrecalentarSombreadores />
     </Canvas>
   )
 }

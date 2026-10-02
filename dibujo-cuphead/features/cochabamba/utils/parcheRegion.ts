@@ -20,14 +20,25 @@ const suave = (borde0: number, borde1: number, x: number): number => {
   return t * t * (3 - 2 * t)
 }
 
+type Vector = readonly [number, number, number]
+
 export interface BaseRegion {
   /** Vector unitario del centro, el este y el norte en el marco de la malla de la Tierra. */
-  origen: THREE.Vector3
-  este: THREE.Vector3
-  norte: THREE.Vector3
+  origen: Vector
+  este: Vector
+  norte: Vector
 }
 
-export function crearParcheRegion({ origen, este, norte }: BaseRegion): Promise<THREE.BufferGeometry> {
+/** Los arreglos de la malla (se calculan en un hilo aparte, ver `features/segundo-plano`). */
+export interface DatosParche {
+  posiciones: Float32Array
+  valle: Float32Array
+  normales: Float32Array
+  region: Float32Array
+  indices: Uint16Array | Uint32Array
+}
+
+export function calcularParcheRegion({ origen, este, norte }: BaseRegion): DatosParche {
   const radios: number[] = [0]
   let r = 0.02
   while (r < RADIO_PARCHE_KM) {
@@ -41,7 +52,6 @@ export function crearParcheRegion({ origen, este, norte }: BaseRegion): Promise<
   const valle = new Float32Array(total * 3)
   const normales = new Float32Array(total * 3)
   const region = new Float32Array(total * 4)
-  const punto = new THREE.Vector3()
 
   const escribir = (indice: number, x: number, y: number, paso: number): void => {
     const distancia = Math.hypot(x, y)
@@ -61,51 +71,47 @@ export function crearParcheRegion({ origen, este, norte }: BaseRegion): Promise<
     valle.set([x * 1000, h - PISO_VALLE, -y * 1000], indice * 3)
     // En la esfera, con la curvatura: se aplana y se hunde en el borde.
     const alto = (h * (1 - suave(BORDE_PARCHE.aplanar[0], BORDE_PARCHE.aplanar[1], distancia)) - 4000 * suave(BORDE_PARCHE.hundir[0], BORDE_PARCHE.hundir[1], distancia)) / 1000
-    punto
-      .copy(origen)
-      .addScaledVector(este, x / RADIO_TIERRA_KM)
-      .addScaledVector(norte, y / RADIO_TIERRA_KM)
-      .normalize()
-      .multiplyScalar(1 + alto / RADIO_TIERRA_KM)
-    posiciones.set([punto.x, punto.y, punto.z], indice * 3)
+    const px = origen[0] + (este[0] * x + norte[0] * y) / RADIO_TIERRA_KM
+    const py = origen[1] + (este[1] * x + norte[1] * y) / RADIO_TIERRA_KM
+    const pz = origen[2] + (este[2] * x + norte[2] * y) / RADIO_TIERRA_KM
+    const escala = (1 + alto / RADIO_TIERRA_KM) / (Math.hypot(px, py, pz) || 1)
+    posiciones.set([px * escala, py * escala, pz * escala], indice * 3)
   }
 
-  return new Promise((resolver) => {
-    escribir(0, 0, 0, radios[1])
-    let anillo = 1
-    const tanda = (): void => {
-      const inicio = performance.now()
-      while (anillo < radios.length && performance.now() - inicio < 12) {
-        const radio = radios[anillo]
-        const paso = anillo + 1 < radios.length ? radios[anillo + 1] - radio : radio - radios[anillo - 1]
-        for (let j = 0; j < segmentos; j += 1) {
-          const angulo = (j / segmentos) * Math.PI * 2
-          escribir(1 + (anillo - 1) * segmentos + j, radio * Math.cos(angulo), radio * Math.sin(angulo), Math.max(paso, (radio * Math.PI * 2) / segmentos))
-        }
-        anillo += 1
-      }
-      if (anillo < radios.length) {
-        window.setTimeout(tanda, 0)
-        return
-      }
-      const indices: number[] = []
-      for (let j = 0; j < segmentos; j += 1) indices.push(0, 1 + j, 1 + ((j + 1) % segmentos))
-      for (let i = 1; i + 1 < radios.length; i += 1) {
-        const a = 1 + (i - 1) * segmentos
-        const b = 1 + i * segmentos
-        for (let j = 0; j < segmentos; j += 1) {
-          const j2 = (j + 1) % segmentos
-          indices.push(a + j, b + j, a + j2, a + j2, b + j, b + j2)
-        }
-      }
-      const geometria = new THREE.BufferGeometry()
-      geometria.setAttribute('position', new THREE.BufferAttribute(posiciones, 3))
-      geometria.setAttribute('aValle', new THREE.BufferAttribute(valle, 3))
-      geometria.setAttribute('aNormalValle', new THREE.BufferAttribute(normales, 3))
-      geometria.setAttribute('aRegion', new THREE.BufferAttribute(region, 4))
-      geometria.setIndex(indices)
-      resolver(geometria)
+  escribir(0, 0, 0, radios[1])
+  for (let anillo = 1; anillo < radios.length; anillo += 1) {
+    const radio = radios[anillo]
+    const paso = anillo + 1 < radios.length ? radios[anillo + 1] - radio : radio - radios[anillo - 1]
+    for (let j = 0; j < segmentos; j += 1) {
+      const angulo = (j / segmentos) * Math.PI * 2
+      escribir(1 + (anillo - 1) * segmentos + j, radio * Math.cos(angulo), radio * Math.sin(angulo), Math.max(paso, (radio * Math.PI * 2) / segmentos))
     }
-    tanda()
-  })
+  }
+  const indices = new (total > 65535 ? Uint32Array : Uint16Array)(3 * segmentos + 6 * segmentos * (radios.length - 2))
+  let k = 0
+  for (let j = 0; j < segmentos; j += 1) {
+    indices.set([0, 1 + j, 1 + ((j + 1) % segmentos)], k)
+    k += 3
+  }
+  for (let i = 1; i + 1 < radios.length; i += 1) {
+    const a = 1 + (i - 1) * segmentos
+    const b = 1 + i * segmentos
+    for (let j = 0; j < segmentos; j += 1) {
+      const j2 = (j + 1) % segmentos
+      indices.set([a + j, b + j, a + j2, a + j2, b + j, b + j2], k)
+      k += 6
+    }
+  }
+  return { posiciones, valle, normales, region, indices }
+}
+
+/** La malla del relieve de la región con sus arreglos (ver `calcularParcheRegion`). */
+export function crearParcheRegion({ posiciones, valle, normales, region, indices }: DatosParche): THREE.BufferGeometry {
+  const geometria = new THREE.BufferGeometry()
+  geometria.setAttribute('position', new THREE.BufferAttribute(posiciones, 3))
+  geometria.setAttribute('aValle', new THREE.BufferAttribute(valle, 3))
+  geometria.setAttribute('aNormalValle', new THREE.BufferAttribute(normales, 3))
+  geometria.setAttribute('aRegion', new THREE.BufferAttribute(region, 4))
+  geometria.setIndex(new THREE.BufferAttribute(indices, 1))
+  return geometria
 }

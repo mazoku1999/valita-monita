@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { CARRIL_VH } from '@/features/agujero-negro/constantes/viajeScroll'
 
 type Escucha = () => void
 
@@ -16,6 +17,17 @@ export function establecerProgreso(valor: number): void {
 
 export function obtenerProgreso(): number {
   return progresoActual
+}
+
+/**
+ * Lo que se puede desplazar la página (px) para recorrer el carril, medido con la altura grande de
+ * la ventana (la del propio carril, en `vh`, que no cambia): en un móvil, al esconderse o aparecer
+ * la barra del navegador cambia `innerHeight` y, con ella, el progreso daba un saltito (la cámara
+ * saltaba).
+ */
+export function largoDelCarril(): number {
+  const total = document.documentElement.scrollHeight
+  return Math.max(1, total * (1 - 100 / CARRIL_VH))
 }
 
 /**

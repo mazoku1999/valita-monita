@@ -51,9 +51,12 @@ El dibujo es un pase al final del posproceso (`features/agujero-negro/components
 - `shaders/dibujo.ts`: cielo y rayos de sol, tinta, composición, destellos y película.
 - `shaders/acuarela.ts`: paleta de época, cielo nocturno en acuarela y papel.
 - `constantes/dibujo.ts`: grosor de la tinta, bandas de color, aguadas, película, hervor.
-- `store/ritmoDibujo.ts`: el ritmo de 24 dibujos por segundo (entre dibujos la pantalla no cambia y
-  no se calcula nada) y el compás (112 pulsaciones por minuto): con él late el disco del agujero y
-  se mecen las estrellas; el sistema solar va sin latidos.
+- `store/ritmoDibujo.ts`: el ritmo. Como en Cuphead, lo dibujado a mano (el hervor de la tinta, el
+  titileo de las estrellas, la película y los lienzos de la canción) cambia 24 veces por segundo,
+  mientras la cámara y el scroll van a 60 por segundo parejos (o a 30, también parejos, si el
+  aparato no llega); los fotogramas que no toca dibujar no calculan nada. Y el compás (112
+  pulsaciones por minuto): con él late el disco del agujero y se mecen las estrellas; el sistema
+  solar va sin latidos.
 - La película antigua lleva también el iris de la época: se cierra sobre la sombra al cruzar el
   horizonte y se abre sobre el remolino (tramos en `constantes/viajeScroll.ts`).
 - `utils/destellos.ts`: estrellas del cielo (puntos, destellos de cuatro puntas y estrellas de
@@ -75,13 +78,44 @@ El dibujo es un pase al final del posproceso (`features/agujero-negro/components
   se apaga cuando la Tierra llena la pantalla.
 - **La mirada del usuario** (`features/agujero-negro/store/miradaEspacio.ts`): dentro del agujero,
   arrastrar orbita alrededor de lo que se mira (el Sol o la Tierra), Ctrl + rueda o pellizcar
-  acercan, el cursor da un leve paralaje; en el valle, arrastrar gira la cabeza. Todo vuelve al
+  acercan, el cursor da un leve paralaje; en el valle, arrastrar gira la cabeza. En una pantalla
+  táctil, un dedo es siempre el scroll del viaje (no orbita) y dos dedos pellizcan. Todo vuelve al
   camino al seguir con el scroll o con un doble clic. La cámara del agujero negro, ahí, se queda
   quieta (antes seguía girando sola y con el cursor, y el marco del agujero de gusano la seguía con
   retraso: el sistema solar se deslizaba por la pantalla y volvía solo) y el campo de visión ya no
   cambia con el scroll.
 - **Estrellas detrás de los planetas**: cada píxel de una estrella comprueba si el cielo está
   abierto (antes bastaba con su centro y alguna se dibujaba encima de un planeta).
+
+## Fluido en el móvil
+
+Lo que hacía que en un celular el scroll y la cámara se sintieran mal, y cómo se arregló:
+
+- **Fotogramas parejos** (`features/dibujo/store/ritmoDibujo.ts`): antes la pantalla entera se
+  dibujaba a 24 por segundo, que en una pantalla de 60 Hz son fotogramas desparejos (unos duran
+  tres refrescos y otros dos) y al deslizar todo temblaba. Ahora la pantalla va a 60 parejos (30 si
+  el aparato pierde muchos fotogramas) y sólo lo dibujado a mano sigue a 24.
+- **Un dedo, el scroll** (`hooks/useArrastreOrbital.ts`): cada deslizamiento también giraba la
+  cámara, y con inercia. Ahora un dedo sólo desplaza la página; dos dedos, el zoom.
+- **Sin saltitos de la barra del navegador** (`largoDelCarril` en
+  `features/narrativa/store/progresoScrollStore.ts`): el progreso se mide con el alto del carril,
+  que no cambia cuando la barra del navegador se esconde o aparece.
+- **Menos píxeles en pantallas táctiles** (`AgujeroNegroCanvas.tsx`): hasta 1,25 píxeles por píxel
+  de CSS (1,5 con ratón); el grano de la película lo disimula.
+- **Los cálculos largos en un hilo aparte** (`features/segundo-plano`): los mapas de la Tierra, la
+  región de Cochabamba (textura y relieve), las sombras de las nubes, el relieve del valle, las
+  flores y la vida del valle se calculan en un Web Worker (`trabajador.ts`) y llegan como arreglos
+  con los que se arman las mallas y las texturas. Antes congelaban la página al empezar: con la CPU
+  de un celular (la de esta Mac frenada 4 veces), unos 13 s de cálculo en los primeros segundos,
+  con congelones de 1,2 a 2,4 s; ahora unos 3 s, y nada de más de 0,22 s tras la carga. Si el
+  navegador no puede crear el hilo, se calculan en la página como antes.
+- **Programas y mallas listos antes de verse** (`PrecalentarSombreadores.tsx`): se compilan en
+  segundo plano y se suben a la GPU de antemano (también lo que llega del hilo aparte, avisado por
+  `store/recursosNuevos.ts`); antes, el sistema solar y el valle trababan el viaje al aparecer.
+- **El primer toque, sin tirón** (`prepararAudio` en `features/cancion/utils/audio.ts`): el Web
+  Audio se creaba en el primer gesto, justo al empezar a deslizar. Ahora se crea con la página ya
+  cargada y el gesto sólo lo reanuda; apoyar el dedo no cuenta, sólo un gesto que de verdad deje
+  sonar (un toque, un clic o una tecla).
 
 ## La canción del agujero negro
 
@@ -321,7 +355,7 @@ Además de las del original (`?vista=canto|anillo|elevada|elevadaCercana|inferio
 | `dibujoGrosor` | grosor de la tinta (radio en px a 720 de alto; la línea mide el doble) |
 
 Con el ratón: arrastrar orbita (o, en el valle, gira la cabeza), Ctrl + rueda o pellizcar acerca,
-doble clic vuelve al camino. Al final, en el corazón: W/S o ↑/↓ (andar), A/D (de lado), ←/→
+doble clic vuelve al camino (con el dedo: deslizar es el scroll y dos dedos acercan). Al final, en el corazón: W/S o ↑/↓ (andar), A/D (de lado), ←/→
 (girar) y Mayúsculas (correr); arrastrar mira alrededor. En pantallas táctiles, la palanca. En la
 carta, Escape sale. En desarrollo, `window.__carta.abrir()` / `salir()` abren y cierran la cajita y
 `window.__carta.saltar(s)` adelanta su reloj; `window.__cancion.saltarA(s)` lleva la canción del
@@ -345,7 +379,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
 `dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`,
-`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`.
+`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

@@ -10,17 +10,32 @@ import { AGUA_INTERIOR, DESIERTOS, HIELO, POBLACION, TIERRA_FIRME, type Poligono
  */
 const ANCHO = 2048
 const ALTO = 1024
+/** Población: manchas radiales sumadas (1024×512 basta: el shader las rompe en ciudades). */
+const ANCHO_POBLACION = 1024
+const ALTO_POBLACION = 512
 
-const crearLienzo = (ancho: number, alto: number): [HTMLCanvasElement, CanvasRenderingContext2D] => {
-  const lienzo = document.createElement('canvas')
-  lienzo.width = ancho
-  lienzo.height = alto
-  const contexto = lienzo.getContext('2d')
+/** Lo que tienen en común el lienzo de la página y el de fuera de pantalla (el del hilo aparte). */
+type Contexto2D = CanvasPath & CanvasDrawPath & CanvasFillStrokeStyles & CanvasRect & CanvasImageData & CanvasCompositing
+
+/**
+ * Un lienzo para pintar y leer sus píxeles: en el hilo aparte (ver `features/segundo-plano`), uno
+ * fuera de pantalla; en la página, uno del documento.
+ */
+const crearLienzo = (ancho: number, alto: number): Contexto2D => {
+  let contexto: Contexto2D | null
+  if (typeof document === 'undefined') {
+    contexto = new OffscreenCanvas(ancho, alto).getContext('2d', { willReadFrequently: true })
+  } else {
+    const lienzo = document.createElement('canvas')
+    lienzo.width = ancho
+    lienzo.height = alto
+    contexto = lienzo.getContext('2d', { willReadFrequently: true })
+  }
   if (!contexto) throw new Error('Sin contexto 2D para el mapa de la Tierra')
-  return [lienzo, contexto]
+  return contexto
 }
 
-const trazar = (contexto: CanvasRenderingContext2D, poligono: Poligono, ancho: number, alto: number): void => {
+const trazar = (contexto: Contexto2D, poligono: Poligono, ancho: number, alto: number): void => {
   contexto.beginPath()
   for (let k = 0; k < poligono.length; k += 2) {
     const x = ((poligono[k] + 180) / 360) * ancho
@@ -34,7 +49,7 @@ const trazar = (contexto: CanvasRenderingContext2D, poligono: Poligono, ancho: n
 
 /** Máscara en escala de grises (0..1) de unos polígonos, restando otros si se dan. */
 const mascara = (poligonos: readonly Poligono[], restar: readonly Poligono[] = []): Float32Array => {
-  const [, contexto] = crearLienzo(ANCHO, ALTO)
+  const contexto = crearLienzo(ANCHO, ALTO)
   contexto.fillStyle = '#000'
   contexto.fillRect(0, 0, ANCHO, ALTO)
   contexto.fillStyle = '#fff'
@@ -80,8 +95,54 @@ const difuminar = (valores: Float32Array, ancho: number, alto: number, radio: nu
   return origen
 }
 
-const aTextura = (lienzo: HTMLCanvasElement): THREE.CanvasTexture => {
-  const textura = new THREE.CanvasTexture(lienzo)
+/** Los píxeles RGBA de un lienzo con la fila de abajo primero (como los lee la GPU: el norte arriba). */
+const deAbajoArriba = (pixeles: Uint8ClampedArray, ancho: number, alto: number): Uint8Array => {
+  const datos = new Uint8Array(ancho * alto * 4)
+  for (let y = 0; y < alto; y += 1) datos.set(pixeles.subarray(y * ancho * 4, (y + 1) * ancho * 4), (alto - 1 - y) * ancho * 4)
+  return datos
+}
+
+/** Los mapas de la Tierra en RGBA (ver `deAbajoArriba`): se pintan en un hilo aparte. */
+export interface DatosMapasTierra {
+  mapa: Uint8Array
+  poblacion: Uint8Array
+}
+
+export function calcularMapasTierra(): DatosMapasTierra {
+  const tierra = difuminar(mascara(TIERRA_FIRME, AGUA_INTERIOR), ANCHO, ALTO, 2)
+  const aridez = difuminar(mascara(DESIERTOS), ANCHO, ALTO, 22)
+  const hielo = difuminar(mascara(HIELO), ANCHO, ALTO, 3)
+  const mapa = new Uint8ClampedArray(ANCHO * ALTO * 4)
+  for (let i = 0; i < ANCHO * ALTO; i += 1) {
+    mapa[i * 4] = Math.round(255 * tierra[i])
+    mapa[i * 4 + 1] = Math.round(255 * aridez[i])
+    mapa[i * 4 + 2] = Math.round(255 * hielo[i])
+    mapa[i * 4 + 3] = 255
+  }
+
+  const contexto = crearLienzo(ANCHO_POBLACION, ALTO_POBLACION)
+  contexto.fillStyle = '#000'
+  contexto.fillRect(0, 0, ANCHO_POBLACION, ALTO_POBLACION)
+  contexto.globalCompositeOperation = 'lighter'
+  for (let k = 0; k < POBLACION.length; k += 4) {
+    const [intensidad, longitud, latitud, radio] = POBLACION.slice(k, k + 4)
+    const x = ((longitud + 180) / 360) * ANCHO_POBLACION
+    const y = ((90 - latitud) / 180) * ALTO_POBLACION
+    const r = (radio / 360) * ANCHO_POBLACION
+    const gradiente = contexto.createRadialGradient(x, y, 0, x, y, r)
+    const nivel = Math.round(200 * intensidad)
+    gradiente.addColorStop(0, `rgb(${nivel},${nivel},${nivel})`)
+    gradiente.addColorStop(1, 'rgb(0,0,0)')
+    contexto.fillStyle = gradiente
+    contexto.fillRect(x - r, y - r, 2 * r, 2 * r)
+  }
+  const poblacion = contexto.getImageData(0, 0, ANCHO_POBLACION, ALTO_POBLACION).data
+
+  return { mapa: deAbajoArriba(mapa, ANCHO, ALTO), poblacion: deAbajoArriba(poblacion, ANCHO_POBLACION, ALTO_POBLACION) }
+}
+
+const aTextura = (datos: Uint8Array, ancho: number, alto: number): THREE.DataTexture => {
+  const textura = new THREE.DataTexture(datos, ancho, alto, THREE.RGBAFormat, THREE.UnsignedByteType)
   textura.colorSpace = THREE.NoColorSpace
   textura.wrapS = THREE.RepeatWrapping
   textura.wrapT = THREE.ClampToEdgeWrapping
@@ -89,52 +150,19 @@ const aTextura = (lienzo: HTMLCanvasElement): THREE.CanvasTexture => {
   textura.magFilter = THREE.LinearFilter
   textura.anisotropy = 4
   textura.generateMipmaps = true
+  textura.needsUpdate = true
   return textura
 }
 
 export interface TexturasTierra {
-  readonly mapa: THREE.CanvasTexture
-  readonly poblacion: THREE.CanvasTexture
+  readonly mapa: THREE.DataTexture
+  readonly poblacion: THREE.DataTexture
   readonly liberar: () => void
 }
 
-export function crearTexturasTierra(): TexturasTierra {
-  const tierra = difuminar(mascara(TIERRA_FIRME, AGUA_INTERIOR), ANCHO, ALTO, 2)
-  const aridez = difuminar(mascara(DESIERTOS), ANCHO, ALTO, 22)
-  const hielo = difuminar(mascara(HIELO), ANCHO, ALTO, 3)
-
-  const [lienzoMapa, contextoMapa] = crearLienzo(ANCHO, ALTO)
-  const imagen = contextoMapa.createImageData(ANCHO, ALTO)
-  for (let i = 0; i < ANCHO * ALTO; i += 1) {
-    imagen.data[i * 4] = Math.round(255 * tierra[i])
-    imagen.data[i * 4 + 1] = Math.round(255 * aridez[i])
-    imagen.data[i * 4 + 2] = Math.round(255 * hielo[i])
-    imagen.data[i * 4 + 3] = 255
-  }
-  contextoMapa.putImageData(imagen, 0, 0)
-
-  // Población: manchas radiales sumadas (1024×512 basta: el shader las rompe en ciudades).
-  const anchoPoblacion = 1024
-  const altoPoblacion = 512
-  const [lienzoPoblacion, contextoPoblacion] = crearLienzo(anchoPoblacion, altoPoblacion)
-  contextoPoblacion.fillStyle = '#000'
-  contextoPoblacion.fillRect(0, 0, anchoPoblacion, altoPoblacion)
-  contextoPoblacion.globalCompositeOperation = 'lighter'
-  for (let k = 0; k < POBLACION.length; k += 4) {
-    const [intensidad, longitud, latitud, radio] = POBLACION.slice(k, k + 4)
-    const x = ((longitud + 180) / 360) * anchoPoblacion
-    const y = ((90 - latitud) / 180) * altoPoblacion
-    const r = (radio / 360) * anchoPoblacion
-    const gradiente = contextoPoblacion.createRadialGradient(x, y, 0, x, y, r)
-    const nivel = Math.round(200 * intensidad)
-    gradiente.addColorStop(0, `rgb(${nivel},${nivel},${nivel})`)
-    gradiente.addColorStop(1, 'rgb(0,0,0)')
-    contextoPoblacion.fillStyle = gradiente
-    contextoPoblacion.fillRect(x - r, y - r, 2 * r, 2 * r)
-  }
-
-  const mapa = aTextura(lienzoMapa)
-  const poblacion = aTextura(lienzoPoblacion)
+export function crearTexturasTierra(datos: DatosMapasTierra): TexturasTierra {
+  const mapa = aTextura(datos.mapa, ANCHO, ALTO)
+  const poblacion = aTextura(datos.poblacion, ANCHO_POBLACION, ALTO_POBLACION)
   return {
     mapa,
     poblacion,

@@ -6,7 +6,7 @@ import type { EffectComposer as ComposerDeEfectos } from 'postprocessing'
 import { useEffect, useMemo, useRef } from 'react'
 import { ESCENARIO } from '@/features/cancion/store/escenario'
 import { NIEBLA } from '@/features/dibujo/store/niebla'
-import { avanzarRitmo, latido, pulsaciones, tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
+import { avanzarRitmo, latido, pulsaciones, ritmoDePantalla, tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
 import { PasoDibujo } from '@/features/dibujo/utils/PasoDibujo'
 import { obtenerProgreso, obtenerProgresoSuave } from '@/features/narrativa/store/progresoScrollStore'
 import { CARRIL_VH, VIAJE } from '../constantes/viajeScroll'
@@ -23,9 +23,10 @@ export function EfectosPost() {
   const pasoDibujo = useMemo(() => new PasoDibujo(), [])
   useEffect(() => () => pasoDibujo.dispose(), [pasoDibujo])
 
-  // Ritmo de dibujo animado (ver `features/dibujo/store/ritmoDibujo.ts`): el primero de cada
-  // fotograma decide si toca un dibujo nuevo; si no, el compositor no dibuja nada y la pantalla
-  // conserva el dibujo anterior. El tiempo que pasa entre dibujos se entrega entero al siguiente.
+  // Ritmo de la pantalla (ver `features/dibujo/store/ritmoDibujo.ts`): el primero de cada
+  // fotograma decide si toca dibujarla (a 60 por segundo, o a 30 si el aparato no llega); si no, el
+  // compositor no dibuja nada y la pantalla conserva el dibujo anterior. El tiempo que pasa entre
+  // dibujos se entrega entero al siguiente.
   // El compositor de r3f se crea en su propio efecto, después de montar: se envuelve su `render`
   // en cuanto existe (y otra vez si se recrea).
   const compositor = useRef<ComposerDeEfectos>(null)
@@ -43,8 +44,9 @@ export function EfectosPost() {
       original(pendiente)
       pendiente = 0
       if (process.env.NODE_ENV === 'development') {
-        const ventana = window as unknown as { __dibujosHechos?: number }
+        const ventana = window as unknown as { __dibujosHechos?: number; __ritmoPantalla?: () => number }
         ventana.__dibujosHechos = (ventana.__dibujosHechos ?? 0) + 1
+        ventana.__ritmoPantalla = ritmoDePantalla
       }
     }
   }, -1)
