@@ -1045,16 +1045,19 @@ void main() {
 /**
  * El escenario de la canción (ver `features/cancion/escenario/Escenario.ts`) sobre el dibujo, antes
  * de la película. Lo pidió el usuario: mientras suena, que se vea que seguimos viajando por el
- * agujero de gusano, pero con el video por encima, nítido y con prioridad ("más enfocado el video,
- * por encima de los costados del agujero de gusano… más prioridad al lyrics"):
+ * agujero de gusano, con el video por encima, ancho y nítido ("más enfocado el video, por encima de
+ * los costados… más prioridad al lyrics"; "más ancho, no tan cuadrado"):
  *
  * - La escena (`uEscena`, su lienzo), grande y nítida en su recuadro alrededor del fondo del túnel,
- *   con sólo un borde corto y suave. `uZoom` la acerca al pasar de una escena a otra (la que se va
- *   pasa de largo; la que llega viene del fondo).
- * - A los costados, el agujero de gusano por el que viajamos (con `uViaje`): un vórtice luminoso que
- *   viene hacia nosotros girando, con los tres brazos en espiral del túnel dibujado, y estelas de
- *   estrellas que pasan deprisa. Donde el túnel 3D deja ver el cielo del otro lado (su boca de
- *   salida, `uCielo`), se ve ese cielo: al avanzar, la boca crece dentro del vórtice.
+ *   con el borde como el de las ilustraciones de un libro de cuentos ("no son uniformes, son más
+ *   bonitos"): una aguada de acuarela que se desvanece irregular, con lóbulos y flecos, nubosa, y el
+ *   pigmento acumulado junto a la orilla. `uZoom` la acerca al pasar de una escena a otra (la que se
+ *   va pasa de largo; la que llega viene del fondo).
+ * - A los costados, el agujero de gusano por el que viajamos (con `uViaje`), que va cambiando
+ *   ("distintas cosas en lo que viajamos, no la misma cosa"; `uEstilo`, con decimales al pasar de
+ *   uno al siguiente): el remolino dibujado de antes, el hiperespacio entre nebulosas, un vórtice
+ *   luminoso, una aurora, un túnel de anillos de luz y el vórtice al atardecer. Sin el círculo del
+ *   fondo (lo pidió el usuario): el túnel converge en un punto.
  * - Encima, nítido (`uEncima`): la letra y el final, que se descubre en un círculo de borde suave
  *   (`uRevelado`).
  */
@@ -1062,16 +1065,18 @@ export const VIAJE_FRAG = /* glsl */ `
 uniform sampler2D uDibujo;
 uniform sampler2D uEscena;
 uniform sampler2D uEncima;
-// El cielo abierto del dibujo (en A): la boca de salida del agujero de gusano.
-uniform sampler2D uCielo;
-// Fondo del túnel (uv) y proporción de la pantalla (ancho / alto).
+// Fondo del túnel (uv), proporción de la pantalla (ancho / alto) y un píxel en altos de pantalla.
 uniform vec2 uCentro;
 uniform float uAspecto;
+uniform float uPixel;
 // Medio ancho y medio alto del recuadro de la escena (en altos de pantalla), su acercamiento y opacidad.
 uniform vec2 uMitad;
 uniform float uZoom;
 uniform float uOpacidadEscena;
 uniform float uViaje;
+// Qué viaje: 0 el remolino dibujado, 1 el hiperespacio, 2 el vórtice, 3 la aurora, 4 los anillos y
+// 5 el vórtice del atardecer; con decimales, el paso de uno al siguiente.
+uniform float uEstilo;
 // Radio del círculo por el que se descubre lo de encima (0–1; 1, entero).
 uniform float uRevelado;
 uniform float uTiempo;
@@ -1080,6 +1085,8 @@ in vec2 vUv;
 out vec4 fragColor;
 
 const float TAU = 6.2831853;
+const float PI = 3.14159265;
+const vec3 TINTA = vec3(0.075, 0.058, 0.047);
 
 float hash13(vec3 p3) {
   p3 = fract(p3 * 0.1031);
@@ -1108,47 +1115,20 @@ float fbm(vec3 x) {
   return v;
 }
 
-// El vórtice del agujero de gusano: coordenadas de túnel (ángulo y hondura, que avanza hacia
-// nosotros), tres brazos en espiral como los del túnel dibujado y nubes de luz estiradas a lo hondo
-// (pasan como estelas). Azul profundo entre los brazos; en ellos, violeta y cian, con crestas cálidas
-// (los colores de las bandas del dibujo) y más luz hacia el fondo.
-vec3 vortice(float r, float a) {
-  float z = 0.34 / max(r, 0.02);
-  float avance = z - uTiempo * 1.5;
-  float giro = a + z * 0.5 + uTiempo * 0.22;
-  vec3 coordenada = vec3(cos(giro) * 1.9, sin(giro) * 1.9, avance * 0.3);
-  float nube = fbm(coordenada);
-  float detalle = fbm(coordenada * vec3(2.3, 2.3, 1.2) + vec3(4.1, 2.7, 9.3));
-  float brazos = 0.5 + 0.5 * cos(3.0 * giro + nube * 2.2);
-  float luz = clamp(brazos * 0.62 + nube * 0.55 + detalle * 0.22 - 0.25, 0.0, 1.0);
-  vec3 hondo = vec3(0.03, 0.04, 0.14);
-  vec3 violeta = vec3(0.42, 0.25, 0.92);
-  vec3 cian = vec3(0.22, 0.78, 1.0);
-  vec3 calido = mix(vec3(1.0, 0.56, 0.46), vec3(1.0, 0.9, 0.64), detalle);
-  vec3 c = mix(hondo, violeta, smoothstep(0.12, 0.5, luz));
-  c = mix(c, cian, smoothstep(0.42, 0.75, luz) * (0.55 + 0.45 * sin(avance * 0.6 + a)));
-  c = mix(c, calido, smoothstep(0.72, 0.97, luz) * 0.9);
-  // Anillos que pasan, cada vez más deprisa al acercarse (la sensación de avanzar).
-  float anillo = pow(0.5 + 0.5 * cos(avance * 2.4), 14.0);
-  c += vec3(0.35, 0.55, 0.9) * anillo * 0.25 * smoothstep(0.15, 0.6, r);
-  // Más luz hacia el fondo del túnel.
-  return c * (0.7 + 0.7 * exp(-r * 1.3));
-}
-
-// Estelas de estrellas: salen del fondo del túnel y se alargan al acercarse a los bordes; casi
-// todas blancas, alguna dorada, turquesa o rosa.
-vec3 estelas(float r, float a) {
+// Estelas de estrellas: salen del fondo del túnel y se alargan al acercarse a los bordes; casi todas
+// blancas, alguna dorada, turquesa o rosa. Cuántas hay (0–1) y su prisa cambian con el viaje.
+vec3 estelas(float r, float a, float cuantas, float prisa) {
   vec3 luz = vec3(0.0);
   for (int capa = 0; capa < 3; capa++) {
     float fc = float(capa);
     float K = 70.0 + fc * 55.0;
     float sector = floor((a / TAU + 0.5) * K);
     float h = hash13(vec3(sector, fc, 7.0));
-    if (h < 0.42) continue;
+    if (h < 1.0 - cuantas) continue;
     float angulo = ((sector + 0.25 + 0.5 * hash13(vec3(sector, fc, 3.0))) / K - 0.5) * TAU;
-    float vida = fract(h * 13.7 + uTiempo * (0.3 + 0.13 * fc));
+    float vida = fract(h * 13.7 + uTiempo * (0.3 + 0.13 * fc) * prisa);
     float rs = 0.04 + vida * vida * 1.35;
-    float largo = 0.015 + rs * 0.22;
+    float largo = 0.015 + rs * 0.22 * prisa;
     float dAngulo = abs(sin(a - angulo)) * r;
     float tramo = smoothstep(rs - largo, rs, r) * (1.0 - smoothstep(rs, rs + 0.004, r));
     float ancho = 0.0009 + 0.0022 * vida;
@@ -1159,21 +1139,143 @@ vec3 estelas(float r, float a) {
   return luz;
 }
 
+// 0. El remolino dibujado de antes: tres brazos de bandas planas (cálidas cerca del fondo, moradas y
+// turquesa hacia fuera) con tinta entre ellas, que giran y salen hacia fuera.
+vec3 espiralDibujada(float r, float a) {
+  float rr = max(r, 0.003);
+  float u = 3.0 * a / TAU - 1.6 * log(rr) + uTiempo * 0.45;
+  float indice = mod(floor(u), 3.0);
+  vec3 calido = indice < 0.5 ? vec3(1.0, 0.93, 0.72) : indice < 1.5 ? vec3(1.0, 0.76, 0.34) : vec3(0.97, 0.5, 0.42);
+  vec3 morado = indice < 0.5 ? vec3(0.6, 0.5, 0.86) : indice < 1.5 ? vec3(0.34, 0.28, 0.64) : vec3(0.28, 0.56, 0.7);
+  float fuera = smoothstep(0.55, 0.95, r);
+  vec3 c = mix(calido, morado, fuera) * mix(1.06, 0.9, fract(u));
+  // Lo que mide una banda en píxeles (las del fondo, finísimas, se funden en su tono medio).
+  float w = 1.67 / rr * uPixel;
+  float fina = smoothstep(0.12, 0.3, w);
+  c = mix(c, mix(vec3(0.99, 0.74, 0.5), vec3(0.41, 0.45, 0.73), fuera), fina);
+  float linea = 1.0 - smoothstep(0.7 * w, 1.7 * w, abs(fract(u + 0.5) - 0.5));
+  return mix(c, TINTA, linea * (1.0 - fina));
+}
+
+// 1. El hiperespacio entre nebulosas: el negro azulado del espacio, nubes de colores que vienen hacia
+// nosotros y muchas estelas, deprisa.
+vec3 hiperespacio(float r, float a) {
+  vec3 c = mix(vec3(0.08, 0.09, 0.22), vec3(0.04, 0.05, 0.14), smoothstep(0.2, 1.2, r));
+  float z = 0.3 / max(r, 0.02) - uTiempo * 0.8;
+  vec3 coordenada = vec3(cos(a) * 1.5, sin(a) * 1.5, z * 0.45);
+  float n = fbm(coordenada);
+  float n2 = fbm(coordenada * vec3(1.6, 1.6, 1.3) + vec3(3.1, 7.4, 1.9));
+  float nube = smoothstep(0.4, 0.8, n) * smoothstep(0.05, 0.35, r);
+  vec3 tono = mix(vec3(0.98, 0.38, 0.66), vec3(0.28, 0.78, 1.0), smoothstep(0.35, 0.65, n2));
+  tono = mix(tono, vec3(1.0, 0.86, 0.6), smoothstep(0.72, 0.95, n) * 0.6);
+  c += tono * nube;
+  return c + estelas(r, a, 0.85, 1.6) * 1.1;
+}
+
+// 2 y 5. Un vórtice luminoso: tres brazos en espiral, nubes de luz estiradas a lo hondo y anillos que
+// pasan; frío (violeta y cian) o, al atardecer, cálido (rosa, naranja y oro).
+vec3 vortice(float r, float a, float calido) {
+  float z = 0.34 / max(r, 0.02);
+  float avance = z - uTiempo * 1.5;
+  float giro = a + z * 0.5 + uTiempo * 0.22;
+  vec3 coordenada = vec3(cos(giro) * 1.9, sin(giro) * 1.9, avance * 0.3);
+  float nube = fbm(coordenada);
+  float detalle = fbm(coordenada * vec3(2.3, 2.3, 1.2) + vec3(4.1, 2.7, 9.3));
+  float brazos = 0.5 + 0.5 * cos(3.0 * giro + nube * 2.2);
+  float luz = clamp(brazos * 0.62 + nube * 0.55 + detalle * 0.22 - 0.25, 0.0, 1.0);
+  vec3 hondo = mix(vec3(0.03, 0.04, 0.14), vec3(0.13, 0.04, 0.09), calido);
+  vec3 primero = mix(vec3(0.42, 0.25, 0.92), vec3(0.86, 0.3, 0.45), calido);
+  vec3 segundo = mix(vec3(0.22, 0.78, 1.0), vec3(1.0, 0.6, 0.28), calido);
+  vec3 cresta = mix(mix(vec3(1.0, 0.56, 0.46), vec3(1.0, 0.9, 0.64), detalle), vec3(1.0, 0.94, 0.66), calido);
+  vec3 c = mix(hondo, primero, smoothstep(0.12, 0.5, luz));
+  c = mix(c, segundo, smoothstep(0.42, 0.75, luz) * (0.55 + 0.45 * sin(avance * 0.6 + a)));
+  c = mix(c, cresta, smoothstep(0.72, 0.97, luz) * 0.9);
+  float anillo = pow(0.5 + 0.5 * cos(avance * 2.4), 14.0);
+  c += mix(vec3(0.35, 0.55, 0.9), vec3(0.95, 0.6, 0.35), calido) * anillo * 0.25 * smoothstep(0.15, 0.6, r);
+  return c * (0.7 + 0.7 * exp(-r * 1.3)) + estelas(r, a, 0.58, 1.0);
+}
+
+// 3. Una aurora: cortinas de luz verde, celeste y lila que ondean a lo largo del túnel, con sus
+// rayitas, sobre un cielo muy oscuro con pocas estrellas.
+vec3 aurora(float r, float a) {
+  vec3 c = mix(vec3(0.03, 0.07, 0.14), vec3(0.02, 0.04, 0.1), smoothstep(0.2, 1.2, r));
+  float z = 0.3 / max(r, 0.02) - uTiempo * 0.55;
+  vec3 luz = vec3(0.0);
+  for (int i = 0; i < 4; i++) {
+    float fi = float(i);
+    float centro = fi * 1.5708 + 0.7 * sin(z * 0.55 + fi * 1.7 + uTiempo * 0.25) + 0.3 * sin(z * 1.9 + fi * 2.3);
+    float dAngulo = abs(mod(a - centro + PI, TAU) - PI);
+    float ancho = 0.36 + 0.14 * sin(z * 0.8 + fi * 2.0);
+    float cortina = exp(-dAngulo * dAngulo / (ancho * ancho) * 2.2);
+    float rayos = 0.55 + 0.45 * sin(a * 34.0 + z * 0.3 + fi * 4.0 + 3.0 * fbm(vec3(a * 2.0, z * 0.3, fi)));
+    float k = cortina * (0.5 + 0.5 * rayos) * smoothstep(0.06, 0.5, r);
+    vec3 tono = fi < 0.5 ? vec3(0.3, 1.0, 0.62) : fi < 1.5 ? vec3(0.4, 0.75, 1.0) : fi < 2.5 ? vec3(0.78, 0.45, 1.0) : vec3(0.35, 0.95, 0.85);
+    tono = mix(tono, vec3(1.0, 0.55, 0.75), smoothstep(0.75, 1.0, cortina) * 0.35);
+    luz += tono * k;
+  }
+  return c + luz * 1.25 + estelas(r, a, 0.35, 0.6) * 0.7;
+}
+
+// 4. Un túnel de anillos de luz que pasan uno tras otro, con sus luces, y estelas.
+vec3 anillos(float r, float a) {
+  vec3 c = mix(vec3(0.05, 0.1, 0.2), vec3(0.03, 0.06, 0.14), smoothstep(0.2, 1.2, r));
+  // Una bruma azul que pasa, para que entre anillo y anillo no quede negro.
+  float bruma = fbm(vec3(cos(a) * 1.3, sin(a) * 1.3, (0.3 / max(r, 0.02) - uTiempo * 1.1) * 0.4));
+  c += vec3(0.1, 0.3, 0.5) * smoothstep(0.45, 0.85, bruma) * smoothstep(0.1, 0.5, r);
+  float z = 0.3 / max(r, 0.02);
+  float avance = z * 0.5 - uTiempo * 1.1;
+  float n = floor(avance);
+  float f = fract(avance + 0.03 * sin(a * 2.0 + uTiempo * 0.7 + n));
+  float cerca = min(f, 1.0 - f);
+  float anillo = exp(-pow(cerca / 0.035, 2.0));
+  float luces = 0.65 + 0.35 * step(0.5, fract(a * 24.0 / TAU + n * 0.37));
+  vec3 tono = mix(vec3(0.35, 0.85, 1.0), vec3(0.85, 0.65, 1.0), hash13(vec3(n, 2.0, 5.0)));
+  float brillo = smoothstep(0.02, 0.35, r);
+  c += tono * (anillo * luces + exp(-pow(cerca / 0.15, 2.0)) * 0.12) * brillo;
+  return c + estelas(r, a, 0.5, 1.2) * 0.8;
+}
+
+vec3 tunel(int estilo, float r, float a) {
+  if (estilo <= 0) return espiralDibujada(r, a);
+  if (estilo == 1) return hiperespacio(r, a);
+  if (estilo == 2) return vortice(r, a, 0.0);
+  if (estilo == 3) return aurora(r, a);
+  if (estilo == 4) return anillos(r, a);
+  return vortice(r, a, 1.0);
+}
+
 void main() {
   vec2 q = (vUv - uCentro) * vec2(uAspecto, 1.0);
   float r = length(q);
   float a = atan(q.y, q.x);
 
-  // La escena: cuánto se ve aquí (entera dentro de su recuadro, con un borde corto y suave).
+  // La escena, como en un libro de cuentos: la acuarela se desvanece en el papel con una orilla que no
+  // es uniforme (lóbulos grandes, flecos, nubosa), y el papel, a su vez, se pierde en el túnel con
+  // otra orilla irregular.
   vec2 e = q / (uMitad * uZoom);
-  float d = pow(pow(abs(e.x), 6.0) + pow(abs(e.y), 6.0), 1.0 / 6.0);
-  float m = (1.0 - smoothstep(0.93, 1.0, d)) * uOpacidadEscena;
+  float d = pow(pow(abs(e.x), 4.0) + pow(abs(e.y), 4.0), 0.25);
+  vec2 dir = e / max(length(e), 1e-4);
+  float lobulos = fbm(vec3(dir * 1.6, 4.0)) - 0.5;
+  float flecos = fbm(vec3(e * 6.0, 9.0)) - 0.5;
+  float nubes = fbm(vec3(e * 3.2, 2.0)) - 0.5;
+  float dd = d + lobulos * 0.2 + flecos * 0.06;
+  float m = (1.0 - smoothstep(0.78, 0.95, dd + nubes * 0.09)) * uOpacidadEscena;
+  float lobulosPapel = fbm(vec3(dir * 2.1, 8.0)) - 0.5;
+  float dPapel = d + lobulosPapel * 0.16 + flecos * 0.05;
+  float papel = (1.0 - smoothstep(0.95, 1.03, dPapel + nubes * 0.05)) * uOpacidadEscena;
 
   vec3 c = texture(uDibujo, vUv).rgb;
-  if (m < 0.999 && uViaje > 0.001) {
-    // La boca deja ver el cielo del otro lado, con algo del vórtice girando por encima.
-    float boca = smoothstep(0.2, 0.9, texture(uCielo, vUv).a);
-    c = mix(c, vortice(r, a) + estelas(r, a), uViaje * (1.0 - 0.8 * boca));
+  if (uViaje > 0.001 && m < 0.999) {
+    float primero = floor(uEstilo);
+    float paso = smoothstep(0.0, 1.0, uEstilo - primero);
+    vec3 viaje = tunel(int(primero), r, a);
+    if (paso > 0.001) viaje = mix(viaje, tunel(int(primero) + 1, r, a), paso);
+    c = mix(c, viaje, uViaje);
+  }
+  if (papel > 0.001 && m < 0.999) {
+    // El papel de acuarela, crema, con su grano.
+    vec3 tonoPapel = vec3(0.96, 0.91, 0.8) * (0.94 + 0.08 * fbm(vec3(e * 18.0, 5.0)));
+    c = mix(c, tonoPapel, papel);
   }
   if (m > 0.001) {
     vec3 escena;
@@ -1186,7 +1288,9 @@ void main() {
       for (int i = 0; i < 8; i++) suma += texture(uEscena, e * (1.0 - (float(i) + azar) / 8.0 * lb) * 0.5 + 0.5).rgb;
       escena = suma / 8.0;
     }
-    c = mix(c, escena, m);
+    // El pigmento que se acumula junto a la orilla de la aguada.
+    float charco = smoothstep(0.62, 0.8, dd) * (1.0 - smoothstep(0.82, 0.93, dd));
+    c = mix(c, escena * (1.0 - 0.12 * charco), m);
   }
 
   // Encima, nítido: la letra y el final (éste, por un círculo de borde suave).

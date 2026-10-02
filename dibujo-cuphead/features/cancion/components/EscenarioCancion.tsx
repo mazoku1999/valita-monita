@@ -97,6 +97,7 @@ export function EscenarioCancion() {
     ESCENARIO.zoom = composicion.zoom
     ESCENARIO.opacidadEscena = composicion.escena ? composicion.opacidadEscena : 0
     ESCENARIO.viaje = composicion.viaje
+    ESCENARIO.estilo = composicion.estilo
     ESCENARIO.revelado = composicion.revelado
     encima.needsUpdate = true
     if (composicion.escena) pintura.needsUpdate = true

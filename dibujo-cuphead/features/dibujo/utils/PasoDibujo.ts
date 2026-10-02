@@ -109,8 +109,9 @@ export class PasoDibujo extends Pass {
     mitad: new THREE.Vector2(0.5, 0.5),
     zoom: 1,
     opacidadEscena: 0,
-    /** Cuánto se ve el viaje a los costados (0–1) y el círculo del final (0–1; 1, entero). */
+    /** Cuánto se ve el viaje a los costados (0–1), cuál (con decimales, al pasar de uno a otro) y el círculo del final (0–1; 1, entero). */
     viaje: 0,
+    estilo: 0,
     revelado: 1,
   }
 
@@ -242,7 +243,8 @@ export class PasoDibujo extends Pass {
     this.matCopia = material(COPIA_FRAG, { uEntrada: { value: null }, uAPantalla: { value: 1 } })
     this.matViaje = material(VIAJE_FRAG, {
       uDibujo: { value: this.dibujo.texture },
-      uCielo: { value: this.cielo.texture },
+      uPixel: { value: 1 / 720 },
+      uEstilo: { value: 0 },
       uEscena: { value: null },
       uEncima: { value: null },
       uCentro: { value: new THREE.Vector2(0.5, 0.5) },
@@ -309,6 +311,7 @@ export class PasoDibujo extends Pass {
     this.dibujo.setSize(ancho, alto)
     this.mezcla.setSize(ancho, alto)
     this.matViaje.uniforms.uAspecto.value = ancho / alto
+    this.matViaje.uniforms.uPixel.value = 1 / alto
 
     ;(this.matCielo.uniforms.uTexelEntrada.value as THREE.Vector2).set(0.5 / ancho, 0.5 / alto)
     this.matCielo.uniforms.uAspecto.value = ancho / alto
@@ -488,6 +491,7 @@ export class PasoDibujo extends Pass {
       uv.uZoom.value = escenario.zoom
       uv.uOpacidadEscena.value = escenario.escena ? escenario.opacidadEscena : 0
       uv.uViaje.value = escenario.viaje
+      uv.uEstilo.value = escenario.estilo
       uv.uRevelado.value = escenario.revelado
       uv.uTiempo.value = this.tiempo
       this.dibujar(renderer, this.matViaje, this.mezcla)

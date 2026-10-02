@@ -19,8 +19,9 @@ export const ESCENARIO = {
   /** El acercamiento de la escena (1 en su sitio; más, pasando de largo; menos, llegando) y su opacidad. */
   zoom: 1,
   opacidadEscena: 0,
-  /** Cuánto se ve el viaje a los costados (0–1). */
+  /** Cuánto se ve el viaje a los costados (0–1) y cuál (ver `VIAJE_FRAG`; con decimales, al pasar de uno a otro). */
   viaje: 0,
+  estilo: 0,
   /** Por cuánto se descubre lo de encima, en círculo (0–1; 1, entero). */
   revelado: 1,
 }

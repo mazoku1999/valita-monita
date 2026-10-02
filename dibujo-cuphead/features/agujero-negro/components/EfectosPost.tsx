@@ -78,6 +78,7 @@ export function EfectosPost() {
     escenario.zoom = ESCENARIO.zoom
     escenario.opacidadEscena = ESCENARIO.opacidadEscena
     escenario.viaje = ESCENARIO.viaje
+    escenario.estilo = ESCENARIO.estilo
     escenario.revelado = ESCENARIO.revelado
     // Dentro de una nube (la del corazón, al entrar en la Tierra y al salir sobre el valle).
     pasoDibujo.niebla = Math.max(NIEBLA.globo, NIEBLA.valle)

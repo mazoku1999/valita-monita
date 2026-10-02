@@ -46,21 +46,36 @@ const TIEMPOS = {
   /** ...y empieza el final, ya fuera del túnel; tarda esto en llenar la pantalla. */
   final: 4.3,
   aperturaFinal: 1.0,
-  /** El vórtice está desde aquí (s), con el iris aún cerrado, así que la canción ya se abre sobre él... */
+  /** El viaje está desde aquí (s), con el iris aún cerrado, así que la canción ya se abre sobre él... */
   viajeDesde: 1,
-  /** ...y, después de la canción, en este tramo del carril (vh): el resto del túnel hasta su salida. */
-  vorticeVh: { entra: [460, 484], sale: [700, 760] },
+  /**
+   * ...y, después de la canción, en este tramo del carril (vh): el resto del túnel; se apaga cuando
+   * el túnel 3D ya enseña entero el cielo del otro lado (así no asoma su boca, un círculo en medio).
+   */
+  vorticeVh: { entra: [460, 484], sale: [650, 690] },
+  /** Lo que tarda el viaje en pasar de un aspecto al siguiente (s). */
+  cambioDeViaje: 2,
 } as const
 
 /**
- * El recuadro de la escena, grande (el video manda): en una pantalla ancha, todo el alto y casi todo
- * el ancho (a los lados queda el agujero de gusano); en una estrecha, todo el ancho y algo más de
- * alto que de ancho (el agujero, arriba y abajo). Sobra un poco por los bordes de la pantalla para
- * que allí no se note su borde suave.
+ * Los aspectos del viaje (ver `VIAJE_FRAG`), uno tras otro (lo pidió el usuario: "distintas cosas en
+ * lo que viajamos en el agujero negro, no la misma cosa"): el remolino dibujado de antes hasta la
+ * mitad de la primera estrofa, el hiperespacio entre nebulosas el resto de la estrofa, un vórtice
+ * violeta y cian en el estribillo, una aurora en el interludio, un túnel de anillos de luz en la
+ * segunda estrofa y el vórtice del atardecer en el último estribillo. Después de la canción, el
+ * hiperespacio (el resto del túnel hasta su salida).
+ */
+const VIAJE_DESPUES = 1
+
+/**
+ * El recuadro de la escena, grande y ancho (el video manda; "más ancho, no tan cuadrado"): en una
+ * pantalla ancha, casi todo el ancho y el alto (alrededor asoma el agujero de gusano, entre los
+ * lóbulos de su borde de acuarela); en una estrecha, todo el ancho y algo más de alto que de ancho
+ * (el agujero, arriba y abajo).
  */
 function recuadro(W: number, H: number): [number, number] {
-  if (W >= 1.15 * H) return [Math.min(W * 0.8, 1.4 * H), 1.04 * H]
-  return [1.04 * W, Math.min(1.35 * W, 0.64 * H)]
+  if (W >= 1.15 * H) return [Math.min(W * 0.86, 1.56 * H), 0.92 * H]
+  return [1.06 * W, Math.min(1.2 * W, 0.58 * H)]
 }
 
 /** El paneo de la cámara en cada escena: lo más cercano avanza `velocidad` u/s, hasta `margen` del recuadro. */
@@ -99,8 +114,9 @@ export interface Composicion {
   readonly opacidadEscena: number
   /** Medio ancho y medio alto del recuadro de la escena, en altos de pantalla. */
   readonly mitad: readonly [number, number]
-  /** Cuánto se ve el viaje a los costados y por cuánto se descubre el final (1, entero). */
+  /** Cuánto se ve el viaje a los costados, cuál (con decimales, al pasar de uno a otro) y por cuánto se descubre el final (1, entero). */
   readonly viaje: number
+  readonly estilo: number
   readonly revelado: number
 }
 
@@ -213,10 +229,12 @@ export class Escenario {
     const mitad: readonly [number, number] = [this.lienzoEscena.width / 2 / H, this.lienzoEscena.height / 2 / H]
     let escena: Pick<Composicion, 'escena' | 'zoom' | 'opacidadEscena'> = { escena: false, zoom: 1, opacidadEscena: 0 }
     let viaje = 0
+    let estilo = VIAJE_DESPUES
     if (lineas && t !== null) {
       escena = this.dibujarEscena(lineas, t)
-      // El vórtice es el agujero de gusano de la canción: está desde que se abre el iris.
+      // El viaje es el agujero de gusano de la canción: está desde que se abre el iris.
       viaje = t >= TIEMPOS.viajeDesde ? 1 : 0
+      estilo = this.estiloDelViaje(lineas, t)
     } else this.capas.clear()
     let revelado = 1
     if (final) {
@@ -232,7 +250,26 @@ export class Escenario {
       dibujarLetrero(this.pincel, lineas, t, this.familia)
       this.ctx.restore()
     }
-    return { ...escena, mitad, viaje, revelado }
+    return { ...escena, mitad, viaje, estilo, revelado }
+  }
+
+  /** Qué aspecto tiene el viaje en `t` (ver `VIAJE_DESPUES`): cada cambio suma uno, poco a poco. */
+  private estiloDelViaje(lineas: readonly LineaEscenario[], t: number): number {
+    const { secciones } = this.cortes(lineas)
+    const cambios = [
+      // A media primera estrofa, al hiperespacio.
+      lineas[4]?.inicio,
+      // En el estribillo, al vórtice.
+      secciones[1]?.desde,
+      // En el interludio, a la aurora.
+      lineas[12] ? lineas[12].fin + 1 : undefined,
+      // En la segunda estrofa, a los anillos.
+      secciones[2]?.desde,
+      // En el último estribillo, al vórtice del atardecer.
+      secciones[3]?.desde,
+    ].filter((cambio): cambio is number => cambio !== undefined)
+    const tarda = TIEMPOS.cambioDeViaje
+    return cambios.reduce((estilo, cambio) => estilo + suave((t - cambio) / tarda + 0.5), 0)
   }
 
   private dibujarEscena(lineas: readonly LineaEscenario[], t: number): Pick<Composicion, 'escena' | 'zoom' | 'opacidadEscena'> {
