@@ -35,33 +35,17 @@ const letraCancion = Corben({
   display: 'swap',
 })
 
+// Sólo el título (lo pidió el usuario: sin descripción ni nada más). El ícono es el agujero negro
+// dibujado del inicio; agregada a la pantalla de inicio del iPhone, se abre como una app a pantalla
+// completa (sin las barras de Safari y con el dibujo bajo la barra de estado). Ver `manifest.ts`.
 export const metadata: Metadata = {
-  title: 'Dust.Blue — A cartoon night',
-  description:
-    'El mismo viaje por un agujero negro, el agujero de gusano y nuestro sistema solar, dibujado como un dibujo animado de los años 30: tinta a pincel, acuarela y película antigua.',
-  generator: 'v0.app',
+  title: 'Para mi Monita linda',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
+    icon: '/icono-192.png',
     apple: '/apple-icon.png',
   },
-  // Agregada a la pantalla de inicio del iPhone, se abre como una app a pantalla completa (sin las
-  // barras de Safari y con el dibujo bajo la barra de estado). Ver `manifest.ts`.
   appleWebApp: {
     capable: true,
-    title: 'Valita monita',
     statusBarStyle: 'black-translucent',
   },
 }
@@ -82,7 +66,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="es"
       className={`${serifDisplay.variable} ${monoNarrativa.variable} ${letraCarta.variable} ${letraCancion.variable} dark`}
     >
       <body className="min-h-screen bg-cosmos text-crema antialiased">

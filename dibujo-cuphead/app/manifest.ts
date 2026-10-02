@@ -8,9 +8,7 @@ import type { MetadataRoute } from 'next'
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Valita monita',
-    short_name: 'Valita monita',
-    description: 'Un viaje por un agujero negro, dibujado como un dibujo animado de los años 30.',
+    name: 'Para mi Monita linda',
     start_url: '/',
     scope: '/',
     display: 'standalone',

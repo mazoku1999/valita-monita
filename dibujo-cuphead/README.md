@@ -135,9 +135,11 @@ completa y la devuelve. En el iPhone, Safari sólo deja poner a pantalla complet
 una página: el botón explica, en un cartel de papel, cómo agregarla a la pantalla de inicio
 (Compartir → «Agregar a inicio»), que la abre como una app, sin las barras de Safari y con el
 dibujo también bajo la barra de estado (`app/manifest.ts`, `appleWebApp` y `viewportFit: 'cover'`
-en `app/layout.tsx`). Abierta así, el botón no aparece. La app se llama «Valita monita» (como el
-proyecto) y su ícono es el agujero negro dibujado del inicio (`public/apple-icon.png`,
-`icono-192.png`, `icono-512.png`).
+en `app/layout.tsx`). Abierta así, el botón no aparece. Su ícono (también el de la pestaña) es el
+agujero negro dibujado del inicio (`public/apple-icon.png`, `icono-192.png`, `icono-512.png`).
+
+Los metadatos de la página son sólo el título, «Para mi Monita linda» (paso 46: sin descripción ni
+nada más; también es el nombre de la app en la pantalla de inicio).
 
 ## La canción del agujero negro
 
@@ -402,7 +404,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
 `dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`,
-`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`.
+`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
