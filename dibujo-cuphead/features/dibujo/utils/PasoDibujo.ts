@@ -104,8 +104,7 @@ export class PasoDibujo extends Pass {
     /** La letra y el final (nítidos) y la escena pintada (sRGB tal cual). */
     encima: null as THREE.Texture | null,
     escena: null as THREE.Texture | null,
-    /** Fondo del túnel (uv), medio recuadro de la escena (altos de pantalla), su acercamiento y opacidad. */
-    centro: new THREE.Vector2(0.5, 0.5),
+    /** Medio recuadro de la escena (altos de pantalla), su acercamiento y opacidad. */
     mitad: new THREE.Vector2(0.5, 0.5),
     zoom: 1,
     opacidadEscena: 0,
@@ -247,7 +246,6 @@ export class PasoDibujo extends Pass {
       uEstilo: { value: 0 },
       uEscena: { value: null },
       uEncima: { value: null },
-      uCentro: { value: new THREE.Vector2(0.5, 0.5) },
       uAspecto: { value: 1 },
       uMitad: { value: new THREE.Vector2(0.5, 0.5) },
       uZoom: { value: 1 },
@@ -486,7 +484,6 @@ export class PasoDibujo extends Pass {
       const uv = this.matViaje.uniforms
       uv.uEscena.value = escenario.escena
       uv.uEncima.value = escenario.encima
-      ;(uv.uCentro.value as THREE.Vector2).copy(escenario.centro)
       ;(uv.uMitad.value as THREE.Vector2).copy(escenario.mitad)
       uv.uZoom.value = escenario.zoom
       uv.uOpacidadEscena.value = escenario.escena ? escenario.opacidadEscena : 0

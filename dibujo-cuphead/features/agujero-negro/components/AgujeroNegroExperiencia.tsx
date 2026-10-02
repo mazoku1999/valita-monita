@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react'
 import { CancionDelAgujero } from '@/features/cancion/components/CancionDelAgujero'
 import { CartaEstrellada } from '@/features/cochabamba/components/CartaEstrellada'
 import { ControlesPaseo } from '@/features/cochabamba/components/ControlesPaseo'
+import { AvisoPantallaCompleta, BotonPantallaCompleta } from '@/features/narrativa/components/BotonPantallaCompleta'
 import { NarrativaOverlay } from '@/features/narrativa/components/NarrativaOverlay'
 
 const AgujeroNegroCanvas = dynamic(
@@ -37,6 +38,9 @@ export function AgujeroNegroExperiencia() {
       <ControlesPaseo />
       {/* Y al abrir la cajita, la carta en el cielo de la noche estrellada. */}
       <CartaEstrellada />
+      {/* Pantalla completa (en el iPhone, cómo agregarla a inicio). */}
+      <BotonPantallaCompleta />
+      <AvisoPantallaCompleta />
     </>
   )
 }

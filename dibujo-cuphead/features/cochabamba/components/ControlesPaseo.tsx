@@ -1,6 +1,8 @@
 'use client'
 
 import { type ReactNode, useEffect, useRef, useSyncExternalStore } from 'react'
+import { IconoPantallaCompleta, usePantallaCompleta } from '@/features/narrativa/components/BotonPantallaCompleta'
+import { pulsarPantallaCompleta } from '@/features/narrativa/store/pantallaCompleta'
 import { abrirCajita, faseCarta, suscribirCarta } from '../store/carta'
 import { PASEO, paseoActivo, paseoMirado, suscribirPaseo } from '../store/paseo'
 
@@ -9,8 +11,8 @@ import { PASEO, paseoActivo, paseoMirado, suscribirPaseo } from '../store/paseo'
  * textos. En pantallas táctiles, la palanca abajo a la izquierda (sale donde se apoya el pulgar, en
  * la mitad izquierda); con teclado y ratón, como en los juegos de ordenador, no hay palanca (se
  * anda con las teclas): en su sitio, el dibujo de las flechas. Arriba a la derecha, abrir la cajita
- * (el regalo: la cámara va hasta ella), volver a donde se posó (la casa) y volver al viaje (la flecha:
- * sube la página). Abierta la cajita, se van todos: sólo queda la carta. Abajo a la derecha, hasta que se
+ * (el regalo: la cámara va hasta ella), volver a donde se posó (la casa), volver al viaje (la flecha:
+ * sube la página) y la pantalla completa. Abierta la cajita, se van todos: sólo queda la carta. Abajo a la derecha, hasta que se
  * mira alrededor por primera vez, la pista de arrastrar o deslizar para mirar (un dedo que va y
  * viene). De papel crema con tinta, como el resto del dibujo; aparecen al posarse la cámara.
  */
@@ -228,6 +230,7 @@ export function ControlesPaseo() {
   const activo = posado && fase === 'cerrada'
   const mirado = useSyncExternalStore(suscribirPaseo, paseoMirado, () => false)
   const tactil = useSyncExternalStore(suscribirTactil, esTactil, () => false)
+  const pantalla = usePantallaCompleta()
 
   const volverAlRamo = (): void => {
     PASEO.volver = true
@@ -269,6 +272,11 @@ export function ControlesPaseo() {
           <path d="M12 19 V6" />
           <path d="M6.5 11 L12 5.5 L17.5 11" />
         </Boton>
+        {pantalla.ofrecer && (
+          <Boton etiqueta={pantalla.dentro ? 'Salir de la pantalla completa' : 'Pantalla completa'} alPulsar={pulsarPantallaCompleta}>
+            <IconoPantallaCompleta dentro={pantalla.dentro} />
+          </Boton>
+        )}
       </div>
     </div>
   )

@@ -57,12 +57,22 @@ export const metadata: Metadata = {
     ],
     apple: '/apple-icon.png',
   },
+  // Agregada a la pantalla de inicio del iPhone, se abre como una app a pantalla completa (sin las
+  // barras de Safari y con el dibujo bajo la barra de estado). Ver `manifest.ts`.
+  appleWebApp: {
+    capable: true,
+    title: 'Valita monita',
+    statusBarStyle: 'black-translucent',
+  },
 }
 
 export const viewport: Viewport = {
   colorScheme: 'dark',
   themeColor: '#050404',
   userScalable: true,
+  // El dibujo ocupa toda la pantalla, también bajo la isla y la barra de estado (los botones se
+  // apartan con `env(safe-area-inset-*)`).
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({

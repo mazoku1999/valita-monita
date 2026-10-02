@@ -12,8 +12,6 @@ export const ESCENARIO = {
   /** Si hay algo que componer y si tapa la pantalla entera (el resto del dibujo no hace falta). */
   activo: false,
   cubre: false,
-  /** El fondo del túnel en la pantalla (uv, y hacia arriba). */
-  centro: { x: 0.5, y: 0.5 },
   /** Medio ancho y medio alto del recuadro de la escena, en altos de pantalla. */
   mitad: { x: 0.5, y: 0.5 },
   /** El acercamiento de la escena (1 en su sitio; más, pasando de largo; menos, llegando) y su opacidad. */

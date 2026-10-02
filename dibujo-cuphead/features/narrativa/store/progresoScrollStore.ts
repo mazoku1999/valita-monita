@@ -19,6 +19,21 @@ export function obtenerProgreso(): number {
   return progresoActual
 }
 
+let guiado = false
+
+/**
+ * Mientras la canción lleva la cámara (ver `features/cancion`), el progreso lo pone ella y no el
+ * scroll de la página: en el iPhone, con la página quieta, Safari no siempre la deja desplazarse
+ * por código, y la cámara se quedaba atrás.
+ */
+export function guiarProgreso(activo: boolean): void {
+  guiado = activo
+}
+
+export function progresoGuiado(): boolean {
+  return guiado
+}
+
 /**
  * Lo que se puede desplazar la página (px) para recorrer el carril, medido con la altura grande de
  * la ventana (la del propio carril, en `vh`, que no cambia): en un móvil, al esconderse o aparecer

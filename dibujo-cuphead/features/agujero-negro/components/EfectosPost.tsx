@@ -75,7 +75,6 @@ export function EfectosPost() {
     escenario.cubre = ESCENARIO.cubre
     escenario.encima = ESCENARIO.encima
     escenario.escena = ESCENARIO.escena
-    escenario.centro.set(ESCENARIO.centro.x, ESCENARIO.centro.y)
     escenario.mitad.set(ESCENARIO.mitad.x, ESCENARIO.mitad.y)
     escenario.zoom = ESCENARIO.zoom
     escenario.opacidadEscena = ESCENARIO.opacidadEscena

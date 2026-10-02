@@ -1048,8 +1048,8 @@ void main() {
  * agujero de gusano, con el video por encima, ancho y nítido, el viaje cambiando y el borde del video
  * como el de un libro de cuentos; y, sobre todo, sin exagerar ("se ve horrible, muy exagerado"):
  *
- * - La escena (`uEscena`, su lienzo), casi a pantalla completa y nítida alrededor del fondo del
- *   túnel, con un borde de acuarela fino y apenas ondulado (irregular pero delicado). `uZoom` la
+ * - La escena (`uEscena`, su lienzo), casi a pantalla completa, nítida y en el centro de la
+ *   pantalla, con un borde de acuarela fino y apenas ondulado (irregular pero delicado). `uZoom` la
  *   acerca un poco al pasar de una escena a otra (la que se va pasa de largo; la que llega viene del
  *   fondo).
  * - Alrededor, el agujero de gusano por el que viajamos (con `uViaje`), tranquilo y con los colores
@@ -1064,8 +1064,7 @@ export const VIAJE_FRAG = /* glsl */ `
 uniform sampler2D uDibujo;
 uniform sampler2D uEscena;
 uniform sampler2D uEncima;
-// Fondo del túnel (uv), proporción de la pantalla (ancho / alto) y un píxel en altos de pantalla.
-uniform vec2 uCentro;
+// Proporción de la pantalla (ancho / alto) y un píxel en altos de pantalla.
 uniform float uAspecto;
 uniform float uPixel;
 // Medio ancho y medio alto del recuadro de la escena (en altos de pantalla), su acercamiento y opacidad.
@@ -1203,8 +1202,12 @@ vec3 tunel(int estilo, float r, float a) {
   return nubes(r, a, 1.0);
 }
 
+// El fondo del túnel, con la escena: siempre en el centro de la pantalla (si seguía al eje del
+// agujero de gusano, en un móvil en vertical se iba hasta un costado).
+const vec2 CENTRO = vec2(0.5);
+
 void main() {
-  vec2 q = (vUv - uCentro) * vec2(uAspecto, 1.0);
+  vec2 q = (vUv - CENTRO) * vec2(uAspecto, 1.0);
   float r = length(q);
   float a = atan(q.y, q.x);
 
@@ -1245,7 +1248,7 @@ void main() {
   // Encima, nítido: la letra y el final (éste, por un círculo de borde suave).
   vec4 encima = texture(uEncima, vUv);
   if (uRevelado < 0.999) {
-    float lejos = length(vec2(max(uCentro.x, 1.0 - uCentro.x) * uAspecto, max(uCentro.y, 1.0 - uCentro.y))) + 0.25;
+    float lejos = length(vec2(0.5 * uAspecto, 0.5)) + 0.25;
     float radio = uRevelado * lejos;
     encima.a *= 1.0 - smoothstep(radio - 0.22, radio, r);
   }

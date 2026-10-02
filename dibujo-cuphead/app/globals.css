@@ -648,3 +648,59 @@
     opacity: 0;
   }
 }
+
+/* Pantalla completa: en la esquina de arriba a la derecha (el del sonido, a su izquierda). */
+.boton-pantalla {
+  right: calc(16px + env(safe-area-inset-right));
+  width: 46px;
+  height: 46px;
+  animation: sonido-aparece 0.9s ease 1.6s backwards;
+}
+.boton-pantalla svg {
+  width: 21px;
+  height: 21px;
+}
+:root[data-boton-pantalla] .boton-sonido[data-lugar='esquina'] {
+  left: calc(100% - 16px - env(safe-area-inset-right) - 23px - 58px);
+}
+/* En el iPhone, cómo verla a pantalla completa: un cartel de papel con tinta, como el del final. */
+.aviso-pantalla {
+  position: fixed;
+  z-index: 34;
+  top: calc(76px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(340px, calc(100vw - 32px));
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 12px 14px 18px;
+  border: 3px solid rgb(19 15 12);
+  border-radius: 16px;
+  background: rgb(248 238 219);
+  box-shadow: 0 4px 0 rgb(19 15 12 / 0.45);
+  color: rgb(19 15 12);
+  font-family: var(--font-letra-cancion), serif;
+  font-size: 15px;
+  line-height: 1.35;
+  cursor: pointer;
+  animation: aviso-aparece 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.aviso-pantalla p {
+  margin: 0;
+}
+.aviso-pantalla button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9999px;
+  color: inherit;
+}
+@keyframes aviso-aparece {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+  }
+}

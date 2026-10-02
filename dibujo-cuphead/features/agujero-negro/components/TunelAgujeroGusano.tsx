@@ -5,7 +5,6 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { VIAJE } from '../constantes/viajeScroll'
-import { EJE_GUSANO } from '../store/ejeGusano'
 import { AGUJERO_GUSANO_CARICATURA_FRAG, AGUJERO_GUSANO_VERT } from '../shaders/agujeroGusanoCaricatura'
 import { CIELO_SISTEMA_FRAG, CIELO_SISTEMA_VERT } from '../shaders/cieloSistemaSolar'
 
@@ -182,7 +181,6 @@ export function TunelAgujeroGusano({ children }: { children?: ReactNode }) {
     } else {
       grupo.quaternion.slerp(camera.quaternion, 1 - Math.exp(-paso * GUSANO.ritmoGiro))
     }
-    EJE_GUSANO.set(0, 0, -1).applyQuaternion(grupo.quaternion)
 
     if (!movimientoReducido) tiempo.current += paso
     // Los cielos giran despacio mientras se atraviesa el paso y se quedan quietos al salir: fuera,

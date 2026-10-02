@@ -2,7 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from 'react'
 import { CARRIL_VH } from '@/features/agujero-negro/constantes/viajeScroll'
-import { largoDelCarril, obtenerProgreso, suscribirProgreso } from '@/features/narrativa/store/progresoScrollStore'
+import { establecerProgreso, guiarProgreso, largoDelCarril, obtenerProgreso, suscribirProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { CANCION, recorridoDeLaCancion } from '../constantes/cancion'
 import { cambiarFaseCancion, faseCancion, suscribirCancion } from '../store/cancion'
 import { empezarFinal, olvidarFinal, ponerLetraDelEscenario } from '../store/escenario'
@@ -40,15 +40,21 @@ const vhActual = (): number => obtenerProgreso() * CARRIL_VH
 /** El recorrido del cruce: el de la canción de ahora y, en cuanto se lee la letra, el de sus tiempos. */
 let recorrido = recorridoDeLaCancion(CANCION.porDefecto.inicioLetra, CANCION.porDefecto.letra)
 
+/** Lleva la cámara (el progreso) y, si el navegador lo deja, también la página a ese punto del carril. */
 function irAVh(vh: number): void {
+  establecerProgreso(vh / CARRIL_VH)
   window.scrollTo(0, (vh / CARRIL_VH) * largoDelCarril())
 }
 
-/** Quieto el scroll del usuario (la cámara la mueve la canción). */
+/**
+ * Quieto el scroll del usuario (la cámara la mueve la canción, que pone el progreso: ver
+ * `guiarProgreso`). Al soltarlo, la página se pone donde va la cámara.
+ */
 function bloquearScroll(): () => void {
   const raiz = document.documentElement
   const antes = raiz.style.overflow
   raiz.style.overflow = 'hidden'
+  guiarProgreso(true)
   const impedir = (evento: Event): void => evento.preventDefault()
   const alTecla = (evento: KeyboardEvent): void => {
     if ([' ', 'PageDown', 'PageUp', 'Home', 'End', 'ArrowDown', 'ArrowUp'].includes(evento.key)) evento.preventDefault()
@@ -58,6 +64,8 @@ function bloquearScroll(): () => void {
   window.addEventListener('keydown', alTecla)
   return () => {
     raiz.style.overflow = antes
+    guiarProgreso(false)
+    window.scrollTo(0, obtenerProgreso() * largoDelCarril())
     window.removeEventListener('wheel', impedir)
     window.removeEventListener('touchmove', impedir)
     window.removeEventListener('keydown', alTecla)

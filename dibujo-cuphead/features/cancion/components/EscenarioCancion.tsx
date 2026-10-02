@@ -4,7 +4,6 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { CARRIL_VH } from '@/features/agujero-negro/constantes/viajeScroll'
-import { EJE_GUSANO } from '@/features/agujero-negro/store/ejeGusano'
 import { cambiaDibujo } from '@/features/dibujo/store/ritmoDibujo'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { CANCION } from '../constantes/cancion'
@@ -15,9 +14,6 @@ import { tiempoCancion } from '../utils/audio'
 
 /** Lado mayor del lienzo de encima (px): más no se nota tras la película y cuesta. */
 const LADO_MAXIMO = 1920
-
-/** Cuánto puede alejarse del centro de la pantalla el fondo del túnel (fracción), al girar la cámara. */
-const DESVIO_CENTRO = 0.12
 
 /** Una textura de lienzo en sRGB tal cual (como el dibujo sobre el que va). */
 function texturaDe(lienzo: HTMLCanvasElement): THREE.CanvasTexture {
@@ -42,10 +38,11 @@ export function EscenarioCancion() {
   const encima = useMemo(() => texturaDe(escenario.lienzo), [escenario])
   const pintura = useMemo(() => texturaDe(escenario.lienzoEscena), [escenario])
   const tamano = useMemo(() => new THREE.Vector2(), [])
-  const auxiliar = useMemo(() => new THREE.Vector3(), [])
   const ocultaLaEscena = useRef(false)
 
   useEffect(() => {
+    // En desarrollo, para las pruebas: el estado del escenario desde la consola.
+    if (process.env.NODE_ENV === 'development') (window as unknown as { __escenario?: unknown }).__escenario = ESCENARIO
     ESCENARIO.encima = encima
     ESCENARIO.escena = pintura
     escenario.cargarLetra()
@@ -61,7 +58,7 @@ export function EscenarioCancion() {
     }
   }, [escenario, encima, pintura, escena])
 
-  useFrame(({ camera }) => {
+  useFrame(() => {
     const lineas = letraDelEscenario()
     const fase = faseCancion()
     const suena = fase === 'sonando' && lineas !== null && lineas.length > 0
@@ -86,12 +83,6 @@ export function EscenarioCancion() {
     const cambia = escenario.dimensionar(Math.max(2, Math.round(tamano.x * escala)), Math.max(2, Math.round(tamano.y * escala)))
     if (cambia.encima) encima.dispose()
     if (cambia.escena) pintura.dispose()
-    // El fondo del túnel en pantalla: donde va el eje del agujero de gusano (que sigue a la cámara
-    // con retraso), cerca del centro.
-    const fondo = auxiliar.copy(camera.position).add(EJE_GUSANO).project(camera)
-    const limitar = (x: number): number => Math.max(-DESVIO_CENTRO, Math.min(DESVIO_CENTRO, x))
-    ESCENARIO.centro.x = fondo.z < 1 ? 0.5 + limitar(fondo.x * 0.5) : 0.5
-    ESCENARIO.centro.y = fondo.z < 1 ? 0.5 + limitar(fondo.y * 0.5) : 0.5
     const composicion = escenario.dibujar({ lineas: suena ? lineas : null, t: suena ? t : null, final })
     ESCENARIO.mitad.x = composicion.mitad[0]
     ESCENARIO.mitad.y = composicion.mitad[1]

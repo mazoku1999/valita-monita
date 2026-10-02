@@ -116,6 +116,29 @@ Lo que hacía que en un celular el scroll y la cámara se sintieran mal, y cómo
   Audio se creaba en el primer gesto, justo al empezar a deslizar. Ahora se crea con la página ya
   cargada y el gesto sólo lo reanuda; apoyar el dedo no cuenta, sólo un gesto que de verdad deje
   sonar (un toque, un clic o una tecla).
+- **El video de la canción, centrado** (paso 44, con una captura del iPhone del usuario: "el video
+  en celular no se ve bien centrado"): el recuadro seguía al eje del agujero de gusano (hasta un 12 %
+  de la pantalla) y, en un teléfono en vertical, el campo de visión es tan angosto que un pequeño
+  retraso del túnel lo llevaba a un costado. Ahora va siempre en el centro de la pantalla.
+- **La canción lleva la cámara** (`guiarProgreso` en `progresoScrollStore.ts`): mientras suena, el
+  progreso lo pone la canción y no el scroll de la página, porque en el iPhone, con la página
+  quieta, Safari no siempre la deja desplazarse por código. Al soltarse, la página se pone donde va
+  la cámara.
+- **Sin saltos al cambiar el tamaño** (`useSincronizarScroll.ts`): al entrar en pantalla completa
+  o girar el teléfono el carril cambia de largo; la página se lleva al mismo punto del viaje.
+
+## Pantalla completa
+
+Un botón de cristal arriba a la derecha (el del sonido va a su izquierda) y, en el paseo del
+final, uno de papel entre sus botones (`features/narrativa/components/BotonPantallaCompleta.tsx` y
+`store/pantallaCompleta.ts`). En ordenadores, Android y iPad pone la página entera a pantalla
+completa y la devuelve. En el iPhone, Safari sólo deja poner a pantalla completa los videos, no
+una página: el botón explica, en un cartel de papel, cómo agregarla a la pantalla de inicio
+(Compartir → «Agregar a inicio»), que la abre como una app, sin las barras de Safari y con el
+dibujo también bajo la barra de estado (`app/manifest.ts`, `appleWebApp` y `viewportFit: 'cover'`
+en `app/layout.tsx`). Abierta así, el botón no aparece. La app se llama «Valita monita» (como el
+proyecto) y su ícono es el agujero negro dibujado del inicio (`public/apple-icon.png`,
+`icono-192.png`, `icono-512.png`).
 
 ## La canción del agujero negro
 
@@ -163,9 +186,8 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   escena, en su recuadro, y encima la letra y el final, con transparencia. El pase de dibujo los
   compone entre el dibujo y la película (`VIAJE_FRAG`), así que les caen el grano, el vaivén y la
   viñeta como a todo lo demás. Mientras suena, la escena va casi a pantalla completa, ancha y nítida
-  en el fondo del túnel (centrada donde va el eje del agujero de gusano, que se publica en
-  `store/ejeGusano.ts`), con un borde de acuarela fino y apenas ondulado, como el de una ilustración
-  de libro. Alrededor, el agujero de gusano, tranquilo y con los colores apagados del dibujo, que
+  en el fondo del túnel (en el centro de la pantalla), con un borde de acuarela fino y apenas
+  ondulado, como el de una ilustración de libro. Alrededor, el agujero de gusano, tranquilo y con los colores apagados del dibujo, que
   cambia a lo largo de la canción: el remolino dibujado de antes hasta media primera estrofa, un
   cielo de noche con aguadas y estrellas finas el resto de la estrofa, nubes pintadas lilas en el
   estribillo y el interludio, anillos pintados en la segunda estrofa y nubes de atardecer en el
@@ -359,7 +381,8 @@ doble clic vuelve al camino (con el dedo: deslizar es el scroll y dos dedos acer
 (girar) y Mayúsculas (correr); arrastrar mira alrededor. En pantallas táctiles, la palanca. En la
 carta, Escape sale. En desarrollo, `window.__carta.abrir()` / `salir()` abren y cierran la cajita y
 `window.__carta.saltar(s)` adelanta su reloj; `window.__cancion.saltarA(s)` lleva la canción del
-agujero a otro segundo (y `fase()`, `sonido()`, `audible()`, `tiempo()`, `saltar()`).
+agujero a otro segundo (y `fase()`, `sonido()`, `audible()`, `tiempo()`, `saltar()`), y
+`window.__escenario` muestra el estado del escenario de la canción.
 
 ## Versiones
 
@@ -379,7 +402,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
 `dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`,
-`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`.
+`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
