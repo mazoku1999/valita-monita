@@ -5,7 +5,7 @@ import { CARRIL_VH } from '@/features/agujero-negro/constantes/viajeScroll'
 import { obtenerProgreso, suscribirProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { CANCION, recorridoDeLaCancion } from '../constantes/cancion'
 import { cambiarFaseCancion, faseCancion, suscribirCancion } from '../store/cancion'
-import { ponerLetraDelEscenario } from '../store/escenario'
+import { empezarFinal, olvidarFinal, ponerLetraDelEscenario } from '../store/escenario'
 import {
   alTerminarCancion,
   cancionAudible,
@@ -18,7 +18,7 @@ import {
   terminarCancion,
   tiempoCancion,
 } from '../utils/audio'
-import { finDelPrimerBloque, letraParaElEscenario } from '../utils/letra'
+import { letraParaElEscenario } from '../utils/letra'
 import { interpolarMonotona } from '../utils/recorrido'
 import { leerSrt } from '../utils/srt'
 import { leerVtt } from '../utils/vtt'
@@ -28,15 +28,16 @@ import { BotonSonido } from './BotonSonido'
  * La canción del agujero negro (ver `constantes/cancion.ts`): al entrar en el agujero bajando, el
  * scroll se queda quieto y empieza la canción, sin pedir nada (con sonido si ya se activó al inicio;
  * si no, en silencio hasta que se active); la cámara cruza sola a su compás (se mueve la página por
- * el carril, así todo lo demás sigue igual) con la letra en pantalla, y a su final se suelta el
- * scroll ya en el sistema solar. Botón de cristal para saltarla (o Escape). La letra y sus escenas
- * las pinta el propio dibujo animado (ver `EscenarioCancion`); aquí se lee y se da a leer.
+ * el carril, así todo lo demás sigue igual) con la letra en pantalla, y a su final, con el mensaje
+ * para Valeria en pantalla, se suelta el scroll todavía en el túnel. Botón de cristal para saltarla
+ * (o Escape), que lleva al mensaje. La letra, sus escenas y el mensaje los pinta el propio dibujo
+ * animado (ver `EscenarioCancion`); aquí se lee la letra y se da a leer.
  */
 
 const vhActual = (): number => obtenerProgreso() * CARRIL_VH
 
 /** El recorrido del cruce: el de la canción de ahora y, en cuanto se lee la letra, el de sus tiempos. */
-let recorrido = recorridoDeLaCancion(CANCION.porDefecto.primerBloque, CANCION.porDefecto.letra)
+let recorrido = recorridoDeLaCancion(CANCION.porDefecto.inicioLetra, CANCION.porDefecto.letra)
 
 function irAVh(vh: number): void {
   const recorrido = document.documentElement.scrollHeight - window.innerHeight
@@ -65,26 +66,30 @@ function bloquearScroll(): () => void {
 
 /** Al entrar en el agujero: quieta la página en la puerta y empieza la canción. */
 function entrar(): void {
+  olvidarFinal()
   cambiarFaseCancion('sonando')
   if (vhActual() > CANCION.puertaVh + 1) irAVh(CANCION.puertaVh)
   empezarCancion(CANCION.audio)
 }
 
-/** Al final del cruce: se suelta el scroll (si suena, sigue sonando su final). */
+/** Al final del cruce: se suelta el scroll, aún en el túnel (si suena, sigue sonando su final). */
 function soltar(): void {
   irAVh(interpolarMonotona(recorrido.puntos, recorrido.suelta))
   soltarCancion()
   cambiarFaseCancion('libre')
 }
 
+/** Saltarla lleva directo al mensaje del final (y el scroll queda suelto). */
 function saltar(): void {
   if (faseCancion() !== 'sonando') return
   terminarCancion(CANCION.fundidoSalida)
+  empezarFinal(vhActual())
   cambiarFaseCancion('libre')
 }
 
 function rearmar(): void {
   terminarCancion(CANCION.fundidoSalida)
+  olvidarFinal()
   cambiarFaseCancion('armada')
 }
 
@@ -102,7 +107,7 @@ export function CancionDelAgujero() {
         .then((respuesta) => (respuesta.ok ? respuesta.text() : ''))
         .then((texto) => {
           const lineas = /^\uFEFF?WEBVTT/.test(texto) ? leerVtt(texto) : leerSrt(texto)
-          if (lineas.length > 0) recorrido = recorridoDeLaCancion(finDelPrimerBloque(lineas), lineas[lineas.length - 1].fin)
+          if (lineas.length > 0) recorrido = recorridoDeLaCancion(lineas[0].inicio, lineas[lineas.length - 1].fin)
           ponerLetraDelEscenario(letraParaElEscenario(lineas))
         })
         .catch(() => ponerLetraDelEscenario([]))

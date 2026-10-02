@@ -1,9 +1,6 @@
 import type { LineaEscenario, PalabraEscenario } from '../escenario/letrero'
 import type { LineaSrt } from './srt'
 
-/** Una pausa más larga que ésta (s) acaba un bloque de la letra. */
-const PAUSA_BLOQUE = 4
-
 /**
  * La letra para la cinta del escenario (ver `escenario/letrero.ts`): cada palabra tal cual está
  * escrita, con su hora, y los renglones del archivo. Si el archivo no trae la hora de cada palabra
@@ -34,10 +31,4 @@ function repartir(textos: readonly string[], inicio: number, fin: number): Palab
     reloj += (tramo * pesos[i]) / total
     return { texto, inicio: desde, fin: reloj }
   })
-}
-
-/** Dónde acaba el primer bloque de la letra (antes de su primera pausa larga), en s. */
-export function finDelPrimerBloque(lineas: readonly LineaSrt[]): number {
-  for (let i = 1; i < lineas.length; i++) if (lineas[i].inicio - lineas[i - 1].fin > PAUSA_BLOQUE) return lineas[i - 1].fin
-  return lineas[lineas.length - 1]?.fin ?? 0
 }

@@ -27,7 +27,7 @@ const CREMA = '#f3e3bf'
 const CREMA_COLA = '#d9c193'
 const CREMA_PLIEGUE = '#b99c6a'
 const TINTA_TEXTO = '#3a2416'
-const ROJO = '#bf3324'
+export const ROJO = '#bf3324'
 
 /** Cuándo llega cada línea a la cinta (un poco antes de su primera palabra). */
 function llegada(lineas: readonly LineaEscenario[], i: number): number {
@@ -143,14 +143,16 @@ function maquetar(ctx: CanvasRenderingContext2D, linea: LineaEscenario, ancho: n
   const anchoMaximo = Math.max(...partidos.map((r) => anchoRenglon(r)))
   const anchoCinta = Math.min(ancho * 0.94, anchoMaximo + tamano * 2.2)
   const altoCinta = partidos.length * altoRenglon + tamano * 0.85
-  const cy = Math.min(alto * 0.765, alto - altoCinta / 2 - alto * 0.07)
+  // Abajo, bajo el portal del túnel (o sobre su borde de abajo).
+  const cy = Math.min(alto * 0.83, alto - altoCinta / 2 - alto * 0.035)
   return { tamano, palabras, ancho: anchoCinta, alto: altoCinta, cx: ancho / 2, cy }
 }
 
 /** Dibuja la cinta (cuerpo arqueado, colas dobladas y su sombra), centrada en el origen. */
-function cinta(p: Pincel, ancho: number, alto: number, id: number): void {
+export function cinta(p: Pincel, ancho: number, alto: number, id: number): void {
   const ctx = p.ctx
-  const arco = alto * 0.14
+  // El arco de la cinta, sin pasarse en las altas y estrechas (tapaba el último renglón).
+  const arco = Math.min(alto * 0.14, ancho * 0.03)
   const borde = (x: number, arriba: boolean): Punto => {
     const k = 1 - Math.pow((2 * x) / ancho, 2)
     return [x, (arriba ? -alto / 2 : alto / 2) - arco * k]
@@ -298,3 +300,45 @@ function pelotita(p: Pincel, m: Maqueta, t: number, desde: number, id: number): 
   girasolito(p, x, y, radio, sx, sy, id + 500)
 }
 
+/**
+ * Una cinta con frases fijas (el mensaje del final), centrada en (cx, cy) y con la letra de
+ * `tamano`; `ex` la despliega (0 enrollada, 1 abierta).
+ */
+export function cintaConFrases(
+  p: Pincel,
+  frases: readonly string[],
+  cx: number,
+  cy: number,
+  tamano: number,
+  familia: string,
+  ex: number,
+  id: number,
+): void {
+  if (ex <= 0.01) return
+  const ctx = p.ctx
+  ctx.font = `700 ${tamano}px ${familia}`
+  const anchos = frases.map((frase) => ctx.measureText(frase).width)
+  const altoRenglon = tamano * (frases.length > 1 ? 1.32 : 1.22)
+  const ancho = Math.max(...anchos) + tamano * 2.2
+  const alto = frases.length * altoRenglon + tamano * 0.85
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.scale(ex, 1)
+  cinta(p, ancho, alto, id)
+  if (ex > 0.6) {
+    ctx.font = `700 ${tamano}px ${familia}`
+    ctx.textBaseline = 'alphabetic'
+    ctx.fillStyle = ROJO
+    frases.forEach((frase, i) => ctx.fillText(frase, -anchos[i] / 2, (i - (frases.length - 1) / 2) * altoRenglon + tamano * 0.34))
+  }
+  ctx.restore()
+}
+
+/** El ancho de la frase más larga con la letra de 1 px (para escoger el tamaño que quepa). */
+export function anchoDeFrases(ctx: CanvasRenderingContext2D, frases: readonly string[], familia: string): number {
+  ctx.save()
+  ctx.font = `700 100px ${familia}`
+  const ancho = Math.max(...frases.map((frase) => ctx.measureText(frase).width)) / 100
+  ctx.restore()
+  return ancho
+}

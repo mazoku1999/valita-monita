@@ -60,15 +60,14 @@ export function EfectosPost() {
     pasoDibujo.bandaVisible = suavizar(1.3, 2.5, distanciaCentro)
     pasoDibujo.latido = latido(clock.getElapsedTime())
     pasoDibujo.pulsaciones = pulsaciones(clock.getElapsedTime())
-    // El iris se cierra sobre la sombra al cruzar el horizonte y se abre sobre el remolino; durante
-    // la canción, también para entrar en su escenario y salir de él (ver `features/cancion`).
+    // El iris se cierra sobre la sombra al cruzar el horizonte y se abre sobre el remolino.
     const progreso = obtenerProgreso()
     const { irisCierre, irisApertura } = VIAJE
-    const irisViaje =
+    pasoDibujo.iris =
       progreso < irisApertura.desde
         ? 1 - suavizar(irisCierre.desde, irisCierre.hasta, progreso)
         : suavizar(irisApertura.desde, irisApertura.hasta, progreso)
-    pasoDibujo.iris = Math.min(irisViaje, ESCENARIO.iris)
+    // El escenario de la canción, encima del dibujo (ver `features/cancion`).
     pasoDibujo.escenario = ESCENARIO.textura
     pasoDibujo.escenarioOpacidad = ESCENARIO.opacidad
     pasoDibujo.escenarioCubre = ESCENARIO.cubre

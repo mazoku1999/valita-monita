@@ -2,9 +2,11 @@
  * La canción del agujero negro (la pidió el usuario: "un lyrics de esta canción, cuando estamos
  * cruzando el agujero negro, así como en este video"; y después: sin botón de play, que al inicio
  * haya algo para activar el sonido y que la canción suene recién al entrar en el agujero). Al entrar
- * en el agujero (el iris se cierra sobre la sombra) empieza la canción y la cámara cruza sola, a su
- * compás, con la letra en pantalla; al final se suelta el scroll ya en el sistema solar, mientras
- * suena lo que queda de la canción. El sonido se activa al inicio (ver `BotonSonido`).
+ * en el agujero (el iris se cierra sobre la sombra) empieza la canción y la cámara avanza sola por el
+ * agujero de gusano, a su compás, con sus escenas en el fondo del túnel y la letra en pantalla; al
+ * final, el mensaje para Valeria (`MENSAJE_FINAL`) y se suelta el scroll todavía en el túnel: el
+ * resto del viaje (la salida y el sistema solar) se hace deslizando, mientras suena lo que queda de
+ * la canción. El sonido se activa al inicio (ver `BotonSonido`).
  *
  * El audio es el archivo del usuario en `public/cancion/`; la letra, `cancion.vtt`: en español (el
  * texto del .srt en español que dio el usuario, tal cual), con la hora de cada palabra: cada una se
@@ -27,16 +29,16 @@ export const CANCION = {
   /**
    * El cruce al compás de la canción (vh del carril), con los tiempos de la letra (ver
    * `recorridoDeLaCancion`): la canción empieza en lo negro (`puertaVh`), el iris se abre sobre el
-   * remolino durante la introducción (de `negro` a `iris`), el remolino del agujero de gusano dura
-   * hasta que acaba el primer bloque de la letra (la boca del otro lado se abre en el estribillo), el
-   * cielo del otro lado hasta la última línea y, después, aparece nuestro sistema solar: se suelta
-   * el scroll `llegada` segundos más tarde (y sigue sonando lo que queda).
+   * remolino durante la introducción (de `negro` a `iris`), la cámara se mete en el túnel hasta
+   * `portal` cuando se abre el portal de las escenas (antes de la primera línea) y desde ahí avanza
+   * muy despacio hasta `finLetra` (la boca del otro lado sigue escondida tras el portal, también en
+   * un móvil); el scroll se suelta en `suelta`, `llegada` segundos después de la última línea.
    */
-  vh: { negro: 484, iris: 510, remolino: 640, cielo: 770, suelta: 830 },
+  vh: { negro: 484, iris: 510, portal: 524, finLetra: 539, suelta: 540 },
   segundos: { negro: 1.5, iris: 7 },
   llegada: 12,
-  /** Mientras se carga la letra: dónde acaban el primer bloque y la letra de la canción de ahora (s). */
-  porDefecto: { primerBloque: 89.3, letra: 175.9 },
+  /** Mientras se carga la letra: dónde empiezan y acaban las líneas de la canción de ahora (s). */
+  porDefecto: { inicioLetra: 17.1, letra: 175.9 },
   /** La letra respecto del audio (s; positivo: la letra va más tarde). */
   desfaseLetra: 0,
   /** Fundido del sonido (s) al saltarla o al volver atrás. */
@@ -44,23 +46,33 @@ export const CANCION = {
 } as const
 
 /** El recorrido del cruce ([segundo, vh]) y el segundo de la suelta, según los tiempos de la letra. */
-export function recorridoDeLaCancion(
-  finPrimerBloque: number,
-  finLetra: number,
-): { puntos: (readonly [number, number])[]; suelta: number } {
+export function recorridoDeLaCancion(inicioLetra: number, finLetra: number): { puntos: (readonly [number, number])[]; suelta: number } {
   const { vh, segundos, llegada } = CANCION
   const fin = Math.max(finLetra, segundos.iris + 20)
-  const remolino = Math.min(Math.max(finPrimerBloque, segundos.iris + 10), fin - 10)
+  const portal = Math.min(Math.max(inicioLetra - 0.8, segundos.iris + 2), fin - 10)
   const suelta = fin + llegada
   return {
     puntos: [
       [0, CANCION.puertaVh],
       [segundos.negro, vh.negro],
       [segundos.iris, vh.iris],
-      [remolino, vh.remolino],
-      [fin, vh.cielo],
+      [portal, vh.portal],
+      [fin, vh.finLetra],
       [suelta, vh.suelta],
     ],
     suelta,
   }
 }
+
+/**
+ * El final de la canción (lo pidió el usuario: "al final que diga Valeria te amo con toda el alma y
+ * siempre quiero estar contigo, con una escena y animación bonita, y que diga que siga deslizando"):
+ * su nombre escrito con estrellas, como una constelación, y el resto en una cinta. Las frases
+ * cortas son para pantallas estrechas (en cuatro renglones).
+ */
+export const MENSAJE_FINAL = {
+  nombre: 'VALERIA',
+  frases: ['te amo con toda el alma', 'y siempre quiero estar contigo'],
+  frasesCortas: ['te amo con toda', 'el alma', 'y siempre quiero', 'estar contigo'],
+  pista: 'Sigue deslizando',
+} as const

@@ -1044,7 +1044,8 @@ void main() {
 
 /**
  * El escenario de la canción (ver `features/cancion/escenario/Escenario.ts`): un lienzo ya pintado
- * en sRGB que se pone encima del dibujo, antes de la película.
+ * en sRGB, con su transparencia (alrededor del portal se ve el túnel), que se pone encima del
+ * dibujo, antes de la película.
  */
 export const ESCENARIO_FRAG = /* glsl */ `
 uniform sampler2D uEscenario;
@@ -1054,6 +1055,7 @@ in vec2 vUv;
 out vec4 fragColor;
 
 void main() {
-  fragColor = vec4(texture(uEscenario, vUv).rgb, uOpacidad);
+  vec4 c = texture(uEscenario, vUv);
+  fragColor = vec4(c.rgb, c.a * uOpacidad);
 }
 `
