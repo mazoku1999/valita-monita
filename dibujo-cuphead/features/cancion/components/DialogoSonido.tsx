@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { desbloquearMusicaDeFondo } from '@/features/ambiente/utils/musicaDeFondo'
 import { CANCION } from '../constantes/cancion'
 import { estadoDelSonido, permitirSonido, suscribirSonido } from '../utils/audio'
 
@@ -49,7 +50,10 @@ export function DialogoSonido() {
         if (evento.target === evento.currentTarget) evento.preventDefault()
       }}
     >
-      <button ref={boton} type="button" className="dialogo-sonido-boton" onClick={() => permitirSonido(CANCION.audio)}>
+      <button ref={boton} type="button" className="dialogo-sonido-boton" onClick={() => {
+          permitirSonido(CANCION.audio)
+          desbloquearMusicaDeFondo()
+        }}>
         <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M3.5 9.4 H7 L11.6 5.6 V18.4 L7 14.6 H3.5 Z" fill="currentColor" />
           <path d="M15.1 9.2 C16.4 10.6 16.4 13.4 15.1 14.8" />

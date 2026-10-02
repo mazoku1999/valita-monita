@@ -114,9 +114,6 @@ export function prepararAudio(): void {
   }
 }
 
-/** El Web Audio de la página, si ya existe (lo usa también el sonido ambiente). */
-export const contextoDeAudio = (): AudioContext | null => contexto
-
 /** (En un gesto.) El Web Audio de la página: se crea una vez (si no se preparó) y se reanuda si se paró. */
 function asegurarContexto(): AudioContext | null {
   prepararAudio()

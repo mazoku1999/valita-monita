@@ -24,7 +24,7 @@ export function IconoSonido({ activo }: { activo: boolean }) {
 }
 
 /**
- * El sonido (la canción y el sonido ambiente, ver `features/ambiente`), pequeño arriba a la
+ * El sonido (la canción y la música de fondo, ver `features/ambiente`), pequeño arriba a la
  * derecha: para apagarlo o encenderlo en todo el viaje. Se activa al inicio, en el diálogo que hay
  * que presionar (ver `DialogoSonido`); mientras está, este botón no se ve. En el paseo del final va
  * entre sus botones (ver `ControlesPaseo`) y con la carta abierta no hace falta.

@@ -155,26 +155,19 @@ agujero negro dibujado del inicio (`public/apple-icon.png`, `icono-192.png`, `ic
 Los metadatos de la página son sólo el título, «Para mi Monita linda» (paso 46: sin descripción ni
 nada más; también es el nombre de la app en la pantalla de inicio).
 
-## Sonido ambiente
+## Música de fondo
 
-Donde no hay música (el acercamiento al agujero negro y, después de la canción, el sistema solar,
-la Tierra, las nubes, el valle y el paseo, hasta que se abre la carta) suena un ambiente suave (paso
-48: "algo romántico y tierno, sólo sonidos"), todo sintetizado con Web Audio, sin archivos, y
-siempre distinto (`features/ambiente/paisajeSonoro.ts`):
-
-- En el espacio, un colchón cálido y muy bajito (re mayor con séptima y novena) que respira
-  despacio, y campanitas de caja de música sueltas y agudas, como estrellas que titilan.
-- Bajando entre las nubes, un viento suave que va y viene.
-- En el valle, la brisa, pajaritos de la mañana (silbidos, trinos y gorjeos, que a veces se
-  contestan desde el otro lado) y campanitas de viento de tarde en tarde.
-
-Las campanitas usan la pentatónica del acorde (siempre suenan bien juntas) y pasan por un eco
-suave. `AmbienteSonoro.tsx` lo mueve según el punto del viaje con fundidos lentos y lo calla
-mientras suena la canción o la música de la carta, o si se silencia; empieza al activar el sonido en
-el diálogo del inicio. En el iPhone suena aunque el teléfono esté en silencio, y si el sistema pausa
-el audio (una llamada), el siguiente toque lo reanuda. En desarrollo,
-`window.__ambiente.renderizar('espacio' | 'nubes' | 'valle', segundos)` devuelve un WAV para
-escucharlo aparte y `window.__ambiente.capas()` lo que suena ahora.
+Donde no suena otra música (el acercamiento al agujero negro y, después de la canción, el sistema
+solar, la Tierra, las nubes, el valle y el paseo, hasta que se abre la carta), una música de fondo
+bajita (paso 49; el usuario la prefirió al sonido ambiente sintetizado del paso 48): una versión
+instrumental que dio el usuario, en bucle (`public/fondo/musica.mp3`, recortada sin los silencios
+del principio y del final y a 96 kbps). Va a un 20 % de su volumen (`NIVEL_FONDO`, unos −32 dB, muy
+por debajo de la canción) y pasa por el mismo Web Audio que la canción
+(`features/ambiente/utils/musicaDeFondo.ts`). Empieza al presionar el diálogo del sonido; se calla
+con un fundido (y se pausa) mientras suena la canción o la música de la carta, o si se silencia, y
+vuelve por donde iba (`components/MusicaDeFondo.tsx`). En el iPhone suena aunque el teléfono esté en
+silencio, y si el sistema pausa el audio (una llamada), el siguiente toque lo reanuda. En
+desarrollo, `window.__fondo()` dice si suena y por qué segundo va.
 
 ## La canción del agujero negro
 
@@ -199,8 +192,8 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   usuario prefirió eso al botón de cristal que, con su animación, iba del centro a la esquina): un
   cartel de papel crema con tinta sobre el viaje en penumbra, quieto; mientras está, la página no
   se desplaza, y tocar fuera no lo cierra. Después, un botón pequeño arriba a la derecha (en el
-  paseo del final, entre sus botones de papel) lo apaga o lo enciende en todo el viaje, también el
-  sonido ambiente. Si aun así el navegador no la deja sonar, la canción va en silencio con la letra
+  paseo del final, entre sus botones de papel) lo apaga o lo enciende en todo el viaje, también la
+  música de fondo. Si aun así el navegador no la deja sonar, la canción va en silencio con la letra
   y el cruce, o con un reloj propio. Se empieza a cargar a 150 vh y pasa por Web Audio para los
   fundidos.
 - **La letra, en español y sincronizada palabra por palabra** (`public/cancion/cancion.vtt`,
@@ -441,7 +434,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
 `dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`,
-`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`.
+`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
