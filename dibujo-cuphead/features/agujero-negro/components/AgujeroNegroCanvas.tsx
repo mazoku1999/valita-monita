@@ -15,9 +15,10 @@ import { TunelAgujeroGusano } from './TunelAgujeroGusano'
 
 /**
  * Resolución máxima del dibujo (píxeles del lienzo por píxel de CSS): en las pantallas táctiles
- * (móviles), algo menos, para que puedan ir fluidos (el grano de la película disimula la diferencia).
+ * (móviles), algo menos, para que puedan ir fluidos (el grano de la película disimula la diferencia);
+ * si el aparato no llega, baja un poco más (ver `ResolucionAdaptable`).
  */
-const DPR_MAXIMO = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches ? 1.25 : 1.5
+const DPR_MAXIMO = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches ? 1.4 : 1.5
 
 interface AgujeroNegroCanvasProps {
   onListo?: () => void

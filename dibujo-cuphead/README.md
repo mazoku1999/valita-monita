@@ -101,21 +101,26 @@ Lo que hacía que en un celular el scroll y la cámara se sintieran mal, y cómo
 - **Sin saltitos de la barra del navegador** (`largoDelCarril` en
   `features/narrativa/store/progresoScrollStore.ts`): el progreso se mide con el alto del carril,
   que no cambia cuando la barra del navegador se esconde o aparece.
-- **Menos píxeles en pantallas táctiles** (`AgujeroNegroCanvas.tsx`): hasta 1,25 píxeles por píxel
-  de CSS (1,5 con ratón); el grano de la película lo disimula.
-- **Escalones de calidad** (paso 47, `ESCALONES` en `store/ritmoDibujo.ts` y
-  `ResolucionAdaptable.tsx`; en el iPhone iba fluido, en Android no siempre): si el aparato pierde
-  muchos fotogramas durante dos segundos, se dibuja con menos píxeles (82 % y luego 68 % de la
-  resolución), manteniendo los 60 por segundo; sólo al final, 30 por segundo. Nunca vuelve a subir
-  (no oscila). Con un móvil simulado que no llega, baja en unos 10 s; en uno que llega, no baja.
+- **Menos píxeles en pantallas táctiles** (`AgujeroNegroCanvas.tsx`): hasta 1,4 píxeles por píxel
+  de CSS (1,5 con ratón; era 1,25 hasta el paso 51); el grano de la película lo disimula.
+- **Escalones de calidad** (pasos 47 y 51, `ESCALONES` en `store/ritmoDibujo.ts` y
+  `ResolucionAdaptable.tsx`): si el aparato pierde más de un 30 % de los fotogramas durante dos
+  segundos y medio, se dibuja con un poco menos de resolución (90 % y, como mucho, 80 %),
+  manteniendo los 60 por segundo; sólo al final, 30 por segundo. Si el navegador mismo va a 30 (el
+  iPhone en ahorro de energía), se dibuja a 30 sin tocar la resolución. Cada tramo tiene su escalón
+  (el agujero negro, la canción y el resto): lo que cuesta el agujero no le baja la calidad a la
+  letra (en el paso 47 bajaba hasta un 68 % y no se leía bien). Dentro de un tramo no vuelve a subir.
 - **El lienzo se rehace una vez** (`resize` del `Canvas`): al aparecer o esconderse la barra del
   navegador, girar el teléfono o la pantalla completa, espera a que el tamaño deje de cambiar
   (250 ms, estirándose mientras tanto) en vez de rehacer sus texturas a cada paso, y ya no mide en
   cada scroll.
 - **Sin zoom ni "tirar para recargar"** (`useSinZoom.ts`, `globals.css`, `viewport` en
-  `app/layout.tsx`): ni pellizcando ni con doble toque o doble clic, en el móvil ni en el ordenador
-  (en Safari, también sus gestos de pellizco), y en Android deslizar hacia arriba al principio ya no
-  recarga la página.
+  `app/layout.tsx`): ni pellizcando ni con doble toque o doble clic, en el móvil ni en el ordenador,
+  y en Android deslizar hacia arriba al principio ya no recarga la página. Safari (iPhone) no
+  respeta la ventana sin escala: en el paseo, con la palanca y otro dedo, se amplió y ya no se podía
+  volver (paso 51). Ahora, además, dos dedos a la vez nunca amplían (se impide en cuanto se apoya el
+  segundo, sin frenar el scroll de un dedo), un doble toque rápido tampoco, y si aun así se ampliara,
+  la página vuelve sola a su escala. La palanca y mirar con otro dedo siguen funcionando a la vez.
 - **Los cálculos largos en un hilo aparte** (`features/segundo-plano`): los mapas de la Tierra, la
   región de Cochabamba (textura y relieve), las sombras de las nubes, el relieve del valle, las
   flores y la vida del valle se calculan en un Web Worker (`trabajador.ts`) y llegan como arreglos
@@ -436,7 +441,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
 `dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`,
-`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`, `dibujo-v0.50-fondo-desde-el-10`.
+`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`, `dibujo-v0.50-fondo-desde-el-10`, `dibujo-v0.51-zoom-ios-y-calidad`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

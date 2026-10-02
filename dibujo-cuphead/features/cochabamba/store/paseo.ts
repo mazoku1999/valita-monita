@@ -230,3 +230,8 @@ export function reiniciarPaseo(): void {
   Object.assign(PASEO, { x: 0, z: 0, vx: 0, vz: 0, giro: 0, cabeceo: 0, dePie: 0, levantarse: false, palancaX: 0, palancaY: 0, volver: false })
   marcarActivo(false)
 }
+
+// En desarrollo: el estado del paseo desde la consola o las pruebas.
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  ;(window as unknown as { __paseo?: unknown }).__paseo = PASEO
+}

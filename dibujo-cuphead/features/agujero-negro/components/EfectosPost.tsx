@@ -32,7 +32,7 @@ export function EfectosPost() {
   const compositor = useRef<ComposerDeEfectos>(null)
   const envuelto = useRef<ComposerDeEfectos | null>(null)
   useFrame(({ clock }) => {
-    avanzarRitmo(clock.getElapsedTime())
+    avanzarRitmo(clock.getElapsedTime(), obtenerProgreso() * CARRIL_VH)
     const composer = compositor.current
     if (!composer || envuelto.current === composer) return
     envuelto.current = composer
