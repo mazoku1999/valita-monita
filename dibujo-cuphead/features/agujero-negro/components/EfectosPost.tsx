@@ -4,6 +4,7 @@ import { EffectComposer } from '@react-three/postprocessing'
 import { useFrame } from '@react-three/fiber'
 import type { EffectComposer as ComposerDeEfectos } from 'postprocessing'
 import { useEffect, useMemo, useRef } from 'react'
+import { ESCENARIO } from '@/features/cancion/store/escenario'
 import { NIEBLA } from '@/features/dibujo/store/niebla'
 import { avanzarRitmo, latido, pulsaciones, tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
 import { PasoDibujo } from '@/features/dibujo/utils/PasoDibujo'
@@ -59,13 +60,18 @@ export function EfectosPost() {
     pasoDibujo.bandaVisible = suavizar(1.3, 2.5, distanciaCentro)
     pasoDibujo.latido = latido(clock.getElapsedTime())
     pasoDibujo.pulsaciones = pulsaciones(clock.getElapsedTime())
-    // El iris se cierra sobre la sombra al cruzar el horizonte y se abre sobre el remolino.
+    // El iris se cierra sobre la sombra al cruzar el horizonte y se abre sobre el remolino; durante
+    // la canción, también para entrar en su escenario y salir de él (ver `features/cancion`).
     const progreso = obtenerProgreso()
     const { irisCierre, irisApertura } = VIAJE
-    pasoDibujo.iris =
+    const irisViaje =
       progreso < irisApertura.desde
         ? 1 - suavizar(irisCierre.desde, irisCierre.hasta, progreso)
         : suavizar(irisApertura.desde, irisApertura.hasta, progreso)
+    pasoDibujo.iris = Math.min(irisViaje, ESCENARIO.iris)
+    pasoDibujo.escenario = ESCENARIO.textura
+    pasoDibujo.escenarioOpacidad = ESCENARIO.opacidad
+    pasoDibujo.escenarioCubre = ESCENARIO.cubre
     // Dentro de una nube (la del corazón, al entrar en la Tierra y al salir sobre el valle).
     pasoDibujo.niebla = Math.max(NIEBLA.globo, NIEBLA.valle)
     pasoDibujo.nieblaSentido = NIEBLA.globo > NIEBLA.valle ? -1 : 1

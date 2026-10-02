@@ -27,7 +27,7 @@ const segundos = (marca: string): number => {
 /**
  * Lee un archivo de subtítulos .srt: bloques separados por líneas en blanco, cada uno con su número,
  * sus tiempos ("00:00:15,000 --> 00:00:19,500") y su texto (una o varias líneas: los saltos se
- * conservan, la maqueta los respeta). Se ignoran las etiquetas de formato y los bloques sin tiempos o
+ * conservan, la cinta los respeta). Se ignoran las etiquetas de formato y los bloques sin tiempos o
  * sin texto.
  */
 export function leerSrt(contenido: string): LineaSrt[] {

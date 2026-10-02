@@ -12,6 +12,7 @@ import {
   DESENFOQUE_FRAG,
   DESTELLO_FRAG,
   DESTELLO_VERT,
+  ESCENARIO_FRAG,
   PANTALLA_VERT,
   PELICULA_FRAG,
   REDUCIR_FRAG,
@@ -69,6 +70,10 @@ export interface AjustesDibujo {
  * 3. Composición: cielo (con aguadas de luz), lo que aún se renderiza con materiales realistas en
  *    colores planos de época, el agujero de caricatura y la tinta; papel.
  * 4. Estrellas y destellos de caricatura; película antigua a 24 fotogramas por segundo.
+ *
+ * Mientras suena la canción del agujero, encima del dibujo va su escenario (un lienzo ya pintado,
+ * ver `features/cancion/escenario/Escenario.ts`) y la película se le aplica igual; mientras tapa la
+ * pantalla entera, el resto del dibujo no se calcula.
  */
 export class PasoDibujo extends Pass {
   /** Cámara de la escena: ancla el cielo a la esfera celeste y sitúa el agujero. */
@@ -90,6 +95,10 @@ export class PasoDibujo extends Pass {
   nieblaAvance = 0
   /** 1 al salir de la nube (la niebla se abre desde el centro), −1 al entrar (se cierra en él). */
   nieblaSentido = 1
+  /** El escenario de la canción (sRGB) y cuánto se ve; si tapa la pantalla entera. */
+  escenario: THREE.Texture | null = null
+  escenarioOpacidad = 0
+  escenarioCubre = false
 
   readonly ajustes: AjustesDibujo = { activo: true, soloTinta: false, grosor: TINTA.grosor }
 
@@ -123,6 +132,7 @@ export class PasoDibujo extends Pass {
   private readonly matComponer: THREE.ShaderMaterial
   private readonly matPelicula: THREE.ShaderMaterial
   private readonly matCopia: THREE.ShaderMaterial
+  private readonly matEscenario: THREE.ShaderMaterial
   private readonly geometriaDestellos = crearGeometriaDestellos(generarDestellos())
   private readonly matDestellos: THREE.ShaderMaterial
   private readonly escenaDestellos = new THREE.Scene()
@@ -214,6 +224,8 @@ export class PasoDibujo extends Pass {
       uIris: { value: 1 },
     })
     this.matCopia = material(COPIA_FRAG, { uEntrada: { value: null }, uAPantalla: { value: 1 } })
+    this.matEscenario = material(ESCENARIO_FRAG, { uEscenario: { value: null }, uOpacidad: { value: 1 } })
+    this.matEscenario.transparent = true
     this.matDestellos = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       vertexShader: DESTELLO_VERT,
@@ -332,35 +344,8 @@ export class PasoDibujo extends Pass {
     this.uSol.value.set(0.5 + 0.5 * p.x, 0.5 + 0.5 * p.y, radio, p.z < 1 ? SOL_EN_ESCENA.visible : 0)
   }
 
-  override render(
-    renderer: THREE.WebGLRenderer,
-    inputBuffer: THREE.WebGLRenderTarget,
-    outputBuffer: THREE.WebGLRenderTarget,
-    deltaTime = 1 / 60,
-  ): void {
-    const limpiezaPrevia = renderer.autoClear
-    renderer.autoClear = false
-    const destino = this.renderToScreen ? null : outputBuffer
-    const aPantalla = this.renderToScreen ? 1 : 0
-
-    if (!this.ajustes.activo) {
-      this.matCopia.uniforms.uEntrada.value = inputBuffer.texture
-      this.matCopia.uniforms.uAPantalla.value = aPantalla
-      this.dibujar(renderer, this.matCopia, destino)
-      renderer.autoClear = limpiezaPrevia
-      return
-    }
-
-    this.tiempo += Math.min(Math.max(deltaTime, 0), 0.25)
-    const camara = this.camara
-    if (camara) {
-      camara.updateMatrixWorld()
-      this.uCamara.uProyInversa.value.copy(camara.projectionMatrixInverse)
-      this.uCamara.uCamaraMundo.value.copy(camara.matrixWorld)
-      this.situarAgujero(camara)
-      this.situarSol(camara)
-      if (camara instanceof THREE.PerspectiveCamera) (this.matContorno.uniforms.uCercaLejos.value as THREE.Vector2).set(camara.near, camara.far)
-    }
+  /** Pasos 1 a 5: el dibujo de la escena en `this.dibujo`, antes de la película. */
+  private componer(renderer: THREE.WebGLRenderer, inputBuffer: THREE.WebGLRenderTarget, camara: THREE.Camera | null): void {
     const gas = refBufferGas.current
     const gasVisible = gas ? this.gasVisible : 0
     const semilla = Math.floor(numeroDeDibujo() / HERVOR.cadaDibujos)
@@ -379,7 +364,6 @@ export class PasoDibujo extends Pass {
     this.desenfocar(renderer, this.aguadaIntermedia, { x: 0, y: pasoA / this.cuarto.height }, this.aguada)
 
     // 2. Cielo en acuarela con los rayos de sol del agujero.
-    const noche = VALLE_EN_ESCENA.noche
     const uc = this.matCielo.uniforms
     uc.uEscena.value = inputBuffer.texture
     uc.uCieloPintado.value = uc.uProfundidad.value ? this.cieloPintado : 0
@@ -431,6 +415,44 @@ export class PasoDibujo extends Pass {
       renderer.setRenderTarget(this.dibujo)
       renderer.render(this.escenaDestellos, this.camaraQuad)
     }
+  }
+
+  override render(
+    renderer: THREE.WebGLRenderer,
+    inputBuffer: THREE.WebGLRenderTarget,
+    outputBuffer: THREE.WebGLRenderTarget,
+    deltaTime = 1 / 60,
+  ): void {
+    const limpiezaPrevia = renderer.autoClear
+    renderer.autoClear = false
+    const destino = this.renderToScreen ? null : outputBuffer
+    const aPantalla = this.renderToScreen ? 1 : 0
+
+    if (!this.ajustes.activo) {
+      this.matCopia.uniforms.uEntrada.value = inputBuffer.texture
+      this.matCopia.uniforms.uAPantalla.value = aPantalla
+      this.dibujar(renderer, this.matCopia, destino)
+      renderer.autoClear = limpiezaPrevia
+      return
+    }
+
+    this.tiempo += Math.min(Math.max(deltaTime, 0), 0.25)
+    const camara = this.camara
+    if (camara) {
+      camara.updateMatrixWorld()
+      this.uCamara.uProyInversa.value.copy(camara.projectionMatrixInverse)
+      this.uCamara.uCamaraMundo.value.copy(camara.matrixWorld)
+      this.situarAgujero(camara)
+      this.situarSol(camara)
+      if (camara instanceof THREE.PerspectiveCamera) (this.matContorno.uniforms.uCercaLejos.value as THREE.Vector2).set(camara.near, camara.far)
+    }
+    const escenario = this.escenario && this.escenarioOpacidad > 0 ? this.escenario : null
+    if (!escenario || !this.escenarioCubre) this.componer(renderer, inputBuffer, camara)
+    if (escenario) {
+      this.matEscenario.uniforms.uEscenario.value = escenario
+      this.matEscenario.uniforms.uOpacidad.value = Math.min(1, this.escenarioOpacidad)
+      this.dibujar(renderer, this.matEscenario, this.dibujo)
+    }
 
     // 6. Película antigua.
     this.matPelicula.uniforms.uFotograma.value = Math.floor(this.tiempo * PELICULA.fotogramasPorSegundo) % 100000
@@ -440,7 +462,7 @@ export class PasoDibujo extends Pass {
     // ensuciaba: se reduce.
     this.matPelicula.uniforms.uAberracion.value = PELICULA.aberracion * (1 - 0.65 * VALLE_EN_ESCENA.dia)
     // En la noche estrellada, menos sepia: los azules y amarillos del cuadro, vivos.
-    ;(this.matPelicula.uniforms.uPelicula2.value as THREE.Vector3).z = PELICULA.envejecido * (1 - 0.7 * suavizar(0, 1, noche))
+    ;(this.matPelicula.uniforms.uPelicula2.value as THREE.Vector3).z = PELICULA.envejecido * (1 - 0.7 * suavizar(0, 1, VALLE_EN_ESCENA.noche))
     this.dibujar(renderer, this.matPelicula, destino)
     renderer.autoClear = limpiezaPrevia
   }
@@ -466,6 +488,7 @@ export class PasoDibujo extends Pass {
       this.matComponer,
       this.matPelicula,
       this.matCopia,
+      this.matEscenario,
       this.matDestellos,
     ])
       m.dispose()

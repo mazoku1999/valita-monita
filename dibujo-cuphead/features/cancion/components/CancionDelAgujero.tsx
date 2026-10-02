@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { CARRIL_VH } from '@/features/agujero-negro/constantes/viajeScroll'
 import { obtenerProgreso, suscribirProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { CANCION, recorridoDeLaCancion } from '../constantes/cancion'
 import { cambiarFaseCancion, faseCancion, suscribirCancion } from '../store/cancion'
+import { ponerLetraDelEscenario } from '../store/escenario'
 import {
   alTerminarCancion,
   cancionAudible,
@@ -17,19 +18,19 @@ import {
   terminarCancion,
   tiempoCancion,
 } from '../utils/audio'
-import { type LineaMaquetada, maquetarLetra } from '../utils/maqueta'
+import { finDelPrimerBloque, letraParaElEscenario } from '../utils/letra'
 import { interpolarMonotona } from '../utils/recorrido'
 import { leerSrt } from '../utils/srt'
 import { leerVtt } from '../utils/vtt'
 import { BotonSonido } from './BotonSonido'
-import { LetraEnPantalla } from './LetraEnPantalla'
 
 /**
  * La canción del agujero negro (ver `constantes/cancion.ts`): al entrar en el agujero bajando, el
  * scroll se queda quieto y empieza la canción, sin pedir nada (con sonido si ya se activó al inicio;
  * si no, en silencio hasta que se active); la cámara cruza sola a su compás (se mueve la página por
  * el carril, así todo lo demás sigue igual) con la letra en pantalla, y a su final se suelta el
- * scroll ya en el sistema solar. Botón de cristal para saltarla (o Escape).
+ * scroll ya en el sistema solar. Botón de cristal para saltarla (o Escape). La letra y sus escenas
+ * las pinta el propio dibujo animado (ver `EscenarioCancion`); aquí se lee y se da a leer.
  */
 
 const vhActual = (): number => obtenerProgreso() * CARRIL_VH
@@ -89,9 +90,8 @@ function rearmar(): void {
 
 export function CancionDelAgujero() {
   const fase = useSyncExternalStore(suscribirCancion, faseCancion, () => 'armada' as const)
-  const [letra, setLetra] = useState<LineaMaquetada[] | null>(null)
 
-  // Al acercarse al agujero: se cargan la canción, su letra y sus letras (las tipografías).
+  // Al acercarse al agujero: se cargan la canción, su letra y la tipografía de la cinta.
   useEffect(() => {
     let pedida = false
     const revisar = (): void => {
@@ -101,25 +101,13 @@ export function CancionDelAgujero() {
       fetch(CANCION.letra)
         .then((respuesta) => (respuesta.ok ? respuesta.text() : ''))
         .then((texto) => {
-          const maqueta = maquetarLetra(/^\uFEFF?WEBVTT/.test(texto) ? leerVtt(texto) : leerSrt(texto))
-          if (maqueta.length > 0) {
-            const primerBloque = Math.max(...maqueta.filter((linea) => linea.seccion === 0).map((linea) => linea.fin))
-            recorrido = recorridoDeLaCancion(primerBloque, maqueta[maqueta.length - 1].fin)
-          }
-          setLetra(maqueta)
+          const lineas = /^\uFEFF?WEBVTT/.test(texto) ? leerVtt(texto) : leerSrt(texto)
+          if (lineas.length > 0) recorrido = recorridoDeLaCancion(finDelPrimerBloque(lineas), lineas[lineas.length - 1].fin)
+          ponerLetraDelEscenario(letraParaElEscenario(lineas))
         })
-        .catch(() => setLetra([]))
-      const estilos = getComputedStyle(document.documentElement)
-      for (const [variable, muestra] of [
-        ['--font-letra-sans', 'italic 800 40px'],
-        ['--font-letra-sans', '600 40px'],
-        ['--font-letra-serif', '500 40px'],
-        ['--font-letra-condensada', '600 40px'],
-        ['--font-serif-display', 'italic 400 40px'],
-      ] as const) {
-        const familia = estilos.getPropertyValue(variable).trim()
-        if (familia) void document.fonts?.load(`${muestra} ${familia}`).catch(() => undefined)
-      }
+        .catch(() => ponerLetraDelEscenario([]))
+      const familia = getComputedStyle(document.documentElement).getPropertyValue('--font-letra-cancion').trim()
+      if (familia) void document.fonts?.load(`700 40px ${familia}`).catch(() => undefined)
     }
     revisar()
     return suscribirProgreso(revisar)
@@ -207,7 +195,6 @@ export function CancionDelAgujero() {
 
   return (
     <>
-      <LetraEnPantalla letra={letra} activa={sonando} />
       {sonando && (
         <button type="button" className="boton-cristal boton-saltar-cancion" aria-label="Saltar la canción" onClick={saltar}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

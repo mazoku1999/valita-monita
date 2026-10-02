@@ -1041,3 +1041,19 @@ void main() {
   fragColor = vec4(uAPantalla > 0.5 ? srgbDesdeLineal(c) : c, 1.0);
 }
 `
+
+/**
+ * El escenario de la canción (ver `features/cancion/escenario/Escenario.ts`): un lienzo ya pintado
+ * en sRGB que se pone encima del dibujo, antes de la película.
+ */
+export const ESCENARIO_FRAG = /* glsl */ `
+uniform sampler2D uEscenario;
+uniform float uOpacidad;
+
+in vec2 vUv;
+out vec4 fragColor;
+
+void main() {
+  fragColor = vec4(texture(uEscenario, vUv).rgb, uOpacidad);
+}
+`

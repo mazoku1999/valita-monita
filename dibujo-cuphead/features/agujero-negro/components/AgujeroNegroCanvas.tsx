@@ -1,6 +1,7 @@
 'use client'
 
 import { Canvas } from '@react-three/fiber'
+import { EscenarioCancion } from '@/features/cancion/components/EscenarioCancion'
 import { EscenaCochabamba } from '@/features/cochabamba/components/EscenaCochabamba'
 import { ProgresoSuave } from '@/features/narrativa/components/ProgresoSuave'
 import { CAMARA_AGUJERO } from '../constantes/parametrosAgujero'
@@ -41,6 +42,8 @@ export function AgujeroNegroCanvas({ onListo }: AgujeroNegroCanvasProps) {
         <EscenaSistemaSolar />
         <EscenaCochabamba />
       </TunelAgujeroGusano>
+      {/* El escenario de la canción, antes del posproceso que lo compone. */}
+      <EscenarioCancion />
       <EfectosPost />
     </Canvas>
   )

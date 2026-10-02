@@ -87,7 +87,7 @@ El dibujo es un pase al final del posproceso (`features/agujero-negro/components
 
 El usuario pidió la letra de una canción mientras se cruza el agujero negro, como en un video de
 letras (`features/cancion`). El audio y la letra son archivos suyos en `public/cancion/`
-(`cancion.mp3` y `cancion.srt`): la letra se lee del .srt al vuelo, no está escrita en el código.
+(`cancion.mp3` y `cancion.vtt`): la letra se lee al vuelo, no está escrita en el código.
 
 - **El cruce al compás** (`constantes/cancion.ts`, `components/CancionDelAgujero.tsx`): la
   canción empieza sola recién al entrar en el agujero bajando (446 vh: el iris ya se cerró sobre la
@@ -108,7 +108,7 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   navegador, la lleva un reloj propio hasta que se pueda. Se empieza a cargar a 150 vh y pasa por
   Web Audio para los fundidos.
 - **La letra, en español y sincronizada palabra por palabra** (`public/cancion/cancion.vtt`,
-  `utils/vtt.ts`, `utils/maqueta.ts`, `components/LetraEnPantalla.tsx`): el texto es la traducción
+  `utils/vtt.ts`, `utils/letra.ts`): el texto es la traducción
   al español que dio el usuario, tal cual (habla de hombre a mujer: "tuyo" para él; "mía" e
   "indicada" para ella). La hora de cada palabra inglesa se sacó del propio audio: la voz se aísla
   del canal central (las guitarras y el piano van a los lados), se miden sus comienzos de nota
@@ -120,32 +120,39 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   de tiempo antes de cada palabra y, en las respiraciones, una que la cierra. `cancion.srt` tiene
   el mismo texto en español con los tiempos de cada línea; `cancion.en.vtt`, la letra original en
   inglés sincronizada igual (para usarla, basta con apuntar `CANCION.letra` a ella).
-- **En pantalla, animada palabra por palabra**: la línea que se canta va grande en el centro,
-  partida en filas cortas con voces distintas (palo seco gruesa en cursiva, Playfair, Oswald
-  condensada, Instrument Serif en cursiva, palo seco espaciada), y la anterior, pequeña y apagada
-  arriba. Antes de cantarse, cada palabra es apenas una sombra; al cantarse aparece (sube, se
-  enfoca y da un pequeño salto con un destello), se pinta del color de la sección de izquierda a
-  derecha mientras dura y al terminar se asienta en blanco cálido. En las palabras clave las letras
-  caen una a una, ladeadas, y se pintan letra a letra; se quedan con un tinte del color y sueltan
-  dos chispas. Cada línea entra a su manera, por turnos: sube desde abajo, llega grande y se encoge
-  a su sitio, cae desde arriba o llega de lado (`ENTRADAS_LINEA`). Las líneas llegan 0.35 s
-  antes de su primera palabra (sin cortar la anterior; si ésta se canta hasta el mismo instante,
-  le cede el sitio 0.22 s antes). El estribillo va en rosa; las estrofas, en oro y en celeste.
-  Detrás, un velo oscuro para que se lea sobre las bandas claras del remolino, un halo suave del
-  color de la sección y chispas finas que suben despacio; nada late al compás.
-- **Una escena por línea** (`constantes/escenas.ts`, `components/EscenasLetra.tsx`): debajo del
-  velo (detrás de la letra queda oscuro; alrededor se ve entera), un motivo dibujado a tinta clara
-  con colores planos, como el resto del dibujo animado, según el tema de la línea: ondas de
-  sonido, una estrella que sube, un sendero que tantea con su farolito, un trazo decidido, un reloj
-  que se deshace en estrellas, una constelación al azar, dos luces que se buscan en espiral, un sol
-  de rayos, un planeta dando vueltas a un sol, una estrella que crece entre todas, dos cometas, dos
-  anillos entrelazados, un girasol que se abre pétalo a pétalo, una tormenta con rayos y lluvia,
-  nubes que se separan, el cielo que se abre, un brote, hojas que caen, fotos que flotan, una línea
-  que se dibuja sola y una firma sin letras. Los estribillos repiten los suyos. Son SVG con
-  animaciones de CSS (y algún recorrido SVG) que empiezan cuando la línea llega al centro; la
-  anterior se desvanece mientras entra la siguiente. Nada de caras ni de corazones. Todo lo mueve el
-  reloj del audio, y los filtros sólo se aplican a las palabras que se están animando (a 60 fps
-  también en un móvil).
+- **El escenario: un dibujo animado de los años 30** (`escenario/`,
+  `components/EscenarioCancion.tsx`; lo pidió el usuario: "estilo Cuphead, que no parezca IA, las
+  letras derechas"). Mientras suena, la pantalla es un dibujo animado pintado en un lienzo 2D a 24
+  dibujos por segundo (las escenas, "en dos", a 12) que el pase de dibujo compone antes de la
+  película, así que le caen el grano, el vaivén, la viñeta y el iris como a todo lo demás; mientras
+  tapa la pantalla, la escena 3D y el resto del dibujo no se calculan.
+  - **El pincel** (`pincel.ts`): contornos de tinta sepia que hierven 12 veces por segundo,
+    rellenos planos con textura de acuarela sobre papel y el borde oscuro de la aguada; las formas
+    son puntos unidos por curvas suaves, sin degradados digitales ni resplandores.
+  - **Una escena por sección** (`escenas.ts`): paisajes en capas que la cámara recorre despacio,
+    cada una a su velocidad (la cámara multiplano de la época), y utilería que entra con su rebote
+    según de qué habla cada línea; nada de caras, corazones ni rótulos. La noche (primera estrofa):
+    lomas con árboles redondos y una casita con la ventana encendida y humo; aparecen estrellas,
+    sube la más grande, una estrella fugaz busca el camino y lo encuentra, pasa un planeta con
+    anillos, las estrellas se unen en constelación, dos estrellas bailan hasta juntarse y la luna
+    se ilumina. Los girasoles (estribillo): el sol de rayos sobre el campo, con su granero y su
+    valla; la Tierra le da la vuelta (por detrás y por delante), la elegida crece por encima de
+    todas, un avión de papel se aleja, dos girasoles se inclinan hasta juntarse y vuelan pétalos;
+    en el interludio se pone el sol. La lluvia (segunda estrofa): una tormenta sobre un pueblito que
+    escampa, los rayos de sol y el arcoíris, un brote, el árbol que se vuelve otoño, fotos colgadas
+    de una cuerda y una pluma que dibuja un girasol, lo colorea y lo firma con una floritura. El
+    atardecer (último estribillo): los girasoles en naranja; al final se hace de noche y sale la
+    primera estrella.
+  - **Los cortes, con iris** (`Escenario.ts`): el de la película se cierra sobre el remolino antes
+    de la primera línea; dentro del dibujo, cada escena se cierra sobre algo suyo (la luna, el sol
+    que se pone, la estrella de la firma) y la siguiente se abre desde algo suyo (la luna, el sol),
+    por debajo de la cinta, así que la letra no se tapa nunca. Al final se cierra en la primera
+    estrella y la película abre su iris sobre nuestro sistema solar antes de soltar el scroll.
+  - **La letra en una cinta de época** (`letrero.ts`): derecha y quieta, con una sola letra de
+    rótulo (Corben), en tinta sepia y roja en cuanto se canta cada palabra; un girasolito salta de
+    palabra en palabra como la pelotita de las canciones de Fleischer (cae en cada una justo al
+    cantarse, se aplasta al caer y se estira en el aire). La cinta se despliega cuando una línea
+    llega tras una pausa y se voltea como un cartel cuando llega enseguida.
 
 ## La llegada a Cochabamba
 
@@ -309,7 +316,8 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.30-sonido-al-inicio`, `dibujo-v0.31-letra-a-tiempo`,
 `dibujo-v0.32-letra-tal-cual`, `dibujo-v0.33-musica-de-la-carta`,
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
-`dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`.
+`dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
+`dibujo-v0.38-escenario-cuphead`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
