@@ -103,6 +103,9 @@ function fundir(destino: number, segundos: number): void {
  */
 export function prepararAudio(): void {
   if (contexto) return
+  // En el iPhone, que suene aunque el teléfono esté en silencio (como un video): se activó a propósito.
+  const sesion = (navigator as Navigator & { audioSession?: { type: string } }).audioSession
+  if (sesion) sesion.type = 'playback'
   const Constructor = window.AudioContext ?? (window as VentanaConWebkit).webkitAudioContext
   try {
     contexto = Constructor ? new Constructor() : null
@@ -110,6 +113,9 @@ export function prepararAudio(): void {
     contexto = null
   }
 }
+
+/** El Web Audio de la página, si ya existe (lo usa también el sonido ambiente). */
+export const contextoDeAudio = (): AudioContext | null => contexto
 
 /** (En un gesto.) El Web Audio de la página: se crea una vez (si no se preparó) y se reanuda si se paró. */
 function asegurarContexto(): AudioContext | null {

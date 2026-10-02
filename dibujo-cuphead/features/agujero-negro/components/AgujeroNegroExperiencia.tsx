@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useCallback, useState } from 'react'
+import { AmbienteSonoro } from '@/features/ambiente/AmbienteSonoro'
 import { CancionDelAgujero } from '@/features/cancion/components/CancionDelAgujero'
 import { CartaEstrellada } from '@/features/cochabamba/components/CartaEstrellada'
 import { ControlesPaseo } from '@/features/cochabamba/components/ControlesPaseo'
@@ -34,6 +35,8 @@ export function AgujeroNegroExperiencia() {
       <NarrativaOverlay />
       {/* Al cruzar el agujero negro, la canción con su letra (la cámara cruza sola a su compás). */}
       <CancionDelAgujero />
+      {/* Donde no hay música, un sonido ambiente suave. */}
+      <AmbienteSonoro />
       {/* Al final, posada la cámara en el corazón de flores: la palanca y los botones del paseo. */}
       <ControlesPaseo />
       {/* Y al abrir la cajita, la carta en el cielo de la noche estrellada. */}

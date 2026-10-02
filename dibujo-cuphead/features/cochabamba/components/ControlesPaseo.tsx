@@ -1,6 +1,9 @@
 'use client'
 
 import { type ReactNode, useEffect, useRef, useSyncExternalStore } from 'react'
+import { IconoSonido } from '@/features/cancion/components/BotonSonido'
+import { CANCION } from '@/features/cancion/constantes/cancion'
+import { alternarSonido, estadoDelSonido, suscribirSonido } from '@/features/cancion/utils/audio'
 import { IconoPantallaCompleta, usePantallaCompleta } from '@/features/narrativa/components/BotonPantallaCompleta'
 import { pulsarPantallaCompleta } from '@/features/narrativa/store/pantallaCompleta'
 import { abrirCajita, faseCarta, suscribirCarta } from '../store/carta'
@@ -12,7 +15,7 @@ import { PASEO, paseoActivo, paseoMirado, suscribirPaseo } from '../store/paseo'
  * la mitad izquierda); con teclado y ratón, como en los juegos de ordenador, no hay palanca (se
  * anda con las teclas): en su sitio, el dibujo de las flechas. Arriba a la derecha, abrir la cajita
  * (el regalo: la cámara va hasta ella), volver a donde se posó (la casa), volver al viaje (la flecha:
- * sube la página) y la pantalla completa. Abierta la cajita, se van todos: sólo queda la carta. Abajo a la derecha, hasta que se
+ * sube la página), el sonido y la pantalla completa. Abierta la cajita, se van todos: sólo queda la carta. Abajo a la derecha, hasta que se
  * mira alrededor por primera vez, la pista de arrastrar o deslizar para mirar (un dedo que va y
  * viene). De papel crema con tinta, como el resto del dibujo; aparecen al posarse la cámara.
  */
@@ -159,7 +162,7 @@ function Boton({ etiqueta, alPulsar, children }: { etiqueta: string; alPulsar: (
       aria-label={etiqueta}
       onClick={alPulsar}
       className="pointer-events-auto grid h-12 w-12 place-items-center rounded-full transition-transform active:scale-90"
-      style={{ border: `3px solid ${TINTA}`, background: PAPEL, boxShadow: '0 3px 0 rgb(19 15 12 / 0.45)', touchAction: 'manipulation' }}
+      style={{ border: `3px solid ${TINTA}`, background: PAPEL, color: TINTA, boxShadow: '0 3px 0 rgb(19 15 12 / 0.45)', touchAction: 'manipulation' }}
     >
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke={TINTA} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         {children}
@@ -231,6 +234,7 @@ export function ControlesPaseo() {
   const mirado = useSyncExternalStore(suscribirPaseo, paseoMirado, () => false)
   const tactil = useSyncExternalStore(suscribirTactil, esTactil, () => false)
   const pantalla = usePantallaCompleta()
+  const sonido = useSyncExternalStore(suscribirSonido, estadoDelSonido, () => 'pendiente' as const)
 
   const volverAlRamo = (): void => {
     PASEO.volver = true
@@ -272,6 +276,11 @@ export function ControlesPaseo() {
           <path d="M12 19 V6" />
           <path d="M6.5 11 L12 5.5 L17.5 11" />
         </Boton>
+        {sonido !== 'pendiente' && (
+          <Boton etiqueta={sonido === 'activo' ? 'Silenciar el sonido' : 'Activar el sonido'} alPulsar={() => alternarSonido(CANCION.audio)}>
+            <IconoSonido activo={sonido === 'activo'} />
+          </Boton>
+        )}
         {pantalla.ofrecer && (
           <Boton etiqueta={pantalla.dentro ? 'Salir de la pantalla completa' : 'Pantalla completa'} alPulsar={pulsarPantallaCompleta}>
             <IconoPantallaCompleta dentro={pantalla.dentro} />
