@@ -1043,19 +1043,160 @@ void main() {
 `
 
 /**
- * El escenario de la canción (ver `features/cancion/escenario/Escenario.ts`): un lienzo ya pintado
- * en sRGB, con su transparencia (alrededor del portal se ve el túnel), que se pone encima del
- * dibujo, antes de la película.
+ * El escenario de la canción (ver `features/cancion/escenario/Escenario.ts`) sobre el dibujo, antes
+ * de la película. Lo pidió el usuario: mientras suena, que se vea que seguimos viajando por el
+ * agujero de gusano, pero con el video por encima, nítido y con prioridad ("más enfocado el video,
+ * por encima de los costados del agujero de gusano… más prioridad al lyrics"):
+ *
+ * - La escena (`uEscena`, su lienzo), grande y nítida en su recuadro alrededor del fondo del túnel,
+ *   con sólo un borde corto y suave. `uZoom` la acerca al pasar de una escena a otra (la que se va
+ *   pasa de largo; la que llega viene del fondo).
+ * - A los costados, el agujero de gusano por el que viajamos (con `uViaje`): un vórtice luminoso que
+ *   viene hacia nosotros girando, con los tres brazos en espiral del túnel dibujado, y estelas de
+ *   estrellas que pasan deprisa. Donde el túnel 3D deja ver el cielo del otro lado (su boca de
+ *   salida, `uCielo`), se ve ese cielo: al avanzar, la boca crece dentro del vórtice.
+ * - Encima, nítido (`uEncima`): la letra y el final, que se descubre en un círculo de borde suave
+ *   (`uRevelado`).
  */
-export const ESCENARIO_FRAG = /* glsl */ `
-uniform sampler2D uEscenario;
-uniform float uOpacidad;
+export const VIAJE_FRAG = /* glsl */ `
+uniform sampler2D uDibujo;
+uniform sampler2D uEscena;
+uniform sampler2D uEncima;
+// El cielo abierto del dibujo (en A): la boca de salida del agujero de gusano.
+uniform sampler2D uCielo;
+// Fondo del túnel (uv) y proporción de la pantalla (ancho / alto).
+uniform vec2 uCentro;
+uniform float uAspecto;
+// Medio ancho y medio alto del recuadro de la escena (en altos de pantalla), su acercamiento y opacidad.
+uniform vec2 uMitad;
+uniform float uZoom;
+uniform float uOpacidadEscena;
+uniform float uViaje;
+// Radio del círculo por el que se descubre lo de encima (0–1; 1, entero).
+uniform float uRevelado;
+uniform float uTiempo;
 
 in vec2 vUv;
 out vec4 fragColor;
 
+const float TAU = 6.2831853;
+
+float hash13(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float ruido(vec3 x) {
+  vec3 i = floor(x);
+  vec3 f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(mix(hash13(i), hash13(i + vec3(1.0, 0.0, 0.0)), f.x), mix(hash13(i + vec3(0.0, 1.0, 0.0)), hash13(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+    mix(mix(hash13(i + vec3(0.0, 0.0, 1.0)), hash13(i + vec3(1.0, 0.0, 1.0)), f.x), mix(hash13(i + vec3(0.0, 1.0, 1.0)), hash13(i + vec3(1.0, 1.0, 1.0)), f.x), f.y),
+    f.z);
+}
+
+float fbm(vec3 x) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += a * ruido(x);
+    x = x * 2.03 + vec3(1.7, 9.2, 3.1);
+    a *= 0.5;
+  }
+  return v;
+}
+
+// El vórtice del agujero de gusano: coordenadas de túnel (ángulo y hondura, que avanza hacia
+// nosotros), tres brazos en espiral como los del túnel dibujado y nubes de luz estiradas a lo hondo
+// (pasan como estelas). Azul profundo entre los brazos; en ellos, violeta y cian, con crestas cálidas
+// (los colores de las bandas del dibujo) y más luz hacia el fondo.
+vec3 vortice(float r, float a) {
+  float z = 0.34 / max(r, 0.02);
+  float avance = z - uTiempo * 1.5;
+  float giro = a + z * 0.5 + uTiempo * 0.22;
+  vec3 coordenada = vec3(cos(giro) * 1.9, sin(giro) * 1.9, avance * 0.3);
+  float nube = fbm(coordenada);
+  float detalle = fbm(coordenada * vec3(2.3, 2.3, 1.2) + vec3(4.1, 2.7, 9.3));
+  float brazos = 0.5 + 0.5 * cos(3.0 * giro + nube * 2.2);
+  float luz = clamp(brazos * 0.62 + nube * 0.55 + detalle * 0.22 - 0.25, 0.0, 1.0);
+  vec3 hondo = vec3(0.03, 0.04, 0.14);
+  vec3 violeta = vec3(0.42, 0.25, 0.92);
+  vec3 cian = vec3(0.22, 0.78, 1.0);
+  vec3 calido = mix(vec3(1.0, 0.56, 0.46), vec3(1.0, 0.9, 0.64), detalle);
+  vec3 c = mix(hondo, violeta, smoothstep(0.12, 0.5, luz));
+  c = mix(c, cian, smoothstep(0.42, 0.75, luz) * (0.55 + 0.45 * sin(avance * 0.6 + a)));
+  c = mix(c, calido, smoothstep(0.72, 0.97, luz) * 0.9);
+  // Anillos que pasan, cada vez más deprisa al acercarse (la sensación de avanzar).
+  float anillo = pow(0.5 + 0.5 * cos(avance * 2.4), 14.0);
+  c += vec3(0.35, 0.55, 0.9) * anillo * 0.25 * smoothstep(0.15, 0.6, r);
+  // Más luz hacia el fondo del túnel.
+  return c * (0.7 + 0.7 * exp(-r * 1.3));
+}
+
+// Estelas de estrellas: salen del fondo del túnel y se alargan al acercarse a los bordes; casi
+// todas blancas, alguna dorada, turquesa o rosa.
+vec3 estelas(float r, float a) {
+  vec3 luz = vec3(0.0);
+  for (int capa = 0; capa < 3; capa++) {
+    float fc = float(capa);
+    float K = 70.0 + fc * 55.0;
+    float sector = floor((a / TAU + 0.5) * K);
+    float h = hash13(vec3(sector, fc, 7.0));
+    if (h < 0.42) continue;
+    float angulo = ((sector + 0.25 + 0.5 * hash13(vec3(sector, fc, 3.0))) / K - 0.5) * TAU;
+    float vida = fract(h * 13.7 + uTiempo * (0.3 + 0.13 * fc));
+    float rs = 0.04 + vida * vida * 1.35;
+    float largo = 0.015 + rs * 0.22;
+    float dAngulo = abs(sin(a - angulo)) * r;
+    float tramo = smoothstep(rs - largo, rs, r) * (1.0 - smoothstep(rs, rs + 0.004, r));
+    float ancho = 0.0009 + 0.0022 * vida;
+    float tono = hash13(vec3(sector, fc, 11.0));
+    vec3 color = tono < 0.72 ? vec3(1.0, 0.95, 0.86) : tono < 0.82 ? vec3(1.0, 0.82, 0.45) : tono < 0.91 ? vec3(0.55, 0.92, 1.0) : vec3(1.0, 0.6, 0.82);
+    luz += color * tramo * (1.0 - smoothstep(0.0, ancho, dAngulo)) * (0.35 + 0.65 * vida);
+  }
+  return luz;
+}
+
 void main() {
-  vec4 c = texture(uEscenario, vUv);
-  fragColor = vec4(c.rgb, c.a * uOpacidad);
+  vec2 q = (vUv - uCentro) * vec2(uAspecto, 1.0);
+  float r = length(q);
+  float a = atan(q.y, q.x);
+
+  // La escena: cuánto se ve aquí (entera dentro de su recuadro, con un borde corto y suave).
+  vec2 e = q / (uMitad * uZoom);
+  float d = pow(pow(abs(e.x), 6.0) + pow(abs(e.y), 6.0), 1.0 / 6.0);
+  float m = (1.0 - smoothstep(0.93, 1.0, d)) * uOpacidadEscena;
+
+  vec3 c = texture(uDibujo, vUv).rgb;
+  if (m < 0.999 && uViaje > 0.001) {
+    // La boca deja ver el cielo del otro lado, con algo del vórtice girando por encima.
+    float boca = smoothstep(0.2, 0.9, texture(uCielo, vUv).a);
+    c = mix(c, vortice(r, a) + estelas(r, a), uViaje * (1.0 - 0.8 * boca));
+  }
+  if (m > 0.001) {
+    vec3 escena;
+    float lb = abs(uZoom - 1.0) * 0.12;
+    if (lb < 0.002) escena = texture(uEscena, e * 0.5 + 0.5).rgb;
+    else {
+      // Al pasar de largo o al llegar, un desenfoque hacia el fondo del túnel (la velocidad).
+      float azar = hash13(vec3(gl_FragCoord.xy, floor(uTiempo * 24.0)));
+      vec3 suma = vec3(0.0);
+      for (int i = 0; i < 8; i++) suma += texture(uEscena, e * (1.0 - (float(i) + azar) / 8.0 * lb) * 0.5 + 0.5).rgb;
+      escena = suma / 8.0;
+    }
+    c = mix(c, escena, m);
+  }
+
+  // Encima, nítido: la letra y el final (éste, por un círculo de borde suave).
+  vec4 encima = texture(uEncima, vUv);
+  if (uRevelado < 0.999) {
+    float lejos = length(vec2(max(uCentro.x, 1.0 - uCentro.x) * uAspecto, max(uCentro.y, 1.0 - uCentro.y))) + 0.25;
+    float radio = uRevelado * lejos;
+    encima.a *= 1.0 - smoothstep(radio - 0.22, radio, r);
+  }
+  c = mix(c, encima.rgb, encima.a);
+  fragColor = vec4(c, 1.0);
 }
 `

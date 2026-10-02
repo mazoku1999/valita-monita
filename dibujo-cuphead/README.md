@@ -123,20 +123,27 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   inglés sincronizada igual (para usarla, basta con apuntar `CANCION.letra` a ella).
 - **El escenario: un dibujo animado de los años 30** (`escenario/`,
   `components/EscenarioCancion.tsx`; lo pidió el usuario: "estilo Cuphead, que no parezca IA, las
-  letras derechas"; y después: "debe verse que aún estamos viajando por el agujero negro"). Es un
-  dibujo animado pintado en un lienzo 2D (con transparencia) a 24 dibujos por segundo (las escenas,
-  "en dos", a 12) que el pase de dibujo compone encima del dibujo y antes de la película, así que le
-  caen el grano, el vaivén y la viñeta como a todo lo demás. Mientras suena, las escenas se ven por
-  un portal redondo en el fondo del túnel (centrado donde va el eje del agujero de gusano, que se
-  publica en `store/ejeGusano.ts`), con el remolino girando alrededor; el portal crece un poco a
-  medida que la canción avanza. Mientras el final tapa la pantalla, la escena 3D y el resto del
-  dibujo no se calculan.
+  letras derechas"; después: "debe verse que aún estamos viajando por el agujero negro"; y luego:
+  "más enfocado el video, por encima de los costados del agujero de gusano… más prioridad al
+  lyrics"). Son dos lienzos 2D pintados a 24 dibujos por segundo (las escenas, "en dos", a 12): la
+  escena, en su recuadro, y encima la letra y el final, con transparencia. El pase de dibujo los
+  compone entre el dibujo y la película (`VIAJE_FRAG`), así que les caen el grano, el vaivén y la
+  viñeta como a todo lo demás. Mientras suena, la escena va grande y nítida en el fondo del túnel
+  (centrada donde va el eje del agujero de gusano, que se publica en `store/ejeGusano.ts`), con sólo
+  un borde corto y suave; en una pantalla ancha ocupa todo el alto y casi todo el ancho, en una
+  estrecha todo el ancho. A los costados va el agujero de gusano: un vórtice luminoso (azul profundo,
+  violeta y cian, con crestas cálidas como las bandas del túnel dibujado) que viene hacia nosotros
+  girando con sus tres brazos en espiral, anillos que pasan y estelas de estrellas de colores. El
+  vórtice es el agujero de gusano desde que se abre el iris al empezar la canción hasta su salida;
+  donde el túnel 3D deja ver el cielo del otro lado (su boca), se ve ese cielo, así que, al seguir
+  deslizando tras la canción, la boca crece dentro del vórtice hasta el sistema solar. Mientras el
+  final tapa la pantalla, la escena 3D y el resto del dibujo no se calculan.
   - **El pincel** (`pincel.ts`): contornos de tinta sepia que hierven 12 veces por segundo,
     rellenos planos con textura de acuarela sobre papel y el borde oscuro de la aguada; las formas
     son puntos unidos por curvas suaves, sin degradados digitales ni resplandores.
-  - **Una escena por sección** (`escenas.ts`, con las piezas de `piezas.ts`), pintadas en el
-    cuadrado del portal y compuestas para su círculo (lo importante, hacia dentro; el suelo, por
-    encima de la cinta): paisajes en capas que la cámara recorre despacio,
+  - **Una escena por sección** (`escenas.ts`, con las piezas de `piezas.ts`), pintadas en su
+    recuadro (lo importante, hacia dentro; el suelo, por encima de la cinta): paisajes en capas que
+    la cámara recorre despacio,
     cada una a su velocidad (la cámara multiplano de la época), y utilería que entra con su rebote
     según de qué habla cada línea; nada de caras, corazones ni rótulos. La noche (primera estrofa):
     lomas con árboles redondos y una casita con la ventana encendida y humo; aparecen estrellas,
@@ -150,20 +157,21 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
     de una cuerda y una pluma que dibuja un girasol, lo colorea y lo firma con una floritura. El
     atardecer (último estribillo): los girasoles en naranja; al final se hace de noche y sale la
     primera estrella.
-  - **Los cortes** (`Escenario.ts`): el portal se abre en el fondo del túnel antes de la primera
-    línea; para cambiar de escena se cierra sobre algo de la que se va (la luna, el sol que se pone,
-    la estrella de la firma), se ve el túnel un momento y se abre desde algo de la que llega (la
-    luna, el sol), por debajo de la cinta, así que la letra no se tapa nunca. Tras la última línea
-    se hace de noche y el portal se cierra en la primera estrella.
+  - **Los cortes** (`Escenario.ts`): la primera escena llega desde el fondo del túnel antes de la
+    primera línea; para cambiar de escena, la que se va pasa de largo (se acerca, se desenfoca hacia
+    fuera y se desvanece), se ve el vórtice un momento y la siguiente llega desde el fondo, por
+    debajo de la cinta, así que la letra no se tapa nunca. Tras la última línea se hace de noche y
+    la última escena pasa de largo.
   - **El final** (`final.ts`, `MENSAJE_FINAL` en `constantes/cancion.ts`; lo pidió el usuario: "al
     final que diga Valeria te amo… con una escena y animación bonita, y que diga que siga
     deslizando"): ya fuera del túnel, una noche sobre el campo de girasoles con su luna y alguna
     estrella fugaz; las estrellas aparecen una a una y se unen, como la constelación de la primera
     estrofa, hasta escribir VALERIA; una cinta se despliega con el resto del mensaje y los
-    girasoles levantan la cabeza para mirarlo. Al soltarse el scroll aparece "Sigue deslizando";
-    el final se queda hasta que se desliza y entonces se cierra hacia el fondo del túnel (según lo
-    deslizado: si se vuelve, se abre otra vez). Lleva su propio reloj, así que también sale al
-    saltar la canción.
+    girasoles levantan la cabeza para mirarlo. Se descubre desde el fondo del túnel en un círculo de
+    borde suave. Al soltarse el scroll aparece "Sigue deslizando" en un cartelito (en claro sobre la
+    noche, la S de la Corben parecía un 8); el final se queda hasta que se desliza y entonces se
+    cierra hacia el fondo del túnel (según lo deslizado: si se vuelve, se abre otra vez). Lleva su
+    propio reloj, así que también sale al saltar la canción.
   - **La letra en una cinta de época** (`letrero.ts`): derecha y quieta, con una sola letra de
     rótulo (Corben), en tinta sepia y roja en cuanto se canta cada palabra; un girasolito salta de
     palabra en palabra como la pelotita de las canciones de Fleischer (cae en cada una justo al
@@ -333,7 +341,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.32-letra-tal-cual`, `dibujo-v0.33-musica-de-la-carta`,
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
-`dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`.
+`dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

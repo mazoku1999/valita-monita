@@ -67,10 +67,18 @@ export function EfectosPost() {
       progreso < irisApertura.desde
         ? 1 - suavizar(irisCierre.desde, irisCierre.hasta, progreso)
         : suavizar(irisApertura.desde, irisApertura.hasta, progreso)
-    // El escenario de la canción, encima del dibujo (ver `features/cancion`).
-    pasoDibujo.escenario = ESCENARIO.textura
-    pasoDibujo.escenarioOpacidad = ESCENARIO.opacidad
-    pasoDibujo.escenarioCubre = ESCENARIO.cubre
+    // El escenario de la canción, entre el dibujo y la película (ver `features/cancion`).
+    const escenario = pasoDibujo.escenario
+    escenario.activo = ESCENARIO.activo
+    escenario.cubre = ESCENARIO.cubre
+    escenario.encima = ESCENARIO.encima
+    escenario.escena = ESCENARIO.escena
+    escenario.centro.set(ESCENARIO.centro.x, ESCENARIO.centro.y)
+    escenario.mitad.set(ESCENARIO.mitad.x, ESCENARIO.mitad.y)
+    escenario.zoom = ESCENARIO.zoom
+    escenario.opacidadEscena = ESCENARIO.opacidadEscena
+    escenario.viaje = ESCENARIO.viaje
+    escenario.revelado = ESCENARIO.revelado
     // Dentro de una nube (la del corazón, al entrar en la Tierra y al salir sobre el valle).
     pasoDibujo.niebla = Math.max(NIEBLA.globo, NIEBLA.valle)
     pasoDibujo.nieblaSentido = NIEBLA.globo > NIEBLA.valle ? -1 : 1

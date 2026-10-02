@@ -3,16 +3,27 @@ import type { LineaEscenario } from '../escenario/letrero'
 
 /**
  * El escenario de la canción (ver `escenario/Escenario.ts`) en el dibujo animado: lo pinta
- * `EscenarioCancion` y lo compone `PasoDibujo` encima del dibujo, antes de la película.
+ * `EscenarioCancion` y lo compone `PasoDibujo` entre el dibujo y la película (ver `VIAJE_FRAG`).
  */
-export const ESCENARIO: {
-  /** El lienzo del escenario como textura (sRGB tal cual, con su transparencia). */
-  textura: THREE.Texture | null
-  /** Si hay algo que componer (0 o 1). */
-  opacidad: number
-  /** Si tapa la pantalla entera (el resto del dibujo no hace falta calcularlo). */
-  cubre: boolean
-} = { textura: null, opacidad: 0, cubre: false }
+export const ESCENARIO = {
+  /** La letra y el final (nítidos, con su transparencia) y la escena pintada (sRGB tal cual). */
+  encima: null as THREE.Texture | null,
+  escena: null as THREE.Texture | null,
+  /** Si hay algo que componer y si tapa la pantalla entera (el resto del dibujo no hace falta). */
+  activo: false,
+  cubre: false,
+  /** El fondo del túnel en la pantalla (uv, y hacia arriba). */
+  centro: { x: 0.5, y: 0.5 },
+  /** Medio ancho y medio alto del recuadro de la escena, en altos de pantalla. */
+  mitad: { x: 0.5, y: 0.5 },
+  /** El acercamiento de la escena (1 en su sitio; más, pasando de largo; menos, llegando) y su opacidad. */
+  zoom: 1,
+  opacidadEscena: 0,
+  /** Cuánto se ve el viaje a los costados (0–1). */
+  viaje: 0,
+  /** Por cuánto se descubre lo de encima, en círculo (0–1; 1, entero). */
+  revelado: 1,
+}
 
 /** La letra con la hora de cada palabra, en cuanto se lee (ver `CancionDelAgujero`). */
 let letra: readonly LineaEscenario[] | null = null

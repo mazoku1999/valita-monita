@@ -82,9 +82,6 @@ export interface Escena {
   cielo?(c: ContextoEscena): void
   /** Lo que se mueve (después de las capas). */
   animar(c: ContextoEscena): void
-  /** Desde dónde se abre el iris al entrar y dónde se cierra al salir (por defecto, el centro). */
-  focoEntrada?(c: ContextoEscena): Punto
-  focoSalida?(c: ContextoEscena): Punto
 }
 
 // --- El tiempo de cada línea --------------------------------------------------------------------
@@ -118,8 +115,6 @@ const LOMAS_NOCHE = { lejos: 0.5, medio: 0.6, cerca: 0.8 } as const
 const CASA_NOCHE: ColoresCasa = { pared: '#5b6ba3', tejado: '#6b3b52', ventana: '#ffd25e', puerta: '#33284a' }
 
 export const NOCHE: Escena = {
-  focoEntrada: posLuna,
-  focoSalida: posLuna,
   capas: [
     {
       profundidad: 0,
@@ -433,9 +428,6 @@ function escenaGirasoles(paleta: PaletaGirasoles, lineas: readonly [number, numb
     ctx.restore()
   }
   return {
-    focoEntrada: posSol,
-    // El primero se despide en el sol que se pone; el último, en su estrella.
-    focoSalida: (c) => (final ? posEstrella(c) : posSol(c)),
     capas: [
       {
         profundidad: 0.3,
@@ -693,13 +685,6 @@ const firmaDe = (c: ContextoEscena): Punto[] => {
 }
 
 export const LLUVIA: Escena = {
-  // El iris se abre donde llega la tormenta y se cierra en la estrella de la firma.
-  focoEntrada: (c) => [c.W * 0.5, c.H * 0.18],
-  focoSalida: (c) => {
-    const firma = firmaDe(c)
-    const [x, y] = firma[firma.length - 1]
-    return [x + c.u * 3, y - c.u * 3]
-  },
   capas: [
     {
       profundidad: 0.3,

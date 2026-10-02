@@ -12,10 +12,10 @@ import {
   DESENFOQUE_FRAG,
   DESTELLO_FRAG,
   DESTELLO_VERT,
-  ESCENARIO_FRAG,
   PANTALLA_VERT,
   PELICULA_FRAG,
   REDUCIR_FRAG,
+  VIAJE_FRAG,
 } from '../shaders/dibujo'
 import { numeroDeDibujo } from '../store/ritmoDibujo'
 import { crearGeometriaDestellos, generarDestellos } from './destellos'
@@ -71,9 +71,10 @@ export interface AjustesDibujo {
  *    colores planos de época, el agujero de caricatura y la tinta; papel.
  * 4. Estrellas y destellos de caricatura; película antigua a 24 fotogramas por segundo.
  *
- * Mientras suena la canción del agujero, encima del dibujo va su escenario (un lienzo ya pintado,
- * ver `features/cancion/escenario/Escenario.ts`) y la película se le aplica igual; mientras tapa la
- * pantalla entera, el resto del dibujo no se calcula.
+ * Mientras suena la canción del agujero, entre el dibujo y la película va su escenario (ver
+ * `features/cancion/escenario/Escenario.ts` y `VIAJE_FRAG`): la escena pintada en el fondo del
+ * túnel, el viaje por él a los costados y la letra; la película se le aplica igual. Mientras el
+ * final tapa la pantalla entera, el resto del dibujo no se calcula.
  */
 export class PasoDibujo extends Pass {
   /** Cámara de la escena: ancla el cielo a la esfera celeste y sitúa el agujero. */
@@ -95,10 +96,23 @@ export class PasoDibujo extends Pass {
   nieblaAvance = 0
   /** 1 al salir de la nube (la niebla se abre desde el centro), −1 al entrar (se cierra en él). */
   nieblaSentido = 1
-  /** El escenario de la canción (sRGB) y cuánto se ve; si tapa la pantalla entera. */
-  escenario: THREE.Texture | null = null
-  escenarioOpacidad = 0
-  escenarioCubre = false
+  /** El escenario de la canción (ver `features/cancion/store/escenario.ts`), que copia `EfectosPost`. */
+  readonly escenario = {
+    activo: false,
+    /** Si tapa la pantalla entera. */
+    cubre: false,
+    /** La letra y el final (nítidos) y la escena pintada (sRGB tal cual). */
+    encima: null as THREE.Texture | null,
+    escena: null as THREE.Texture | null,
+    /** Fondo del túnel (uv), medio recuadro de la escena (altos de pantalla), su acercamiento y opacidad. */
+    centro: new THREE.Vector2(0.5, 0.5),
+    mitad: new THREE.Vector2(0.5, 0.5),
+    zoom: 1,
+    opacidadEscena: 0,
+    /** Cuánto se ve el viaje a los costados (0–1) y el círculo del final (0–1; 1, entero). */
+    viaje: 0,
+    revelado: 1,
+  }
 
   readonly ajustes: AjustesDibujo = { activo: true, soloTinta: false, grosor: TINTA.grosor }
 
@@ -117,6 +131,8 @@ export class PasoDibujo extends Pass {
   private readonly contornos = objetivo(2, 2)
   /** El dibujo compuesto (sRGB), antes de pasar por la película. */
   private readonly dibujo = objetivo(2, 2)
+  /** El dibujo con el escenario de la canción (sRGB), cuando lo hay. */
+  private readonly mezcla = objetivo(2, 2)
 
   private readonly uCamara = {
     uProyInversa: { value: new THREE.Matrix4() },
@@ -132,7 +148,7 @@ export class PasoDibujo extends Pass {
   private readonly matComponer: THREE.ShaderMaterial
   private readonly matPelicula: THREE.ShaderMaterial
   private readonly matCopia: THREE.ShaderMaterial
-  private readonly matEscenario: THREE.ShaderMaterial
+  private readonly matViaje: THREE.ShaderMaterial
   private readonly geometriaDestellos = crearGeometriaDestellos(generarDestellos())
   private readonly matDestellos: THREE.ShaderMaterial
   private readonly escenaDestellos = new THREE.Scene()
@@ -224,8 +240,20 @@ export class PasoDibujo extends Pass {
       uIris: { value: 1 },
     })
     this.matCopia = material(COPIA_FRAG, { uEntrada: { value: null }, uAPantalla: { value: 1 } })
-    this.matEscenario = material(ESCENARIO_FRAG, { uEscenario: { value: null }, uOpacidad: { value: 1 } })
-    this.matEscenario.transparent = true
+    this.matViaje = material(VIAJE_FRAG, {
+      uDibujo: { value: this.dibujo.texture },
+      uCielo: { value: this.cielo.texture },
+      uEscena: { value: null },
+      uEncima: { value: null },
+      uCentro: { value: new THREE.Vector2(0.5, 0.5) },
+      uAspecto: { value: 1 },
+      uMitad: { value: new THREE.Vector2(0.5, 0.5) },
+      uZoom: { value: 1 },
+      uOpacidadEscena: { value: 0 },
+      uViaje: { value: 0 },
+      uRevelado: { value: 1 },
+      uTiempo: { value: 0 },
+    })
     this.matDestellos = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       vertexShader: DESTELLO_VERT,
@@ -279,6 +307,8 @@ export class PasoDibujo extends Pass {
     for (const rt of [this.media, this.mediaIntermedia, this.colorSuave, this.cielo]) rt.setSize(anchoM, altoM)
     this.contornos.setSize(ancho, alto)
     this.dibujo.setSize(ancho, alto)
+    this.mezcla.setSize(ancho, alto)
+    this.matViaje.uniforms.uAspecto.value = ancho / alto
 
     ;(this.matCielo.uniforms.uTexelEntrada.value as THREE.Vector2).set(0.5 / ancho, 0.5 / alto)
     this.matCielo.uniforms.uAspecto.value = ancho / alto
@@ -446,15 +476,26 @@ export class PasoDibujo extends Pass {
       this.situarSol(camara)
       if (camara instanceof THREE.PerspectiveCamera) (this.matContorno.uniforms.uCercaLejos.value as THREE.Vector2).set(camara.near, camara.far)
     }
-    const escenario = this.escenario && this.escenarioOpacidad > 0 ? this.escenario : null
-    if (!escenario || !this.escenarioCubre) this.componer(renderer, inputBuffer, camara)
-    if (escenario) {
-      this.matEscenario.uniforms.uEscenario.value = escenario
-      this.matEscenario.uniforms.uOpacidad.value = Math.min(1, this.escenarioOpacidad)
-      this.dibujar(renderer, this.matEscenario, this.dibujo)
+    const escenario = this.escenario
+    if (!escenario.activo || !escenario.cubre) this.componer(renderer, inputBuffer, camara)
+    let imagen = this.dibujo.texture
+    if (escenario.activo) {
+      const uv = this.matViaje.uniforms
+      uv.uEscena.value = escenario.escena
+      uv.uEncima.value = escenario.encima
+      ;(uv.uCentro.value as THREE.Vector2).copy(escenario.centro)
+      ;(uv.uMitad.value as THREE.Vector2).copy(escenario.mitad)
+      uv.uZoom.value = escenario.zoom
+      uv.uOpacidadEscena.value = escenario.escena ? escenario.opacidadEscena : 0
+      uv.uViaje.value = escenario.viaje
+      uv.uRevelado.value = escenario.revelado
+      uv.uTiempo.value = this.tiempo
+      this.dibujar(renderer, this.matViaje, this.mezcla)
+      imagen = this.mezcla.texture
     }
 
     // 6. Película antigua.
+    this.matPelicula.uniforms.uImagen.value = imagen
     this.matPelicula.uniforms.uFotograma.value = Math.floor(this.tiempo * PELICULA.fotogramasPorSegundo) % 100000
     this.matPelicula.uniforms.uAPantalla.value = aPantalla
     this.matPelicula.uniforms.uIris.value = this.iris
@@ -478,6 +519,7 @@ export class PasoDibujo extends Pass {
       this.cielo,
       this.contornos,
       this.dibujo,
+      this.mezcla,
     ])
       rt.dispose()
     for (const m of [
@@ -488,7 +530,7 @@ export class PasoDibujo extends Pass {
       this.matComponer,
       this.matPelicula,
       this.matCopia,
-      this.matEscenario,
+      this.matViaje,
       this.matDestellos,
     ])
       m.dispose()
