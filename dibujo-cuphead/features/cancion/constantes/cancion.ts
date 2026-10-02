@@ -6,10 +6,12 @@
  * compás, con la letra en pantalla; al final se suelta el scroll ya en el sistema solar, mientras
  * suena lo que queda de la canción. El sonido se activa al inicio (ver `BotonSonido`).
  *
- * El audio es el archivo del usuario en `public/cancion/`; la letra, `cancion.vtt`: su texto, tal
- * cual el .srt del usuario, con la hora de cada palabra sacada del propio audio (WebVTT de karaoke,
- * ver `utils/vtt.ts`; también vale un .srt, sólo por líneas). Se lee al vuelo, no está escrita en el
- * código; para cambiar de canción basta con cambiar los archivos.
+ * El audio es el archivo del usuario en `public/cancion/`; la letra, `cancion.vtt`: en español (el
+ * texto del .srt en español que dio el usuario, tal cual), con la hora de cada palabra: cada una se
+ * enciende cuando se canta la palabra inglesa que dice lo mismo (WebVTT de karaoke, ver
+ * `utils/vtt.ts`; también vale un .srt, sólo por líneas). `cancion.en.vtt` es la letra original en
+ * inglés, sincronizada igual. Se lee al vuelo, no está escrita en el código; para cambiar de canción
+ * o de letra basta con cambiar los archivos.
  */
 export const CANCION = {
   audio: '/cancion/cancion.mp3',

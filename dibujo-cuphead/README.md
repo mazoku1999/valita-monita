@@ -107,27 +107,32 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   para invitar); al tocarlo, el sonido se une donde va. Si ni en silencio la deja sonar el
   navegador, la lleva un reloj propio hasta que se pueda. Se empieza a cargar a 150 vh y pasa por
   Web Audio para los fundidos.
-- **La letra, sincronizada palabra por palabra** (`public/cancion/cancion.vtt`, `utils/vtt.ts`,
-  `utils/maqueta.ts`, `components/LetraEnPantalla.tsx`): el texto es el del .srt del usuario (la
-  canción en inglés), tal cual: como está escrito, con su puntuación y sus mayúsculas, sin alargar
-  letras. La hora de cada palabra se sacó del propio audio: la voz se aísla del canal central (las
-  guitarras y el piano van a los lados), se miden sus comienzos de nota (subida de 2–4 kHz, flujo
-  espectral, sibilancia para las palabras con s, ch o f) sobre la rejilla del pulso de la canción
-  (122 BPM) y cada palabra se colocó en su nota y se comprobó sobre el espectrograma, línea por
-  línea (los dos estribillos se confirman entre sí: van 176 pulsos aparte). Se guarda como WebVTT de
-  karaoke, el formato estándar: una marca de tiempo antes de cada palabra y, si la voz respira antes
-  de la siguiente, una marca que la cierra. También queda `cancion.srt` con los mismos textos y los
-  tiempos exactos de cada línea (para usarlo en otra parte; la app lee el .vtt, y si se le diera un
-  .srt, encendería las palabras por sílabas).
-- **En pantalla**: la línea que se canta va grande en el centro, partida en filas cortas con voces
-  distintas (palo seco gruesa en cursiva, Playfair, Oswald condensada, Instrument Serif en cursiva,
-  palo seco espaciada); la anterior, pequeña y apagada arriba; la siguiente se asoma abajo 2.5 s
-  antes. Cada palabra se enciende de izquierda a derecha exactamente mientras se canta, con un
-  brillo que luego baja; la línea llega al centro 0.35 s antes de su primera palabra (sin cortar
-  nunca la anterior). El estribillo (las líneas que se repiten) va en rosa; las estrofas, en oro y
-  en celeste. Las líneas largas se achican para no tapar a las vecinas. Un velo oscuro detrás para
-  que se lea sobre las bandas claras del remolino. Sigue el reloj del audio (`desfaseLetra`
-  corregiría la sincronía si hiciera falta).
+- **La letra, en español y sincronizada palabra por palabra** (`public/cancion/cancion.vtt`,
+  `utils/vtt.ts`, `utils/maqueta.ts`, `components/LetraEnPantalla.tsx`): el texto es la traducción
+  al español que dio el usuario, tal cual (habla de hombre a mujer: "tuyo" para él; "mía" e
+  "indicada" para ella). La hora de cada palabra inglesa se sacó del propio audio: la voz se aísla
+  del canal central (las guitarras y el piano van a los lados), se miden sus comienzos de nota
+  (subida de 2–4 kHz, flujo espectral, sibilancia) sobre la rejilla del pulso (122 BPM) y cada
+  palabra se colocó en su nota y se comprobó sobre el espectrograma, línea por línea (los dos
+  estribillos, a 176 pulsos, se confirman entre sí). Cada palabra en español se enciende cuando se
+  canta la palabra inglesa que dice lo mismo (si dos caen en una, se la reparten; si la voz
+  respira, la palabra se cierra). Se guarda como WebVTT de karaoke, el formato estándar: una marca
+  de tiempo antes de cada palabra y, en las respiraciones, una que la cierra. `cancion.srt` tiene
+  el mismo texto en español con los tiempos de cada línea; `cancion.en.vtt`, la letra original en
+  inglés sincronizada igual (para usarla, basta con apuntar `CANCION.letra` a ella).
+- **En pantalla, animada palabra por palabra**: la línea que se canta va grande en el centro,
+  partida en filas cortas con voces distintas (palo seco gruesa en cursiva, Playfair, Oswald
+  condensada, Instrument Serif en cursiva, palo seco espaciada), y la anterior, pequeña y apagada
+  arriba. Antes de cantarse, cada palabra es apenas una sombra; al cantarse aparece (sube, se
+  enfoca y da un pequeño salto con un destello), se pinta del color de la sección de izquierda a
+  derecha mientras dura y al terminar se asienta en blanco cálido; las palabras clave se quedan con
+  un tinte del color y sueltan dos chispas. Las líneas llegan desde abajo, desenfocadas, 0.35 s
+  antes de su primera palabra (sin cortar la anterior; si ésta se canta hasta el mismo instante,
+  le cede el sitio 0.22 s antes). El estribillo va en rosa; las estrofas, en oro y en celeste.
+  Detrás, un velo oscuro para que se lea sobre las bandas claras del remolino, un halo suave del
+  color de la sección y chispas finas que suben despacio; nada late al compás. Todo lo mueve el
+  reloj del audio, y los filtros sólo se aplican a las palabras que se están animando (a 60 fps
+  también en un móvil).
 
 ## La llegada a Cochabamba
 
@@ -290,7 +295,8 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.28-cielo-como-el-cuadro`, `dibujo-v0.29-cancion-del-agujero`,
 `dibujo-v0.30-sonido-al-inicio`, `dibujo-v0.31-letra-a-tiempo`,
 `dibujo-v0.32-letra-tal-cual`, `dibujo-v0.33-musica-de-la-carta`,
-`dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`.
+`dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
+`dibujo-v0.36-letra-en-espanol`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

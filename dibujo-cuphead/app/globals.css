@@ -573,10 +573,17 @@
   }
 }
 
-/* La canción del agujero negro: la letra como en los videos de letras (ver
-   features/cancion/components/LetraEnPantalla.tsx). La línea que se canta, grande en el centro, en
-   filas de voces distintas; la anterior, pequeña arriba; la siguiente, pequeña abajo. */
+/* La canción del agujero negro: la letra animada palabra por palabra, como en los videos de letras
+   (ver features/cancion/components/LetraEnPantalla.tsx). La línea que se canta, grande en el
+   centro, en filas de voces distintas; la anterior, pequeña arriba. Detrás, un velo, un halo del
+   color de la sección y chispas finas que suben despacio. */
+@property --aura {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #f4c56c;
+}
 .letras {
+  --aura: #f4c56c;
   position: fixed;
   inset: 0;
   z-index: 20;
@@ -584,27 +591,77 @@
   pointer-events: none;
   --base: min(10.4vw, 7.6vh);
   opacity: 0;
-  transition: opacity 1.4s ease;
+  transition:
+    opacity 1.4s ease,
+    --aura 1.6s ease;
 }
 .letras[data-visible] {
   opacity: 1;
+}
+.letras[data-paleta='celeste'] {
+  --aura: #8fd0ff;
+}
+.letras[data-paleta='rosa'] {
+  --aura: #ff9ccc;
 }
 /* Un velo oscuro detrás, para que la letra se lea sobre las bandas claras del remolino. */
 .letras-velo {
   position: absolute;
   inset: 0;
   background: radial-gradient(
-    ellipse 66% 52% at 50% 47%,
-    rgb(8 5 20 / 0.68),
-    rgb(8 5 20 / 0.34) 56%,
-    rgb(8 5 20 / 0) 84%
+    ellipse 70% 54% at 50% 47%,
+    rgb(8 5 20 / 0.7),
+    rgb(8 5 20 / 0.36) 58%,
+    rgb(8 5 20 / 0) 86%
   );
 }
+/* El halo del color de la sección, suave, detrás de la línea. */
+.letras-aura {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 40% 22% at 50% 47%, color-mix(in srgb, var(--aura) 26%, transparent), transparent 70%),
+    radial-gradient(ellipse 75% 45% at 50% 50%, color-mix(in srgb, var(--aura) 9%, transparent), transparent 75%);
+}
+/* Chispas finas que suben despacio (sin latir). */
+.letras-chispas i {
+  position: absolute;
+  bottom: -3%;
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: #fff7df;
+  box-shadow:
+    0 0 4px 1px color-mix(in srgb, var(--aura) 75%, white),
+    0 0 10px 2px color-mix(in srgb, var(--aura) 35%, transparent);
+  opacity: 0;
+  animation: chispa-sube var(--d) linear var(--r) infinite;
+}
+@keyframes chispa-sube {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  12% {
+    opacity: var(--o);
+  }
+  55% {
+    transform: translate3d(var(--dx), -58vh, 0);
+  }
+  80% {
+    opacity: var(--o);
+  }
+  100% {
+    transform: translate3d(calc(var(--dx) * -0.5), -106vh, 0);
+    opacity: 0;
+  }
+}
 .letra-linea {
-  --acento: #f4c56c;
-  --brillo-acento: rgb(255 186 84 / 0.9);
+  --acento: #f6c96e;
+  --brillo-acento: rgb(255 184 78 / 0.95);
   --s: 1;
   --o: 1;
+  --bl: 0px;
   position: absolute;
   left: 50%;
   top: 47%;
@@ -612,50 +669,46 @@
   text-align: center;
   transform: translate(-50%, -50%) scale(var(--s));
   opacity: var(--o);
-  filter: drop-shadow(0 3px 14px rgb(0 0 0 / 0.55));
+  filter: blur(var(--bl));
   transition:
-    top 0.85s cubic-bezier(0.22, 0.8, 0.2, 1),
-    transform 0.85s cubic-bezier(0.22, 0.8, 0.2, 1),
-    opacity 0.7s ease;
+    top 0.9s cubic-bezier(0.22, 0.8, 0.2, 1),
+    transform 0.9s cubic-bezier(0.22, 0.8, 0.2, 1),
+    opacity 0.7s ease,
+    filter 0.7s ease;
 }
 .letra-linea[data-paleta='celeste'] {
-  --acento: #a9d9ff;
-  --brillo-acento: rgb(120 196 255 / 0.9);
+  --acento: #a4dbff;
+  --brillo-acento: rgb(110 192 255 / 0.95);
 }
 .letra-linea[data-paleta='rosa'] {
-  --acento: #f8acd2;
-  --brillo-acento: rgb(255 140 200 / 0.9);
+  --acento: #ffaad6;
+  --brillo-acento: rgb(255 128 196 / 0.95);
 }
+/* Terminada sin otra detrás: se desvanece donde está. */
 .letra-linea[data-rol='apagada'] {
   top: 45%;
-  --s: 0.96;
+  --s: 0.97;
   --o: 0;
+  --bl: 4px;
 }
 .letra-linea[data-rol='anterior'] {
   top: 15%;
-  --s: 0.36;
-  --o: 0.34;
+  --s: 0.4;
+  --o: 0.36;
+  --bl: 0.4px;
 }
 .letra-linea[data-rol='ida'] {
-  top: 3%;
-  --s: 0.28;
+  top: 2%;
+  --s: 0.32;
   --o: 0;
+  --bl: 3px;
 }
+/* La que viene espera invisible un poco más abajo: al llegar sube, se enfoca y aparece. */
 .letra-linea[data-rol='siguiente'] {
-  top: 85%;
-  --s: 0.34;
-  --o: 0.3;
-  animation: letra-asoma 0.9s ease backwards;
-}
-.letra-linea[data-rol='oculta'] {
-  top: 93%;
-  --s: 0.3;
+  top: 60%;
+  --s: 0.86;
   --o: 0;
-}
-@keyframes letra-asoma {
-  from {
-    opacity: 0;
-  }
+  --bl: 8px;
 }
 .letra-fila {
   --espaciado: 0em;
@@ -691,13 +744,18 @@
   font-family: var(--font-letra-sans), system-ui, sans-serif;
   font-weight: 600;
 }
-/* Cada palabra: la luz la recorre de izquierda a derecha mientras se canta (--x), con un brillo
-   que luego baja (--e). */
+/* Cada palabra (las variables las mueve el reloj del audio): antes de cantarse, una sombra; al
+   cantarse aparece (--a), da un salto con destello (--g), se pinta del color de la sección de
+   izquierda a derecha mientras dura (--x) y al terminar se asienta en blanco cálido (--f). */
 .letra-palabra {
+  --a: 0;
   --x: 0;
-  --e: 0;
-  --luz: #fff;
-  --brillo: rgb(255 255 255 / 0.85);
+  --g: 0;
+  --f: 0;
+  --c: 0;
+  --cs: 0;
+  --luz: #fff6ea;
+  position: relative;
   display: inline-block;
   padding: 0.1em 0.14em;
   margin: -0.1em -0.02em;
@@ -705,17 +763,61 @@
   color: transparent;
   background-image: linear-gradient(
     90deg,
-    var(--luz) calc(var(--x) * 106% - 6%),
-    rgb(255 255 255 / 0.34) calc(var(--x) * 106%)
+    color-mix(in srgb, var(--acento) calc((1 - var(--f)) * 100%), var(--luz)) calc(var(--x) * 108% - 8%),
+    var(--luz) calc(var(--x) * 108%)
   );
   -webkit-background-clip: text;
   background-clip: text;
-  filter: drop-shadow(0 0 calc(var(--e) * 0.3em) color-mix(in srgb, var(--brillo) calc(var(--e) * 100%), transparent));
-  transform: translateY(calc((1 - min(var(--e) * 3, 1)) * 0.05em));
+  opacity: calc(0.12 + 0.88 * var(--a));
+  text-shadow: none;
 }
+/* Sólo mientras está viva (aparece, se canta o se asienta) lleva movimiento y filtros. */
+.letra-palabra[data-fase='viva'] {
+  transform: translateY(calc((1 - var(--a)) * 0.24em)) scale(calc(1 + 0.13 * var(--g)));
+  filter: blur(calc((1 - var(--a)) * 2.4px))
+    drop-shadow(0 0 calc(0.05em + var(--g) * 0.42em) color-mix(in srgb, var(--brillo-acento) calc(var(--g) * 90%), transparent));
+}
+.letra-palabra[data-fase='sombra'] {
+  transform: translateY(0.24em);
+}
+/* Las palabras clave se quedan con un tinte del color y sueltan dos chispas al cantarse. */
 .letra-palabra[data-acento] {
-  --luz: var(--acento);
-  --brillo: var(--brillo-acento);
+  --luz: color-mix(in srgb, var(--acento) 46%, #fff6ea);
+}
+.letra-palabra[data-acento]::before,
+.letra-palabra[data-acento]::after {
+  content: '✦';
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  font: 400 0.34em/1 system-ui, sans-serif;
+  color: var(--acento);
+  -webkit-text-fill-color: var(--acento);
+  text-shadow: 0 0 0.6em var(--brillo-acento);
+  opacity: var(--cs);
+  transform: translate(calc(-50% + var(--c) * 2.3em), calc(-50% - var(--c) * 1.7em)) scale(calc(0.4 + var(--c) * 0.9))
+    rotate(calc(var(--c) * 120deg));
+  pointer-events: none;
+}
+.letra-palabra[data-acento]::after {
+  font-size: 0.24em;
+  transform: translate(calc(-50% - var(--c) * 3em), calc(-50% - var(--c) * 2.6em)) scale(calc(0.4 + var(--c) * 0.8))
+    rotate(calc(var(--c) * -90deg));
+}
+@media (prefers-reduced-motion: reduce) {
+  .letra-linea {
+    transition-duration: 0.2s;
+  }
+  .letra-palabra,
+  .letra-palabra[data-fase] {
+    transform: none;
+    filter: none;
+  }
+  .letra-palabra[data-acento]::before,
+  .letra-palabra[data-acento]::after,
+  .letras-chispas {
+    display: none;
+  }
 }
 /* Saltar la canción (arriba a la izquierda, o Escape): aparece y luego se queda discreto. */
 .boton-saltar-cancion {
@@ -790,10 +892,5 @@
 @keyframes sonido-aparece {
   from {
     opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .letra-linea {
-    transition-duration: 0.2s;
   }
 }
