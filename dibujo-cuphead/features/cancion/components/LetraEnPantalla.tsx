@@ -2,18 +2,23 @@
 
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { CANCION } from '../constantes/cancion'
+import { ENTRADAS_LINEA, ESCENAS_LETRA } from '../constantes/escenas'
 import { tiempoCancion } from '../utils/audio'
 import type { LineaMaquetada, PalabraMaquetada } from '../utils/maqueta'
+import { type EscenaVisible, EscenasLetra } from './EscenasLetra'
 
 /**
  * La letra en pantalla, animada palabra por palabra como en los videos de letras: la línea que se
  * canta, grande en el centro, en filas cortas de voces distintas, y la anterior, pequeña y apagada
- * arriba. Antes de cantarse, cada palabra es apenas una sombra; al cantarse aparece (sube, se
- * enfoca y da un pequeño salto con un destello), se pinta del color de la sección de izquierda a
- * derecha mientras dura y, al terminar, se asienta en blanco cálido (las palabras clave, con un
- * tinte del color). De las palabras clave saltan dos chispas. Detrás, un velo oscuro para que se
- * lea, un halo suave del color de la sección (oro en la primera estrofa, celeste en la segunda,
- * rosa en el estribillo) y chispas finas que suben despacio. Nada late al compás.
+ * arriba. Cada línea entra a su manera (sube, se acerca, cae o llega de lado; ver ENTRADAS_LINEA).
+ * Antes de cantarse, cada palabra es apenas una sombra; al cantarse aparece (sube, se enfoca y da
+ * un pequeño salto con un destello), se pinta del color de la sección de izquierda a derecha
+ * mientras dura y, al terminar, se asienta en blanco cálido. En las palabras clave las letras caen
+ * una a una, se quedan con un tinte del color y sueltan dos chispas. Detrás, un velo oscuro para
+ * que se lea, un halo suave del color de la sección (oro en la primera estrofa, celeste en la
+ * segunda, rosa en el estribillo), chispas finas que suben despacio y, debajo del velo (para que
+ * detrás de la letra quede oscuro y alrededor se vea entera), la escena de cada línea (ver
+ * `EscenasLetra`): un motivo animado según lo que dice. Nada late al compás.
  *
  * Cada palabra se enciende exactamente mientras se canta (los tiempos de la letra, palabra por
  * palabra). La línea llega al centro un instante antes de su primera palabra (sin cortar la
@@ -68,6 +73,8 @@ const CHISPAS = Array.from({ length: 18 }, (_, i) => {
 })
 
 function Palabra({ palabra }: { palabra: PalabraMaquetada }) {
+  // Las palabras clave, letra a letra (caen una a una y se pintan por letras).
+  const letras = palabra.acento ? Array.from(palabra.texto) : null
   return (
     <span
       className="letra-palabra"
@@ -75,8 +82,15 @@ function Palabra({ palabra }: { palabra: PalabraMaquetada }) {
       data-fase="sombra"
       data-inicio={palabra.inicio}
       data-fin={palabra.fin}
+      style={letras ? ({ '--n': letras.length } as CSSProperties) : undefined}
     >
-      {palabra.texto}
+      {letras
+        ? letras.map((letra, i) => (
+            <span key={i} className="letra" style={{ '--i': i } as CSSProperties}>
+              {letra}
+            </span>
+          ))
+        : palabra.texto}
     </span>
   )
 }
@@ -86,6 +100,8 @@ function Linea({ linea, rol }: { linea: LineaMaquetada; rol: Rol }) {
     <div
       className="letra-linea"
       data-indice={linea.indice}
+      data-entrada={ENTRADAS_LINEA[linea.indice % ENTRADAS_LINEA.length]}
+      data-lado={Math.floor(linea.indice / ENTRADAS_LINEA.length) % 2 === 0 ? 'der' : 'izq'}
       data-rol={rol}
       data-paleta={paleta(linea)}
       data-cierre={linea.cierre ? '' : undefined}
@@ -108,8 +124,9 @@ const escrito = new WeakMap<HTMLElement, string>()
 /**
  * Anima las palabras (directo en el DOM, cada fotograma, con el reloj del audio):
  * --a, cuánto ha aparecido; --x, cuánto se ha cantado (la pintura de izquierda a derecha); --g, el
- * salto y el destello del comienzo; --f, cuánto se ha asentado al terminar; --c y --cs, el vuelo de
- * las chispas (y su brillo). data-fase dice si es una sombra (aún no se canta), si está viva
+ * salto y el destello del comienzo; --f, cuánto se ha asentado al terminar; --k, la caída de las
+ * letras de las palabras clave; --c y --cs, el vuelo de las chispas (y su brillo). data-fase dice
+ * si es una sombra (aún no se canta), si está viva
  * (apareciendo, cantándose o asentándose: sólo entonces lleva filtros) o si ya está hecha. Sólo se
  * escribe lo que cambia: las sombras y las hechas no se tocan.
  */
@@ -125,7 +142,8 @@ function animar(raiz: HTMLElement, t: number): void {
     const f = suave((t - fin) / 0.45)
     const c = limitar(desde / 0.8)
     const cs = desde < 0 ? 0 : Math.sin(Math.PI * c)
-    const valores = `${fase}|${a.toFixed(3)}|${x.toFixed(3)}|${g.toFixed(3)}|${f.toFixed(3)}|${c.toFixed(3)}|${cs.toFixed(3)}`
+    const k = suave((desde + 0.05) / 0.55)
+    const valores = `${fase}|${a.toFixed(3)}|${x.toFixed(3)}|${g.toFixed(3)}|${f.toFixed(3)}|${c.toFixed(3)}|${cs.toFixed(3)}|${k.toFixed(3)}`
     if (escrito.get(nodo) === valores) continue
     escrito.set(nodo, valores)
     if (nodo.dataset.fase !== fase) nodo.dataset.fase = fase
@@ -135,6 +153,7 @@ function animar(raiz: HTMLElement, t: number): void {
     nodo.style.setProperty('--f', f.toFixed(3))
     nodo.style.setProperty('--c', c.toFixed(3))
     nodo.style.setProperty('--cs', cs.toFixed(3))
+    nodo.style.setProperty('--k', k.toFixed(3))
   }
 }
 
@@ -186,6 +205,13 @@ export function LetraEnPantalla({ letra, activa }: { letra: readonly LineaMaquet
   }
   const hayLetra = activa && (mostrarActual || pronto)
   const color = letra[mostrarActual ? actual : Math.min(letra.length - 1, actual + 1)]
+  // Las escenas: la de la línea que se canta y, desvaneciéndose, la de la anterior.
+  const escenas: EscenaVisible[] = []
+  for (const { linea, rol } of visibles) {
+    const motivo = ESCENAS_LETRA[linea.indice] ?? 'cielo'
+    if (rol === 'actual') escenas.push({ indice: linea.indice, motivo, estado: 'actual' })
+    else if (rol === 'anterior' || rol === 'apagada') escenas.push({ indice: linea.indice, motivo, estado: 'sale' })
+  }
 
   return (
     <div
@@ -195,6 +221,7 @@ export function LetraEnPantalla({ letra, activa }: { letra: readonly LineaMaquet
       data-paleta={color ? paleta(color) : undefined}
       aria-live="off"
     >
+      {activa && <EscenasLetra escenas={escenas} />}
       <div className="letras-velo" />
       <div className="letras-aura" />
       <div className="letras-chispas" aria-hidden="true">

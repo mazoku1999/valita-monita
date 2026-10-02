@@ -125,12 +125,25 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   condensada, Instrument Serif en cursiva, palo seco espaciada), y la anterior, pequeña y apagada
   arriba. Antes de cantarse, cada palabra es apenas una sombra; al cantarse aparece (sube, se
   enfoca y da un pequeño salto con un destello), se pinta del color de la sección de izquierda a
-  derecha mientras dura y al terminar se asienta en blanco cálido; las palabras clave se quedan con
-  un tinte del color y sueltan dos chispas. Las líneas llegan desde abajo, desenfocadas, 0.35 s
+  derecha mientras dura y al terminar se asienta en blanco cálido. En las palabras clave las letras
+  caen una a una, ladeadas, y se pintan letra a letra; se quedan con un tinte del color y sueltan
+  dos chispas. Cada línea entra a su manera, por turnos: sube desde abajo, llega grande y se encoge
+  a su sitio, cae desde arriba o llega de lado (`ENTRADAS_LINEA`). Las líneas llegan 0.35 s
   antes de su primera palabra (sin cortar la anterior; si ésta se canta hasta el mismo instante,
   le cede el sitio 0.22 s antes). El estribillo va en rosa; las estrofas, en oro y en celeste.
   Detrás, un velo oscuro para que se lea sobre las bandas claras del remolino, un halo suave del
-  color de la sección y chispas finas que suben despacio; nada late al compás. Todo lo mueve el
+  color de la sección y chispas finas que suben despacio; nada late al compás.
+- **Una escena por línea** (`constantes/escenas.ts`, `components/EscenasLetra.tsx`): debajo del
+  velo (detrás de la letra queda oscuro; alrededor se ve entera), un motivo dibujado a tinta clara
+  con colores planos, como el resto del dibujo animado, según el tema de la línea: ondas de
+  sonido, una estrella que sube, un sendero que tantea con su farolito, un trazo decidido, un reloj
+  que se deshace en estrellas, una constelación al azar, dos luces que se buscan en espiral, un sol
+  de rayos, un planeta dando vueltas a un sol, una estrella que crece entre todas, dos cometas, dos
+  anillos entrelazados, un girasol que se abre pétalo a pétalo, una tormenta con rayos y lluvia,
+  nubes que se separan, el cielo que se abre, un brote, hojas que caen, fotos que flotan, una línea
+  que se dibuja sola y una firma sin letras. Los estribillos repiten los suyos. Son SVG con
+  animaciones de CSS (y algún recorrido SVG) que empiezan cuando la línea llega al centro; la
+  anterior se desvanece mientras entra la siguiente. Nada de caras ni de corazones. Todo lo mueve el
   reloj del audio, y los filtros sólo se aplican a las palabras que se están animando (a 60 fps
   también en un móvil).
 
@@ -296,7 +309,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.30-sonido-al-inicio`, `dibujo-v0.31-letra-a-tiempo`,
 `dibujo-v0.32-letra-tal-cual`, `dibujo-v0.33-musica-de-la-carta`,
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
-`dibujo-v0.36-letra-en-espanol`.
+`dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
