@@ -128,19 +128,18 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   lyrics"). Son dos lienzos 2D pintados a 24 dibujos por segundo (las escenas, "en dos", a 12): la
   escena, en su recuadro, y encima la letra y el final, con transparencia. El pase de dibujo los
   compone entre el dibujo y la película (`VIAJE_FRAG`), así que les caen el grano, el vaivén y la
-  viñeta como a todo lo demás. Mientras suena, la escena va grande, ancha y nítida en el fondo del
-  túnel (centrada donde va el eje del agujero de gusano, que se publica en `store/ejeGusano.ts`;
-  "más ancho, no tan cuadrado"), y su borde es como el de las ilustraciones de un libro de cuentos
-  ("no son uniformes, son más bonitos"): la acuarela se desvanece en un papel crema con una orilla
-  irregular (lóbulos, flecos, nubosa, con el pigmento acumulado junto a ella) y el papel, a su vez,
-  se pierde en el túnel con otra orilla irregular. Alrededor va el agujero de gusano, que cambia a lo
-  largo de la canción ("distintas cosas en lo que viajamos, no la misma cosa"): el remolino dibujado
-  de antes hasta media primera estrofa, el hiperespacio entre nebulosas y estelas el resto de la
-  estrofa, un vórtice luminoso violeta y cian en el estribillo, una aurora en el interludio, un túnel
-  de anillos de luz en la segunda estrofa y el vórtice del atardecer en el último estribillo, cada
-  uno fundiéndose en el siguiente en 2 s. Sin el círculo de la boca en medio (lo pidió el usuario):
-  todos convergen en un punto. Tras la canción, al seguir deslizando por el resto del túnel, el
-  hiperespacio, que se funde con el cielo del otro lado cuando el túnel 3D ya lo enseña entero.
+  viñeta como a todo lo demás. Mientras suena, la escena va casi a pantalla completa, ancha y nítida
+  en el fondo del túnel (centrada donde va el eje del agujero de gusano, que se publica en
+  `store/ejeGusano.ts`), con un borde de acuarela fino y apenas ondulado, como el de una ilustración
+  de libro. Alrededor, el agujero de gusano, tranquilo y con los colores apagados del dibujo, que
+  cambia a lo largo de la canción: el remolino dibujado de antes hasta media primera estrofa, un
+  cielo de noche con aguadas y estrellas finas el resto de la estrofa, nubes pintadas lilas en el
+  estribillo y el interludio, anillos pintados en la segunda estrofa y nubes de atardecer en el
+  último estribillo, cada uno fundiéndose en el siguiente en 2 s; todos convergen en un punto, sin
+  el círculo de la boca en medio. Tras la canción, al seguir deslizando por el resto del túnel, las
+  nubes de noche, que se funden con el cielo del otro lado cuando el túnel 3D ya lo enseña entero.
+  (Una versión anterior, con vórtices de neón, estelas, auroras y un halo grueso de papel crema, le
+  pareció "horrible, muy exagerado".)
   Mientras el final tapa la pantalla, la escena 3D y el resto del dibujo no se calculan.
   - **El pincel** (`pincel.ts`): contornos de tinta sepia que hierven 12 veces por segundo,
     rellenos planos con textura de acuarela sobre papel y el borde oscuro de la aguada; las formas
@@ -346,7 +345,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
 `dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`,
-`dibujo-v0.41-viajes-y-papel`.
+`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

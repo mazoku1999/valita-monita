@@ -58,24 +58,24 @@ const TIEMPOS = {
 } as const
 
 /**
- * Los aspectos del viaje (ver `VIAJE_FRAG`), uno tras otro (lo pidió el usuario: "distintas cosas en
- * lo que viajamos en el agujero negro, no la misma cosa"): el remolino dibujado de antes hasta la
- * mitad de la primera estrofa, el hiperespacio entre nebulosas el resto de la estrofa, un vórtice
- * violeta y cian en el estribillo, una aurora en el interludio, un túnel de anillos de luz en la
- * segunda estrofa y el vórtice del atardecer en el último estribillo. Después de la canción, el
- * hiperespacio (el resto del túnel hasta su salida).
+ * Los aspectos del viaje (ver `VIAJE_FRAG`), uno tras otro y sin exagerar (lo pidió el usuario:
+ * "distintas cosas en lo que viajamos en el agujero negro, no la misma cosa"; y luego: "se ve
+ * horrible, muy exagerado"): el remolino dibujado de antes hasta la mitad de la primera estrofa, un
+ * cielo de noche con estrellas finas el resto de la estrofa, nubes pintadas en el estribillo y el
+ * interludio, anillos pintados en la segunda estrofa y nubes de atardecer en el último estribillo.
+ * Después de la canción, las nubes de noche (el resto del túnel hasta su salida: a pantalla
+ * completa, el cielo de noche se veía demasiado oscuro y vacío).
  */
-const VIAJE_DESPUES = 1
+const VIAJE_DESPUES = 2
 
 /**
  * El recuadro de la escena, grande y ancho (el video manda; "más ancho, no tan cuadrado"): en una
- * pantalla ancha, casi todo el ancho y el alto (alrededor asoma el agujero de gusano, entre los
- * lóbulos de su borde de acuarela); en una estrecha, todo el ancho y algo más de alto que de ancho
- * (el agujero, arriba y abajo).
+ * pantalla ancha, casi toda ella (alrededor asoma el agujero de gusano); en una estrecha, todo el
+ * ancho y algo más de alto que de ancho (el agujero, arriba y abajo).
  */
 function recuadro(W: number, H: number): [number, number] {
-  if (W >= 1.15 * H) return [Math.min(W * 0.86, 1.56 * H), 0.92 * H]
-  return [1.06 * W, Math.min(1.2 * W, 0.58 * H)]
+  if (W >= 1.15 * H) return [Math.min(W * 0.92, 1.66 * H), 0.96 * H]
+  return [1.06 * W, Math.min(1.2 * W, 0.6 * H)]
 }
 
 /** El paneo de la cámara en cada escena: lo más cercano avanza `velocidad` u/s, hasta `margen` del recuadro. */
@@ -257,15 +257,13 @@ export class Escenario {
   private estiloDelViaje(lineas: readonly LineaEscenario[], t: number): number {
     const { secciones } = this.cortes(lineas)
     const cambios = [
-      // A media primera estrofa, al hiperespacio.
+      // A media primera estrofa, al cielo de noche.
       lineas[4]?.inicio,
-      // En el estribillo, al vórtice.
+      // En el estribillo, a las nubes.
       secciones[1]?.desde,
-      // En el interludio, a la aurora.
-      lineas[12] ? lineas[12].fin + 1 : undefined,
-      // En la segunda estrofa, a los anillos.
+      // En la segunda estrofa, a los anillos pintados.
       secciones[2]?.desde,
-      // En el último estribillo, al vórtice del atardecer.
+      // En el último estribillo, a las nubes del atardecer.
       secciones[3]?.desde,
     ].filter((cambio): cambio is number => cambio !== undefined)
     const tarda = TIEMPOS.cambioDeViaje
@@ -298,18 +296,18 @@ export class Escenario {
     const d = t - desde
     if (k === 0 && d < aperturaPrimera) {
       const x = d / aperturaPrimera
-      zoom = 0.3 + 0.7 * rebote(x)
+      zoom = 0.55 + 0.45 * rebote(x)
       opacidad = suave(x / 0.6)
     } else if (k > 0 && d < tunel / 2 + apertura) {
       const x = suave((d - tunel / 2) / apertura)
-      zoom = 0.3 + 0.7 * x
+      zoom = 0.6 + 0.4 * x
       opacidad = x
     }
     const hueco = k + 1 < secciones.length ? tunel / 2 : 0
     const e = hasta - t
     if (e < hueco + cierre) {
       const x = 1 - suave((e - hueco) / cierre)
-      zoom *= 1 + 1.3 * x * x
+      zoom *= 1 + 0.5 * x * x
       opacidad *= 1 - x
     }
 
