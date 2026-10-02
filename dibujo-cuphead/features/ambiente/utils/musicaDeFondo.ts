@@ -5,7 +5,9 @@ import { enlazarAudio } from '@/features/cancion/utils/audio'
  * sintetizado: "mejor esta música de fondo, solo en lugares donde no hay sonido y volumen
  * bajito"): una versión instrumental, en bucle y bajita, que pasa por el mismo Web Audio que la
  * canción (en iOS el volumen del elemento no se puede cambiar). Se calla con un fundido cuando
- * empieza la canción o se abre la carta y vuelve por donde iba (ver `components/MusicaDeFondo.tsx`).
+ * empieza la canción o se abre la carta y vuelve por donde iba (ver `components/MusicaDeFondo.tsx`):
+ * nunca vuelve a empezar de cero. El archivo empieza en el segundo 10 de la pista (lo pidió el
+ * usuario): así empieza la primera vez y cada vez que da la vuelta.
  */
 export const MUSICA_FONDO = { audio: '/fondo/musica.mp3' } as const
 
@@ -20,6 +22,8 @@ let ganancia: GainNode | null = null
 let desbloqueada = false
 let sonando = false
 let pausaPendiente = 0
+/** Por dónde iba al callarse (s): si al volver el navegador la reinició, se sigue desde aquí. */
+let posicion = 0
 
 function fundir(destino: number, segundos: number): void {
   if (ganancia) {
@@ -61,11 +65,17 @@ export function ajustarMusicaDeFondo(quiere: boolean): void {
   sonando = quiere
   window.clearTimeout(pausaPendiente)
   if (quiere) {
-    if (audio.paused) void audio.play().catch(() => undefined)
+    if (audio.paused) {
+      if (Math.abs(audio.currentTime - posicion) > 1) audio.currentTime = posicion
+      void audio.play().catch(() => undefined)
+    }
     fundir(NIVEL_FONDO, FUNDIDO.entrada)
   } else {
     fundir(0, FUNDIDO.salida)
-    pausaPendiente = window.setTimeout(() => audio.pause(), FUNDIDO.salida * 1000 + 100)
+    pausaPendiente = window.setTimeout(() => {
+      audio.pause()
+      posicion = audio.currentTime
+    }, FUNDIDO.salida * 1000 + 100)
   }
 }
 
