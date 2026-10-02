@@ -8,14 +8,11 @@ import { faseCancion, suscribirCancion } from '../store/cancion'
 import { alternarSonido, cancionAudible, estadoDelSonido, suscribirSonido } from '../utils/audio'
 
 /**
- * El sonido de la canción del agujero negro. Al inicio, un botón de cristal bajo el agujero para
- * activarlo (lo pidió el usuario: "que al inicio haya algo para activar el sonido"; los navegadores
- * no dejan sonar sin un gesto y la rueda no cuenta). Al empezar a bajar (o al activarlo) se queda
- * pequeño arriba a la derecha, para apagarlo o encenderlo mientras la canción esté por llegar o
- * suene; si aún no se activó, con un brillo que invita a tocarlo.
+ * El sonido de la canción del agujero negro, pequeño arriba a la derecha: para apagarlo o
+ * encenderlo mientras la canción esté por llegar o suene. Se activa al inicio, en el diálogo que
+ * hay que presionar (ver `DialogoSonido`); mientras está, este botón no se ve.
  */
 
-const enElInicio = (): boolean => obtenerProgreso() * CARRIL_VH < 40
 /** Más allá ya no hace falta (y arriba a la derecha van los botones del paseo del final). */
 const lejos = (): boolean => obtenerProgreso() * CARRIL_VH > 1100
 
@@ -23,16 +20,13 @@ export function BotonSonido() {
   const estado = useSyncExternalStore(suscribirSonido, estadoDelSonido, () => 'pendiente' as const)
   const audible = useSyncExternalStore(suscribirSonido, cancionAudible, () => false)
   const fase = useSyncExternalStore(suscribirCancion, faseCancion, () => 'armada' as const)
-  const inicio = useSyncExternalStore(suscribirProgreso, enElInicio, () => true)
   const fuera = useSyncExternalStore(suscribirProgreso, lejos, () => false)
-  if (fuera || (fase === 'libre' && !audible)) return null
+  if (estado === 'pendiente' || fuera || (fase === 'libre' && !audible)) return null
   const activo = estado === 'activo'
   return (
     <button
       type="button"
       className="boton-cristal boton-sonido"
-      data-lugar={inicio && estado === 'pendiente' ? 'inicio' : 'esquina'}
-      data-estado={estado}
       aria-label={activo ? 'Silenciar la canción' : 'Activar el sonido'}
       aria-pressed={activo}
       onClick={() => alternarSonido(CANCION.audio)}

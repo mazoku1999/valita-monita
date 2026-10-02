@@ -114,8 +114,7 @@ Lo que hacía que en un celular el scroll y la cámara se sintieran mal, y cómo
   `store/recursosNuevos.ts`); antes, el sistema solar y el valle trababan el viaje al aparecer.
 - **El primer toque, sin tirón** (`prepararAudio` en `features/cancion/utils/audio.ts`): el Web
   Audio se creaba en el primer gesto, justo al empezar a deslizar. Ahora se crea con la página ya
-  cargada y el gesto sólo lo reanuda; apoyar el dedo no cuenta, sólo un gesto que de verdad deje
-  sonar (un toque, un clic o una tecla).
+  cargada y el diálogo del sonido sólo lo reanuda.
 - **El video de la canción, centrado** (paso 44, con una captura del iPhone del usuario: "el video
   en celular no se ve bien centrado"): el recuadro seguía al eje del agujero de gusano (hasta un 12 %
   de la pantalla) y, en un teléfono en vertical, el campo de visión es tan angosto que un pequeño
@@ -157,14 +156,15 @@ letras (`features/cancion`). El audio y la letra son archivos suyos en `public/c
   salida y nuestro sistema solar se recorren deslizando, mientras suena lo que queda. Botón de
   cristal para saltarla (arriba a la izquierda, o Escape), que lleva directo al mensaje; volver
   fuera del agujero (400 vh) la deja lista para otra vez.
-- **El sonido** (`utils/audio.ts`, `components/BotonSonido.tsx`): los navegadores sólo dejan sonar
-  tras un gesto (clic, tecla o toque; la rueda no cuenta), así que al inicio hay un botón de
-  cristal bajo el agujero para activar el sonido (cualquier otro gesto también lo activa); al bajar
-  se queda pequeño arriba a la derecha para apagarlo o encenderlo. Si al entrar en el agujero aún
-  no se activó, la canción empieza igual, en silencio, con la letra y el cruce (el botón brilla
-  para invitar); al tocarlo, el sonido se une donde va. Si ni en silencio la deja sonar el
-  navegador, la lleva un reloj propio hasta que se pueda. Se empieza a cargar a 150 vh y pasa por
-  Web Audio para los fundidos.
+- **El sonido** (`utils/audio.ts`, `components/DialogoSonido.tsx`, `components/BotonSonido.tsx`):
+  los navegadores sólo dejan sonar tras un gesto (clic, tecla o toque; la rueda no cuenta), así
+  que al abrir la página hay un diálogo que hay que presionar para activar el sonido (paso 45: el
+  usuario prefirió eso al botón de cristal que, con su animación, iba del centro a la esquina): un
+  cartel de papel crema con tinta sobre el viaje en penumbra, quieto; mientras está, la página no
+  se desplaza, y tocar fuera no lo cierra. Después, un botón pequeño arriba a la derecha lo apaga
+  o lo enciende. Si aun así el navegador no la deja sonar, la canción va en silencio con la letra
+  y el cruce, o con un reloj propio. Se empieza a cargar a 150 vh y pasa por Web Audio para los
+  fundidos.
 - **La letra, en español y sincronizada palabra por palabra** (`public/cancion/cancion.vtt`,
   `utils/vtt.ts`, `utils/letra.ts`): el texto es la traducción
   al español que dio el usuario, tal cual (habla de hombre a mujer: "tuyo" para él; "mía" e
@@ -402,7 +402,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
 `dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`,
-`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`.
+`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

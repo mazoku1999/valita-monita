@@ -3,8 +3,8 @@
  * gesto, pasa por Web Audio para los fundidos (en iOS el volumen del elemento no se puede cambiar).
  *
  * Los navegadores sólo dejan sonar después de un gesto del usuario (un clic, una tecla o un toque;
- * la rueda y el scroll no cuentan). Por eso al inicio hay un botón para activar el sonido (y
- * cualquier gesto vale igual). La canción empieza siempre al entrar en el agujero, sin pedir nada:
+ * la rueda y el scroll no cuentan). Por eso, al inicio, un diálogo que hay que presionar para
+ * activar el sonido (ver `DialogoSonido`). La canción empieza siempre al entrar en el agujero:
  * con sonido si ya se activó; si no, en silencio (y la letra y el cruce siguen igual), y en cuanto
  * se activa el sonido se une donde va. Si ni siquiera en silencio la deja sonar el navegador, la
  * lleva un reloj propio hasta que se pueda.

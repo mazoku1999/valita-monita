@@ -11,7 +11,6 @@ import {
   cancionAudible,
   empezarCancion,
   estadoDelSonido,
-  permitirSonido,
   prepararAudio,
   precargarCancion,
   saltarCancionA,
@@ -24,6 +23,7 @@ import { interpolarMonotona } from '../utils/recorrido'
 import { leerSrt } from '../utils/srt'
 import { leerVtt } from '../utils/vtt'
 import { BotonSonido } from './BotonSonido'
+import { DialogoSonido } from './DialogoSonido'
 
 /**
  * La canción del agujero negro (ver `constantes/cancion.ts`): al entrar en el agujero bajando, el
@@ -126,30 +126,11 @@ export function CancionDelAgujero() {
     return suscribirProgreso(revisar)
   }, [])
 
-  // Cualquier gesto (clic, tecla o toque) también activa el sonido para después; el del botón del
-  // sonido lo decide él. Con el ratón cuenta al pulsar; con un dedo, al levantarlo (apoyarlo no es
-  // un gesto para el navegador, ni deslizar): así, al empezar a deslizar no se hace nada más, y se
-  // sigue esperando hasta un gesto que de verdad deje sonar. El Web Audio se crea antes, con la
-  // página ya cargada (ver `prepararAudio`).
+  // El sonido se activa en el diálogo del inicio (ver `DialogoSonido`). El Web Audio se crea antes,
+  // con la página ya cargada: crearlo en el gesto detenía la página un momento (ver `prepararAudio`).
   useEffect(() => {
-    const tipos = ['pointerdown', 'pointerup', 'keydown', 'touchend'] as const
-    const quitar = (): void => {
-      for (const tipo of tipos) window.removeEventListener(tipo, alGesto, true)
-    }
-    const alGesto = (evento: Event): void => {
-      if (evento.target instanceof Element && evento.target.closest('.boton-sonido')) return
-      if (evento instanceof PointerEvent && (evento.type === 'pointerdown') !== (evento.pointerType === 'mouse')) return
-      const activacion = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation
-      if (activacion && !activacion.isActive) return
-      quitar()
-      permitirSonido(CANCION.audio)
-    }
-    for (const tipo of tipos) window.addEventListener(tipo, alGesto, { capture: true, passive: true })
     const preparar = window.setTimeout(prepararAudio, 1500)
-    return () => {
-      quitar()
-      window.clearTimeout(preparar)
-    }
+    return () => window.clearTimeout(preparar)
   }, [])
 
   // La puerta: entrar en el agujero bajando la empieza; volver fuera, después, la arma otra vez.
@@ -228,6 +209,7 @@ export function CancionDelAgujero() {
         </button>
       )}
       <BotonSonido />
+      <DialogoSonido />
     </>
   )
 }

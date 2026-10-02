@@ -590,58 +590,15 @@
     opacity: 0.5;
   }
 }
-/* El sonido de la canción: al inicio, un botón bajo el agujero para activarlo; luego, pequeño arriba
-   a la derecha (con un brillo que invita mientras no se haya activado). */
+/* El sonido de la canción: pequeño arriba a la derecha (se activa en el diálogo del inicio). */
 .boton-sonido {
-  left: calc(100% - 16px - env(safe-area-inset-right) - 23px);
-  top: calc(16px + env(safe-area-inset-top) + 23px);
+  right: calc(16px + env(safe-area-inset-right));
   width: 46px;
   height: 46px;
-  transform: translate(-50%, -50%);
-  transition:
-    left 0.9s cubic-bezier(0.2, 0.8, 0.2, 1),
-    top 0.9s cubic-bezier(0.2, 0.8, 0.2, 1),
-    width 0.9s cubic-bezier(0.2, 0.8, 0.2, 1),
-    height 0.9s cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 0.6s ease,
-    transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
-    background-color 0.25s ease;
-  animation: sonido-aparece 0.9s ease 1.6s backwards;
 }
 .boton-sonido svg {
   width: 21px;
   height: 21px;
-  transition:
-    width 0.9s ease,
-    height 0.9s ease;
-}
-.boton-sonido[data-lugar='inicio'] {
-  left: 50%;
-  top: 79%;
-  width: 76px;
-  height: 76px;
-  box-shadow:
-    0 0 0 10px rgb(255 255 255 / 0.06),
-    0 0 46px rgb(255 214 150 / 0.4),
-    0 12px 32px rgb(4 10 40 / 0.45),
-    inset 0 1px 0 rgb(255 255 255 / 0.55);
-}
-.boton-sonido[data-lugar='inicio'] svg {
-  width: 32px;
-  height: 32px;
-}
-.boton-sonido[data-lugar='esquina'][data-estado='pendiente'] {
-  box-shadow:
-    0 0 0 3px rgb(255 214 150 / 0.45),
-    0 0 26px rgb(255 214 150 / 0.5),
-    0 12px 32px rgb(4 10 40 / 0.45),
-    inset 0 1px 0 rgb(255 255 255 / 0.55);
-}
-.boton-sonido:hover {
-  transform: translate(-50%, -50%) scale(1.06);
-}
-.boton-sonido:active {
-  transform: translate(-50%, -50%) scale(0.94);
 }
 @keyframes sonido-aparece {
   from {
@@ -660,8 +617,46 @@
   width: 21px;
   height: 21px;
 }
-:root[data-boton-pantalla] .boton-sonido[data-lugar='esquina'] {
-  left: calc(100% - 16px - env(safe-area-inset-right) - 23px - 58px);
+:root[data-boton-pantalla] .boton-sonido {
+  right: calc(16px + env(safe-area-inset-right) + 58px);
+}
+/* Al inicio, el diálogo que hay que presionar para activar el sonido: un cartel de papel con tinta
+   sobre el viaje en penumbra, quieto (sin brillos ni animaciones). */
+.dialogo-sonido {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(5 4 4 / 0.55);
+}
+.dialogo-sonido-boton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(300px, 100%);
+  padding: 26px 24px 22px;
+  border: 3px solid rgb(19 15 12);
+  border-radius: 18px;
+  background: rgb(248 238 219);
+  box-shadow: 0 5px 0 rgb(19 15 12 / 0.45);
+  color: rgb(19 15 12);
+  font-family: var(--font-letra-cancion), serif;
+  font-size: 19px;
+  line-height: 1.3;
+  text-align: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.dialogo-sonido-boton:active {
+  transform: translateY(2px);
+  box-shadow: 0 3px 0 rgb(19 15 12 / 0.45);
+}
+.dialogo-sonido-boton:focus-visible {
+  outline: 3px solid rgb(255 226 150 / 0.95);
+  outline-offset: 4px;
 }
 /* En el iPhone, cómo verla a pantalla completa: un cartel de papel con tinta, como el del final. */
 .aviso-pantalla {

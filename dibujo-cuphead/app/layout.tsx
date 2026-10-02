@@ -26,13 +26,13 @@ const letraCarta = Caveat({
 })
 
 // La letra de la canción del agujero negro, en la cinta de su escenario (ver `features/cancion`):
-// una de rótulo de los años 30, redonda y gruesa. Sin precarga: se pide al acercarse al agujero.
+// una de rótulo de los años 30, redonda y gruesa. Precargada: también la lleva el diálogo del
+// sonido, a la vista desde el principio.
 const letraCancion = Corben({
   subsets: ['latin', 'latin-ext'],
   weight: '700',
   variable: '--font-letra-cancion',
   display: 'swap',
-  preload: false,
 })
 
 export const metadata: Metadata = {
