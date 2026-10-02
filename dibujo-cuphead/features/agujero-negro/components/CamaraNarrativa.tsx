@@ -9,7 +9,7 @@ import { DISTANCIA_LIBRE, VISTAS_CAMARA, type VistaCamara } from '../constantes/
 import { useArrastreOrbital } from '../hooks/useArrastreOrbital'
 import { useSeguirCursor } from '../hooks/useSeguirCursor'
 import { MIRADA_ESPACIO, reiniciarMirada } from '../store/miradaEspacio'
-import { ajuste, consumirZoomPendiente, obtenerVersionVista, obtenerVista } from '../store/vistaCamaraStore'
+import { ajuste, obtenerVersionVista, obtenerVista } from '../store/vistaCamaraStore'
 import { interpolarFotograma } from '../utils/fotogramasCamara'
 
 const POLAR_MINIMO = 0.08
@@ -188,7 +188,7 @@ const objetivoDeVista = (vista: VistaCamara, progreso: number): EstadoCompleto =
 
 export function CamaraNarrativa() {
   const { camera, gl } = useThree()
-  const { estado: arrastre, actualizar: actualizarArrastre, sumarZoom, volverAlEncuadre } = useArrastreOrbital(
+  const { estado: arrastre, actualizar: actualizarArrastre, volverAlEncuadre } = useArrastreOrbital(
     gl.domElement,
   )
   const cursor = useSeguirCursor()
@@ -226,7 +226,6 @@ export function CamaraNarrativa() {
       versionVista.current = version
       volverAlEncuadre()
     }
-    sumarZoom(consumirZoomPendiente())
 
     // Primer fotograma: la cámara se coloca directamente donde toca (progreso inicial, vista de
     // la URL), sin un travelling desde el estado por defecto.

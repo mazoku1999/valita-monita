@@ -229,6 +229,21 @@
   grid-area: 1 / 1;
 }
 
+/* Sin zoom del navegador: en toda la página sólo se desplaza en vertical (ni pellizco ni doble
+   toque; ver `features/narrativa/hooks/useSinZoom.ts`). Y sin rebote en los extremos ni "tirar para
+   recargar" (en Android, deslizar hacia arriba al principio recargaba la página). */
+html {
+  touch-action: pan-y;
+  overscroll-behavior: none;
+}
+
+/* El lienzo llena siempre su sitio: mientras espera para rehacerse a un tamaño nuevo, se estira (si
+   no, quedaba una franja vacía al esconderse la barra del navegador del móvil). */
+.lienzo-agujero canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 /* Botones de cristal: translúcidos, con el cielo difuminado detrás. */
 .boton-cristal {
   position: fixed;

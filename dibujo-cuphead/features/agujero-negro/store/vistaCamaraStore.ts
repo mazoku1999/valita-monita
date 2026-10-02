@@ -36,10 +36,8 @@ type Escucha = () => void
 let vistaActual: IdVista = VISTA_INICIAL
 /** Sube cada vez que se elige un encuadre: la cámara lo lee para volver a él desde el modo libre. */
 let versionVista = 0
-/** El usuario ha orbitado o hecho zoom desde el último encuadre elegido. */
+/** El usuario ha orbitado desde el último encuadre elegido. */
 let modoLibre = false
-/** Zoom pedido desde la interfaz (pasos acumulados hasta que la cámara los consume). */
-let zoomPendiente = 0
 let ajustesActuales: AjustesCalibracion = {}
 const escuchas = new Set<Escucha>()
 
@@ -69,17 +67,6 @@ export function marcarModoLibre(): void {
 
 export function esModoLibre(): boolean {
   return modoLibre
-}
-
-/** Pasos de zoom desde la interfaz: positivo acerca, negativo aleja. */
-export function solicitarZoom(pasos: number): void {
-  zoomPendiente += pasos
-}
-
-export function consumirZoomPendiente(): number {
-  const pasos = zoomPendiente
-  zoomPendiente = 0
-  return pasos
 }
 
 /** Valor calibrado desde la URL si existe (sólo desarrollo); si no, el valor por defecto. */

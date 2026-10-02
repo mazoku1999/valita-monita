@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { CARRIL_VH } from '@/features/agujero-negro/constantes/viajeScroll'
 import { aplicarVistaDesdeUrl } from '@/features/agujero-negro/store/vistaCamaraStore'
 import { useSincronizarScroll } from '../hooks/useSincronizarScroll'
+import { useSinZoom } from '../hooks/useSinZoom'
 
 /**
  * Sin textos en la interfaz (petición del usuario): ni cabecera, ni capítulo, ni epílogo, ni pie,
@@ -16,6 +17,7 @@ import { useSincronizarScroll } from '../hooks/useSincronizarScroll'
  */
 export function NarrativaOverlay() {
   useSincronizarScroll()
+  useSinZoom()
 
   // Enlace profundo a una vista (`?vista=elevada`): se aplica tras montar para no alterar la hidratación.
   useEffect(() => {

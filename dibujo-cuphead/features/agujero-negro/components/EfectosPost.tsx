@@ -6,7 +6,7 @@ import type { EffectComposer as ComposerDeEfectos } from 'postprocessing'
 import { useEffect, useMemo, useRef } from 'react'
 import { ESCENARIO } from '@/features/cancion/store/escenario'
 import { NIEBLA } from '@/features/dibujo/store/niebla'
-import { avanzarRitmo, latido, pulsaciones, ritmoDePantalla, tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
+import { avanzarRitmo, latido, pulsaciones, resolucionDePantalla, ritmoDePantalla, tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
 import { PasoDibujo } from '@/features/dibujo/utils/PasoDibujo'
 import { obtenerProgreso, obtenerProgresoSuave } from '@/features/narrativa/store/progresoScrollStore'
 import { CARRIL_VH, VIAJE } from '../constantes/viajeScroll'
@@ -44,9 +44,10 @@ export function EfectosPost() {
       original(pendiente)
       pendiente = 0
       if (process.env.NODE_ENV === 'development') {
-        const ventana = window as unknown as { __dibujosHechos?: number; __ritmoPantalla?: () => number }
+        const ventana = window as unknown as { __dibujosHechos?: number; __ritmoPantalla?: () => number; __resolucionPantalla?: () => number }
         ventana.__dibujosHechos = (ventana.__dibujosHechos ?? 0) + 1
         ventana.__ritmoPantalla = ritmoDePantalla
+        ventana.__resolucionPantalla = resolucionDePantalla
       }
     }
   }, -1)

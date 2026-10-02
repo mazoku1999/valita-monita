@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useRef } from 'react'
-import { MIRADA_ESPACIO } from '../store/miradaEspacio'
 import { marcarModoLibre } from '../store/vistaCamaraStore'
 
 /**
@@ -11,7 +10,7 @@ import { marcarModoLibre } from '../store/vistaCamaraStore'
 export interface DesplazamientoOrbital {
   azimut: number
   polar: number
-  /** Zoom en escala logarítmica: la distancia del encuadre se multiplica por exp(zoom). */
+  /** Zoom en escala logarítmica (la distancia se multiplica por exp(zoom)): sin zoom, se queda en 0. */
   zoom: number
   velocidadAzimut: number
   velocidadPolar: number
@@ -22,10 +21,13 @@ export interface DesplazamientoOrbital {
 
 const SENSIBILIDAD = (Math.PI * 2) / 1400
 const VELOCIDAD_MAXIMA = 3.5
-/** Rueda con Ctrl (pellizco en trackpad) y pellizco táctil: zoom por píxel de desplazamiento. */
-const ZOOM_POR_PIXEL = 0.0035
-const ZOOM_POR_TECLA = 0.18
 
+/**
+ * Orbitar arrastrando con el ratón (o un lápiz). En una pantalla táctil, el dedo es el scroll del
+ * viaje: no orbita (cada deslizamiento giraba la cámara, y con inercia). Sin zoom de ninguna manera
+ * (lo pidió el usuario: ni pellizcando, ni con la rueda, ni con doble clic; ver también
+ * `features/narrativa/hooks/useSinZoom.ts`).
+ */
 export function useArrastreOrbital(elemento: HTMLElement | null) {
   const estado = useRef<DesplazamientoOrbital>({
     azimut: 0,
@@ -40,38 +42,15 @@ export function useArrastreOrbital(elemento: HTMLElement | null) {
   useEffect(() => {
     if (!elemento) return
 
-    const punteros = new Map<number, { x: number; y: number }>()
     let ultimoX = 0
     let ultimoY = 0
     let ultimoTiempo = 0
     let idPuntero: number | null = null
-    let separacionPellizco = 0
-
-    const tocar = (): void => {
-      estado.current.volviendo = false
-      marcarModoLibre()
-    }
-
-    const separacion = (): number => {
-      const [a, b] = Array.from(punteros.values())
-      return Math.hypot(a.x - b.x, a.y - b.y)
-    }
 
     const alBajar = (evento: PointerEvent): void => {
+      if (evento.pointerType === 'touch') return
       if (evento.pointerType === 'mouse' && evento.button !== 0) return
-      punteros.set(evento.pointerId, { x: evento.clientX, y: evento.clientY })
-      // En una pantalla táctil, un dedo es el scroll del viaje: no orbita (cada deslizamiento giraba
-      // la cámara, y con inercia). Dos dedos, el pellizco del zoom.
-      const tactil = evento.pointerType === 'touch'
-      if (!tactil) elemento.setPointerCapture(evento.pointerId)
-      if (tactil && punteros.size !== 2) return
-      if (punteros.size === 2) {
-        // Segundo dedo: pasa de orbitar a pellizcar.
-        idPuntero = null
-        estado.current.arrastrando = false
-        separacionPellizco = separacion()
-        return
-      }
+      elemento.setPointerCapture(evento.pointerId)
       idPuntero = evento.pointerId
       ultimoX = evento.clientX
       ultimoY = evento.clientY
@@ -83,17 +62,7 @@ export function useArrastreOrbital(elemento: HTMLElement | null) {
     }
 
     const alMover = (evento: PointerEvent): void => {
-      if (punteros.has(evento.pointerId)) punteros.set(evento.pointerId, { x: evento.clientX, y: evento.clientY })
-      if (punteros.size === 2) {
-        const nueva = separacion()
-        if (separacionPellizco > 0) {
-          estado.current.zoom += (nueva - separacionPellizco) * ZOOM_POR_PIXEL
-          tocar()
-        }
-        separacionPellizco = nueva
-        return
-      }
-      if (!estado.current.arrastrando || evento.pointerId !== idPuntero || evento.pointerType === 'touch') return
+      if (!estado.current.arrastrando || evento.pointerId !== idPuntero) return
       const dx = evento.clientX - ultimoX
       const dy = evento.clientY - ultimoY
       const dt = Math.max((evento.timeStamp - ultimoTiempo) / 1000, 1 / 240)
@@ -104,7 +73,10 @@ export function useArrastreOrbital(elemento: HTMLElement | null) {
       estado.current.polar += deltaPolar
       estado.current.velocidadAzimut = Math.max(-VELOCIDAD_MAXIMA, Math.min(VELOCIDAD_MAXIMA, deltaAzimut / dt))
       estado.current.velocidadPolar = Math.max(-VELOCIDAD_MAXIMA, Math.min(VELOCIDAD_MAXIMA, deltaPolar / dt))
-      if (dx !== 0 || dy !== 0) tocar()
+      if (dx !== 0 || dy !== 0) {
+        estado.current.volviendo = false
+        marcarModoLibre()
+      }
 
       ultimoX = evento.clientX
       ultimoY = evento.clientY
@@ -112,39 +84,10 @@ export function useArrastreOrbital(elemento: HTMLElement | null) {
     }
 
     const alSoltar = (evento: PointerEvent): void => {
-      punteros.delete(evento.pointerId)
-      if (evento.pointerId === idPuntero) {
-        idPuntero = null
-        estado.current.arrastrando = false
-        elemento.style.cursor = 'grab'
-      }
-      if (punteros.size < 2) separacionPellizco = 0
-    }
-
-    // Rueda con Ctrl o Cmd (así llega el pellizco del trackpad): zoom. La rueda sola sigue
-    // siendo el scroll de la narrativa.
-    const alRueda = (evento: WheelEvent): void => {
-      if (!evento.ctrlKey && !evento.metaKey) return
-      evento.preventDefault()
-      estado.current.zoom -= evento.deltaY * ZOOM_POR_PIXEL
-      tocar()
-    }
-
-    // Doble clic o doble toque: la vista vuelve a su sitio (el encuadre y, dentro del agujero, el
-    // camino del viaje).
-    const alDobleClic = (): void => {
-      estado.current.volviendo = true
-      estado.current.velocidadAzimut = 0
-      estado.current.velocidadPolar = 0
-      MIRADA_ESPACIO.volver = true
-    }
-
-    const alTecla = (evento: KeyboardEvent): void => {
-      if (evento.metaKey || evento.ctrlKey || evento.altKey) return
-      if (evento.key === '+' || evento.key === '=') estado.current.zoom += ZOOM_POR_TECLA
-      else if (evento.key === '-' || evento.key === '_') estado.current.zoom -= ZOOM_POR_TECLA
-      else return
-      tocar()
+      if (evento.pointerId !== idPuntero) return
+      idPuntero = null
+      estado.current.arrastrando = false
+      elemento.style.cursor = 'grab'
     }
 
     elemento.style.touchAction = 'pan-y'
@@ -153,28 +96,14 @@ export function useArrastreOrbital(elemento: HTMLElement | null) {
     elemento.addEventListener('pointermove', alMover)
     elemento.addEventListener('pointerup', alSoltar)
     elemento.addEventListener('pointercancel', alSoltar)
-    elemento.addEventListener('wheel', alRueda, { passive: false })
-    elemento.addEventListener('dblclick', alDobleClic)
-    window.addEventListener('keydown', alTecla)
 
     return () => {
       elemento.removeEventListener('pointerdown', alBajar)
       elemento.removeEventListener('pointermove', alMover)
       elemento.removeEventListener('pointerup', alSoltar)
       elemento.removeEventListener('pointercancel', alSoltar)
-      elemento.removeEventListener('wheel', alRueda)
-      elemento.removeEventListener('dblclick', alDobleClic)
-      window.removeEventListener('keydown', alTecla)
     }
   }, [elemento])
-
-  /** Zoom sumado desde fuera (botones de la interfaz o teclado): pasos positivos acercan. */
-  const sumarZoom = useCallback((pasos: number): void => {
-    if (pasos === 0) return
-    estado.current.zoom += pasos * ZOOM_POR_TECLA
-    estado.current.volviendo = false
-    marcarModoLibre()
-  }, [])
 
   /** Vuelve al encuadre elegido: los desplazamientos se funden a cero en el siguiente segundo. */
   const volverAlEncuadre = useCallback((): void => {
@@ -208,5 +137,5 @@ export function useArrastreOrbital(elemento: HTMLElement | null) {
     actual.velocidadPolar *= friccion
   }, [])
 
-  return { estado, actualizar, sumarZoom, volverAlEncuadre }
+  return { estado, actualizar, volverAlEncuadre }
 }

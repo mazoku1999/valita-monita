@@ -10,6 +10,7 @@ import { EfectosPost } from './EfectosPost'
 import { EscenaSistemaSolar } from './EscenaSistemaSolar'
 import { LenteGravitacionalQuad } from './LenteGravitacionalQuad'
 import { PrecalentarSombreadores } from './PrecalentarSombreadores'
+import { ResolucionAdaptable } from './ResolucionAdaptable'
 import { TunelAgujeroGusano } from './TunelAgujeroGusano'
 
 /**
@@ -27,6 +28,11 @@ export function AgujeroNegroCanvas({ onListo }: AgujeroNegroCanvasProps) {
     <Canvas
       flat
       dpr={[1, DPR_MAXIMO]}
+      // Al cambiar de tamaño (la barra del navegador del móvil que aparece o se esconde, girar el
+      // teléfono, pantalla completa), el lienzo se rehace una sola vez, cuando ya no cambia (rehacerlo
+      // traba un momento); mientras tanto se estira (ver `.lienzo-agujero` en `globals.css`).
+      resize={{ scroll: false, debounce: { scroll: 0, resize: 250 } }}
+      className="lienzo-agujero"
       camera={{
         fov: CAMARA_AGUJERO.fov,
         near: CAMARA_AGUJERO.cerca,
@@ -54,6 +60,8 @@ export function AgujeroNegroCanvas({ onListo }: AgujeroNegroCanvasProps) {
       <EfectosPost />
       {/* Los programas de la GPU de lo que aún no se ve, preparados de antemano (sin tirones luego). */}
       <PrecalentarSombreadores />
+      {/* Menos píxeles si el aparato no llega a 60 por segundo. */}
+      <ResolucionAdaptable maxima={DPR_MAXIMO} />
     </Canvas>
   )
 }

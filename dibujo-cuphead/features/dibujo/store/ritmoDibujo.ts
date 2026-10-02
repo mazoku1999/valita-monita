@@ -6,24 +6,38 @@
  * (unos duran tres refrescos y otros dos): al deslizar, en un móvil, el movimiento temblaba.
  *
  * La pantalla se dibuja a 60 por segundo (cada refresco en 60 Hz, uno de cada dos en 120 Hz). Si el
- * aparato no llega (se pierden muchos fotogramas durante un par de segundos), baja a 30 por segundo,
- * también parejos, y se queda ahí. Los fotogramas que no toca dibujar no cuestan nada: ni el trazado
- * de rayos del agujero ni el dibujo se calculan.
+ * aparato no llega (se pierden muchos fotogramas durante un par de segundos), baja un escalón de
+ * calidad (`ESCALONES`) y se queda ahí: primero la resolución del dibujo (en un móvil lo que más
+ * cuesta es pintar cada píxel: el trazado de rayos del agujero y los pases del dibujo; el grano de la
+ * película disimula la diferencia) y, si aun así no llega, 30 por segundo, también parejos. En el
+ * iPhone va de sobra en el primero; en muchos Android hacía falta bajar. Los fotogramas que no toca
+ * dibujar no cuestan nada: ni el trazado de rayos del agujero ni el dibujo se calculan.
  *
  * Un `useFrame` con prioridad negativa (el primero de cada fotograma) llama a `avanzarRitmo`; el
  * resto consulta `tocaDibujar()` (si se dibuja la pantalla) y `numeroDeDibujo()` / `cambiaDibujo()`
- * (el dibujo animado, a 24 por segundo).
+ * (el dibujo animado, a 24 por segundo); `ResolucionAdaptable` aplica la resolución del escalón.
  */
 export const RITMO_DIBUJO = {
   /** Los dibujos del dibujo animado por segundo (tinta, estrellas, película, lienzos pintados). */
   dibujosPorSegundo: 24,
-  /** Lo que se mueve en pantalla (cámara, scroll): a esto por segundo si se puede; si no, al siguiente. */
-  pantallaPorSegundo: [60, 30],
-  /** Para bajar de ritmo: tras este arranque (s), si en una ventana de este tiempo (s) se pierde esta parte de los refrescos. */
+  /** Para bajar de escalón: tras este arranque (s), si en una ventana de este tiempo (s) se pierde esta parte de los refrescos. */
   arranque: 4,
   ventana: 2,
   perdidos: 0.2,
+  /** Tras bajar, lo que se espera (s) antes de volver a medir (cambiar la resolución traba un momento). */
+  calma: 1.5,
 } as const
+
+/**
+ * Los escalones de calidad, de mejor a peor: la resolución (parte de la máxima del aparato, ver
+ * `AgujeroNegroCanvas`) y los dibujos por segundo de la pantalla.
+ */
+export const ESCALONES = [
+  { resolucion: 1, pantalla: 60 },
+  { resolucion: 0.82, pantalla: 60 },
+  { resolucion: 0.68, pantalla: 60 },
+  { resolucion: 0.68, pantalla: 30 },
+] as const
 
 let tiempoAnterior = -1
 let ultimoDibujo = -1
@@ -36,11 +50,12 @@ let cambia = true
 let inicioVentana = -1
 let muestras = 0
 let lentos = 0
+let cambioDeNivel = -Infinity
 
 export function avanzarRitmo(tiempo: number): void {
   const paso = tiempoAnterior < 0 || tiempoAnterior > tiempo ? 0 : tiempo - tiempoAnterior
   tiempoAnterior = tiempo
-  const objetivo = RITMO_DIBUJO.pantallaPorSegundo[nivel]
+  const objetivo = ESCALONES[nivel].pantalla
 
   // Se dibuja en cuanto han pasado tres cuartos del intervalo que toca: así cae siempre en el mismo
   // refresco (cada uno en 60 Hz, uno de cada dos en 120 Hz…) aunque los fotogramas lleguen con algo
@@ -50,14 +65,18 @@ export function avanzarRitmo(tiempo: number): void {
 
   // ¿Va el aparato a este ritmo? Un fotograma que tarda bastante más de lo que toca es un fotograma
   // perdido; si se pierden muchos (a 45 por segundo en una pantalla de 60 Hz los fotogramas salen
-  // desparejos), se baja al ritmo siguiente, que sí va parejo.
-  if (tiempo > RITMO_DIBUJO.arranque && paso > 0 && paso < 0.25 && nivel < RITMO_DIBUJO.pantallaPorSegundo.length - 1) {
+  // desparejos), se baja al escalón siguiente.
+  const midiendo = tiempo > RITMO_DIBUJO.arranque && tiempo - cambioDeNivel > RITMO_DIBUJO.calma
+  if (midiendo && paso > 0 && paso < 0.25 && nivel < ESCALONES.length - 1) {
     if (inicioVentana < 0) inicioVentana = tiempo
     muestras++
     if (paso > 1.35 / objetivo) lentos++
     if (tiempo - inicioVentana >= RITMO_DIBUJO.ventana) {
-      if (muestras > 10 && lentos / muestras > RITMO_DIBUJO.perdidos) nivel++
-      inicioVentana = tiempo
+      if (muestras > 10 && lentos / muestras > RITMO_DIBUJO.perdidos) {
+        nivel++
+        cambioDeNivel = tiempo
+      }
+      inicioVentana = -1
       muestras = 0
       lentos = 0
     }
@@ -85,7 +104,12 @@ export function cambiaDibujo(): boolean {
 
 /** A cuántos fotogramas por segundo se quiere dibujar la pantalla ahora (para medir). */
 export function ritmoDePantalla(): number {
-  return RITMO_DIBUJO.pantallaPorSegundo[nivel]
+  return ESCALONES[nivel].pantalla
+}
+
+/** La resolución del escalón actual (parte de la máxima del aparato). */
+export function resolucionDePantalla(): number {
+  return ESCALONES[nivel].resolucion
 }
 
 /**

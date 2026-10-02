@@ -53,7 +53,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: 'dark',
   themeColor: '#050404',
-  userScalable: true,
+  // Sin zoom: ni pellizcando ni con doble toque (ver `features/narrativa/hooks/useSinZoom.ts`).
+  maximumScale: 1,
+  userScalable: false,
   // El dibujo ocupa toda la pantalla, también bajo la isla y la barra de estado (los botones se
   // apartan con `env(safe-area-inset-*)`).
   viewportFit: 'cover',

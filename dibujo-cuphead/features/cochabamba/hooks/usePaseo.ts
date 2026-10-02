@@ -33,7 +33,7 @@ const mandosActivos = (): boolean => PASEO.activo && CARTA.fase === 'cerrada'
  * flechas y WASD (con Mayúsculas, correr; entonces las flechas no desplazan la página) y arrastrar
  * sobre el lienzo para mirar, como en los juegos: el dedo o el ratón a la derecha gira a la derecha,
  * hacia arriba mira arriba, sin inercia. Mientras se pasea, tocar el lienzo no desplaza la página
- * (subir es un botón). Doble clic: de vuelta a donde se posó. Un toque o clic sin arrastrar deja su
+ * (subir es un botón; volver a donde se posó, otro). Un toque o clic sin arrastrar deja su
  * punto en `CARTA.toque` (si cae en la cajita, la abre: lo comprueba `EscenaCochabamba`). La palanca
  * y los botones están en `components/ControlesPaseo.tsx`.
  */
@@ -106,10 +106,6 @@ export function usePaseo(elemento: HTMLElement | null): void {
         bajada = null
       }
     }
-    const alDobleClic = (): void => {
-      if (mandosActivos()) PASEO.volver = true
-    }
-
     // Paseando, el lienzo no desplaza la página al tocarlo (se mira arrastrando en cualquier
     // dirección); fuera, el scroll del viaje como siempre.
     const ajustarTactil = (): void => {
@@ -124,7 +120,6 @@ export function usePaseo(elemento: HTMLElement | null): void {
     elemento.addEventListener('pointermove', alMover)
     elemento.addEventListener('pointerup', alSoltar)
     elemento.addEventListener('pointercancel', alSoltar)
-    elemento.addEventListener('dblclick', alDobleClic)
     return () => {
       dejarDeOir()
       window.removeEventListener('keydown', alBajarTecla)
@@ -134,7 +129,6 @@ export function usePaseo(elemento: HTMLElement | null): void {
       elemento.removeEventListener('pointermove', alMover)
       elemento.removeEventListener('pointerup', alSoltar)
       elemento.removeEventListener('pointercancel', alSoltar)
-      elemento.removeEventListener('dblclick', alDobleClic)
     }
   }, [elemento])
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { ORDEN_VISTAS, VISTAS_CAMARA } from '../constantes/vistasCamara'
-import { establecerVista, solicitarZoom, useModoLibre, useVistaCamara } from '../store/vistaCamaraStore'
+import { establecerVista, useModoLibre, useVistaCamara } from '../store/vistaCamaraStore'
 
 const estiloBoton = (activo: boolean): string =>
   `cursor-pointer transition-colors duration-500 ${activo ? 'text-crema' : 'text-gris hover:text-crema/80'}`
@@ -64,18 +64,9 @@ export function SelectorVista() {
       <span
         aria-live="polite"
         className={`transition-colors duration-500 ${libre ? 'text-oro' : 'text-gris-tenue'}`}
-        title="Drag to orbit, pinch or Ctrl+scroll to zoom, + and − keys"
+        title="Drag to orbit"
       >
         {libre ? 'Free' : '·'}
-      </span>
-
-      <span className="flex items-center gap-2" aria-label="Zoom">
-        <button type="button" aria-label="Zoom out" onClick={() => solicitarZoom(-1)} className={estiloBoton(false)}>
-          −
-        </button>
-        <button type="button" aria-label="Zoom in" onClick={() => solicitarZoom(1)} className={estiloBoton(false)}>
-          +
-        </button>
       </span>
     </div>
   )
