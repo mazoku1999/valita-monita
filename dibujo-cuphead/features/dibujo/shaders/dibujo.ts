@@ -814,7 +814,6 @@ in float aBrillo;
 
 out vec2 vLocal;
 out float vTipo;
-out float vFondoClaro;
 out vec3 vRelleno;
 // Estrella fugaz: semilargo y semiancho del quad, largo de la estela y radio de la cabeza (px);
 // giro y estiramiento de la cabeza.
@@ -877,7 +876,6 @@ void estrellaFugaz() {
   gl_Position = vec4(px / uResolucion * 2.0 - 1.0, 0.0, 1.0);
   vLocal = position.xy;
   vTipo = 3.0;
-  vFondoClaro = 0.0;
   vDelCielo = 1.0;
   vRelleno = vec3(1.0, 0.94, 0.68);
   vMedidas = vec4(semiLargo, semiAncho, largo, radio);
@@ -918,14 +916,11 @@ void main() {
   vec2 uv = ndc.xy * 0.5 + 0.5;
   vec2 uvc = clamp(uv, 0.0, 1.0);
   float visible;
-  vFondoClaro = 0.0;
   if (esBanda) {
     float delante = textureLod(uProfundidad, uvc, 0.0).r;
-    visible = uBandaVisible * step(ndc.z * 0.5 + 0.5, delante + 2e-4);
-    // Delante del disco (claro), blancos.
-    vec4 gas = textureLod(uGasColor, uvc, 0.0);
-    float luzGas = dot(gas.rgb, vec3(0.2126, 0.7152, 0.0722)) * clamp(gas.a, 0.0, 1.0) * uGasVisible;
-    vFondoClaro = smoothstep(0.08, 0.25, luzGas);
+    // (Lo que tapa el agujero lo decide cada píxel, ver DESTELLO_FRAG.) Los que pasan muy cerca de
+    // la cámara se desvanecen: al cruzar la nube de polvo en la caída eran un enjambre de puntos.
+    visible = uBandaVisible * step(ndc.z * 0.5 + 0.5, delante + 2e-4) * smoothstep(6.0, 14.0, length(mundo - uPosCamara));
   } else {
     visible = uEstrellasVisibles * luzDeCielo(uvc);
   }
@@ -975,8 +970,7 @@ void main() {
   }
 
   // Relleno: casi todas crema blanca; algunas doradas, rosadas o celestes (tintes de época). Los
-  // granos de la banda, dorados (más claros cerca del agujero, alguno melocotón), y blancos sobre
-  // el disco.
+  // granos de la banda, dorados (más claros cerca del agujero, alguno melocotón).
   float tono = hash11(semilla * 11.1 + 4.2);
   vec3 relleno = tono < 0.6 ? vec3(1.0, 0.96, 0.84)
     : tono < 0.82 ? vec3(1.0, 0.88, 0.62)
@@ -985,7 +979,7 @@ void main() {
   if (esBanda) {
     vec3 oro = mix(vec3(1.0, 0.96, 0.84), vec3(1.0, 0.86, 0.58), smoothstep(16.0, 70.0, length(aPosicion.xz)));
     oro = mix(oro, vec3(1.0, 0.8, 0.62), 0.4 * step(0.75, tono));
-    relleno = mix(oro, vec3(1.0, 0.98, 0.9), vFondoClaro);
+    relleno = oro;
   }
   vRelleno = relleno;
   vBrillo = brillo;
@@ -1007,10 +1001,11 @@ export const DESTELLO_FRAG = /* glsl */ `
 uniform vec3 uTinta;
 uniform sampler2D uCielo;
 uniform vec2 uResolucion;
+uniform sampler2D uGasColor;
+uniform float uGasVisible;
 
 in vec2 vLocal;
 in float vTipo;
-in float vFondoClaro;
 in vec3 vRelleno;
 in vec4 vMedidas;
 in vec2 vFugaz;
@@ -1094,8 +1089,16 @@ vec4 estrellaFugaz() {
   return vec4(color, alfaC + alfaE * (1.0 - alfaC));
 }
 
+// Nada se dibuja encima del agujero (disco, anillos, hueco ni sombra), ni las estrellas ni los granos
+// de la banda aunque estén delante: de cerca, al cruzar la nube de polvo, tapaban los anillos, y la
+// prueba de profundidad (con su margen) dejaba pasar los que estaban unas unidades detrás del disco.
+float libreDelAgujero() {
+  if (uGasVisible < 0.001) return 1.0;
+  return 1.0 - smoothstep(0.25, 0.6, texture(uGasColor, gl_FragCoord.xy / uResolucion).a * uGasVisible);
+}
+
 void main() {
-  float cielo = cieloEnPixel();
+  float cielo = cieloEnPixel() * libreDelAgujero();
   if (cielo < 0.01) discard;
   if (vTipo > 2.5) {
     vec4 fugaz = estrellaFugaz() * cielo;

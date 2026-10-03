@@ -47,17 +47,21 @@ const float R_FOTON = 1.5;
 const float B_CRITICO = 2.5980762;
 const float R_BORDE = 17.0;
 const float R_INTERIOR = 3.0;
-// Borde del disco; más allá, dos anillos planos y finos (ANILLOS_FUERA: desde y hasta de cada uno).
+// Borde del disco; más allá, tres anillos planos y finos (desde y hasta de cada uno), cada vez más
+// transparentes (ANILLOS_COBERTURA), dentro de la esfera de marcha (R_BORDE).
 const float R_EXTERIOR = 12.6;
-const vec4 ANILLOS_FUERA = vec4(13.05, 13.6, 14.0, 14.35);
+const int N_ANILLOS = 3;
+const float ANILLOS_FUERA[6] = float[](13.05, 13.6, 14.0, 14.35, 15.0, 15.3);
+const vec3 ANILLOS_COBERTURA = vec3(0.85, 0.75, 0.62);
 const int MAX_PASOS = 260;
 const float PI = 3.14159265359;
 const float DOS_PI = 6.28318530718;
 
 // Paleta (sRGB): se pasa a lineal al final. Siete bandas, del crema blanco caliente del borde de
-// dentro al carmesí del de fuera (que casa con el cielo morado), y los dos anillos finos.
+// dentro al carmesí del de fuera (que casa con el cielo morado), y los tres anillos finos (rosa,
+// dorado y lila).
 const int N_BANDAS = 7;
-const vec3 BANDAS[9] = vec3[](
+const vec3 BANDAS[10] = vec3[](
   vec3(1.000, 0.965, 0.880),
   vec3(1.000, 0.895, 0.560),
   vec3(1.000, 0.800, 0.260),
@@ -65,8 +69,9 @@ const vec3 BANDAS[9] = vec3[](
   vec3(0.960, 0.470, 0.170),
   vec3(0.880, 0.300, 0.170),
   vec3(0.730, 0.170, 0.200),
-  vec3(0.920, 0.430, 0.420),
-  vec3(0.840, 0.470, 0.580)
+  vec3(0.930, 0.450, 0.420),
+  vec3(0.960, 0.720, 0.460),
+  vec3(0.800, 0.520, 0.700)
 );
 // Remolino: ondas espirales de dos brazos que ondulan los bordes de las bandas y giran como un todo
 // (el patrón no se enrosca con los minutos): amplitud (en bandas) junto al borde de dentro y junto
@@ -82,8 +87,8 @@ const float GIRO_GAS = 1.7;
 const vec3 BOLAS_RADIO = vec3(4.2, 5.6, 7.4);
 const vec3 BOLAS_FASE = vec3(0.0, 2.2, 4.3);
 const float BOLAS_GIRO = 2.6;
-const float BOLA_CABEZA = 0.42;
-const float BOLA_COLA = 3.6;
+const float BOLA_CABEZA = 0.5;
+const float BOLA_COLA = 4.2;
 const vec3 BOLA_BORDE = vec3(1.000, 0.520, 0.150);
 const vec3 BOLA_MEDIO = vec3(1.000, 0.860, 0.350);
 const vec3 BOLA_CENTRO = vec3(1.000, 0.990, 0.930);
@@ -126,8 +131,12 @@ bool enDisco(vec3 p) {
   return r >= R_INTERIOR && r <= R_EXTERIOR && abs(p.y) <= semiEspesor(r);
 }
 
-bool enAnillosFuera(float r) {
-  return (r >= ANILLOS_FUERA.x && r <= ANILLOS_FUERA.y) || (r >= ANILLOS_FUERA.z && r <= ANILLOS_FUERA.w);
+// Cuál de los anillos de fuera (0, 1, 2) hay a ese radio; -1 si ninguno.
+int anilloFuera(float r) {
+  for (int k = 0; k < N_ANILLOS; k++) {
+    if (r >= ANILLOS_FUERA[2 * k] && r <= ANILLOS_FUERA[2 * k + 1]) return k;
+  }
+  return -1;
 }
 
 // Raíces de a·t² + 2·b·t + c = 0 (forma estable); -1 donde no hay raíz.
@@ -186,7 +195,7 @@ float cortaDisco(vec3 p, vec3 d, out float superficie) {
   // Los anillos de fuera, en el plano.
   if (abs(d.y) > 1e-7) {
     float tp = -p.y / d.y;
-    if (tp >= 0.0 && tp < mejor && enAnillosFuera(length(p.xz + tp * d.xz))) {
+    if (tp >= 0.0 && tp < mejor && anilloFuera(length(p.xz + tp * d.xz)) >= 0) {
       mejor = tp;
       superficie = d.y < 0.0 ? 1.0 : -1.0;
     }
@@ -225,14 +234,15 @@ vec3 colorCara(vec3 p, float lado, float deCanto, out float banda) {
     float brazo = 2.0 * (angulo - REMOLINO_GIRO * uTiempo) + REMOLINO_ENROSCADO * log(r / R_INTERIOR);
     float amplitud = mix(REMOLINO_AMPLITUD.x, REMOLINO_AMPLITUD.y, tCara);
     sCara = clamp(tCara * float(N_BANDAS) + amplitud * sin(brazo), 0.0, float(N_BANDAS) - 0.001);
-  } else if (r < ANILLOS_FUERA.z) {
-    sCara = float(N_BANDAS) + clamp((r - ANILLOS_FUERA.x) / (ANILLOS_FUERA.y - ANILLOS_FUERA.x), 0.0, 0.999);
   } else {
-    sCara = float(N_BANDAS) + 1.0 + clamp((r - ANILLOS_FUERA.z) / (ANILLOS_FUERA.w - ANILLOS_FUERA.z), 0.0, 0.999);
+    int k = max(anilloFuera(r), 0);
+    float desde = ANILLOS_FUERA[2 * k];
+    float hasta = ANILLOS_FUERA[2 * k + 1];
+    sCara = float(N_BANDAS + k) + clamp((r - desde) / (hasta - desde), 0.0, 0.999);
   }
   // (Cuatro tonos en la hoja, del crema al dorado: con más, la hoja de cerca era una vara a rayas.)
   float sHoja = 0.55 * float(N_BANDAS) * abs(p.y) / H_CUMBRE;
-  float s = clamp(mix(sCara, sHoja, deCanto), 0.0, float(N_BANDAS) + 1.999);
+  float s = clamp(mix(sCara, sHoja, deCanto), 0.0, float(N_BANDAS + N_ANILLOS) - 0.001);
   banda = floor(s);
   float f = s - banda;
   vec3 base = BANDAS[int(banda)];
@@ -410,13 +420,18 @@ void main() {
       float bPlano = abs(ro.x * dirRayo.z - ro.z * dirRayo.x) / max(length(dirRayo.xz), 1e-4);
       float grosorPx = 2.0 * semiEspesor(max(bPlano, RADIOS_HUSO[1])) / max(length(pHit - ro) * uAnguloPixel, 1e-6);
       if (deCanto * (1.0 - smoothstep(7.0, 13.0, grosorPx)) > 0.5) objeto = 2.0;
-      // Los anillos de fuera, pintados suaves, también sin tinta (con ella eran rayas oscuras).
+      // Los anillos de fuera, pintados suaves, también sin tinta (con ella eran rayas oscuras), y
+      // algo transparentes (ver la cobertura, más abajo).
       if (length(pHit.xz) > R_EXTERIOR) objeto = 2.0;
     } else {
       color = CANTO_INTERIOR;
       objeto = 3.0;
     }
     cobertura = 1.0;
+    if (abs(superficieHit) < 1.5 && length(pHit.xz) > R_EXTERIOR) {
+      int k = max(anilloFuera(length(pHit.xz)), 0);
+      cobertura = ANILLOS_COBERTURA[k];
+    }
   } else if (escapo && dot(ro, v0) < 0.0) {
     // El hueco entre la sombra y el borde interior del disco (rayos que pasan a menos de R_INTERIOR
     // del centro, por dentro del disco, y escapan): oscuro, como en la versión realista, con el anillo

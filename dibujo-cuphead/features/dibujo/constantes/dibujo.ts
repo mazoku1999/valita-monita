@@ -82,4 +82,4 @@ export const VIA_LACTEA = { normal: [0.565, -0.813, -0.131] as const, anchura: 0
  * el cielo (`bandaPintada` en `CIELO_FRAG`): entre estos radios, con espesor gaussiano
  * σ = espesorBase + espesorPendiente·r y densidad de superficie ∝ (radioMinimo/r)².
  */
-export const BANDA_POLVO = { radioMinimo: 15.5, radioMaximo: 100, espesorBase: 0.06, espesorPendiente: 0.006 } as const
+export const BANDA_POLVO = { radioMinimo: 16.3, radioMaximo: 100, espesorBase: 0.06, espesorPendiente: 0.006 } as const
