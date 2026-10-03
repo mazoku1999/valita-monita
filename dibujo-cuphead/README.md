@@ -347,7 +347,17 @@ flores como las de un ramo (gerberas, rosas, lirios, clavelinas, bocas de dragó
   altura de los ojos) y más altos hacia fuera, con un sendero de tierra entre ellos y el ribete de
   gipsófila blanca y rosa pálido; alrededor, los campos cercanos son sobre todo girasoles y flores
   (los verdes, más lejos). De cerca, bajo los girasoles, tierra entre las hileras; por detrás, se
-  ven su cáliz verde claro y sus pétalos.
+  ven su cáliz verde claro y sus pétalos. Desde el paso 53 miran hacia el corazón (mirando al
+  este, desde dentro sólo se les veía la espalda: un muro de discos verdes), algo más espaciados y
+  de alturas variadas.
+- **Los girasoles, de cerca** (paso 53, `girasol()` en `shaders/flores.ts`; el usuario: "se ven
+  mal"): dos coronas de 21 pétalos llenos y de punta suave (la de atrás anaranjada, la de delante
+  dorada, más clara en la punta, cada pétalo algo distinto), un centro castaño con las semillas en
+  dos familias de espirales que se cruzan (21 y 34) y un aro de florecillas doradas; de lejos, el
+  centro más pequeño y claro. Casi sin la sombra lila (quedaban pardos). Nunca de canto: si se los
+  ve muy de lado, la cara gira lo justo hacia quien mira (eran palitos oscuros); vale también para
+  gerberas y lirios. Sus hojas, corazones de punta afilada y borde apenas dentado, con nervios en V,
+  que cuelgan del tallo (eran rombos planos, como avioncitos de papel).
 - **El suelo del macizo**: verde en sombra con hojarasca menuda de poco contraste; cada planta lleva
   sólo sus hojas (la gerbera en roseta a ras del suelo, el lirio largas por el tallo, la rosa
   pequeñas), con el contorno verde oscuro. Las flores cubren todo el corazón (unas 18.000, más
@@ -448,7 +458,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
 `dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`,
-`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`, `dibujo-v0.50-fondo-desde-el-10`, `dibujo-v0.51-zoom-ios-y-calidad`, `dibujo-v0.52-audios-livianos`.
+`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`, `dibujo-v0.50-fondo-desde-el-10`, `dibujo-v0.51-zoom-ios-y-calidad`, `dibujo-v0.52-audios-livianos`, `dibujo-v0.53-girasoles`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

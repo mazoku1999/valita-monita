@@ -99,6 +99,16 @@ void main() {
     vec3 normal = vec3(sin(rumbo) * cos(inclinacion), sin(inclinacion), -cos(rumbo) * cos(inclinacion));
     normal.xz += empuje * 0.8;
     normal = normalize(normal);
+    // Nunca de canto: si se la ve muy de lado, la cara se gira lo justo hacia quien mira (de canto,
+    // los girasoles eran palitos oscuros), sin dejar de mirar hacia su lado.
+    vec3 haciaCamara = normalize(uCamara - centro);
+    float frente = dot(normal, haciaCamara);
+    const float MINIMO = 0.42;
+    if (abs(frente) < MINIMO) {
+      vec3 deLado = normal - frente * haciaCamara;
+      float largoLado = length(deLado);
+      if (largoLado > 1e-4) normal = deLado / largoLado * sqrt(1.0 - MINIMO * MINIMO) + haciaCamara * (frente < 0.0 ? -MINIMO : MINIMO);
+    }
     ejeX = normalize(cross(vec3(0.0, 1.0, 0.0), normal));
     ejeY = cross(normal, ejeX);
     vDorso = step(dot(normal, uCamara - centro), 0.0);
@@ -184,35 +194,68 @@ float corona(vec2 p, float n, float r0, float r1, float ancho, float giro, out f
   return max(d, max(r0 - r, r - r1));
 }
 
+// Pétalos de girasol: n pétalos llenos, de punta suave, entre r0 y r1; cada uno algo más largo o
+// más corto y un poco ladeado, como en los de verdad. En 'lado', la posición a lo ancho (-1..1) y en
+// 'largo', a lo largo (0..1).
+float petalosGirasol(vec2 p, float n, float r0, float r1, float ancho, float giro, out float lado, out float largo) {
+  float r = length(p);
+  float angulo = atan(p.y, p.x) - giro;
+  float sector = 2.0 * PI / n;
+  float k = floor(angulo / sector + 0.5);
+  float delta = angulo - k * sector;
+  float azar = hash21(vec2(k + 7.0 * giro, vVariante * 37.0));
+  float fin = r1 * (0.9 + 0.13 * azar);
+  largo = clamp((r - r0) / (fin - r0), 0.0, 1.0);
+  // Ancho: crece rápido desde la base, es máximo antes de la mitad y se cierra en una punta suave.
+  float semiancho = ancho * pow(sin(PI * clamp(largo * 0.94 + 0.04, 0.0, 1.0)), 0.5) * (1.0 - 0.28 * largo);
+  float a = delta * r - (azar - 0.5) * 0.09 * largo;
+  lado = a / max(semiancho, 1e-4);
+  return max(abs(a) - semiancho, max(r0 - r, r - fin));
+}
+
 vec4 girasol(vec2 p) {
   vec4 lienzo = vec4(0.0);
   float lado;
   float largo;
+  float r = length(p);
+  // La luz de la mañana sobre la flor: más claro del lado del Sol.
+  float alSol = dot(p, normalize(vSolEnFlor + vec2(0.0, 0.3))) / max(r, 1e-3);
   if (vDorso > 0.5) {
-    // Por detrás: los pétalos amarillos asomando, el cáliz verde claro con sus sépalos en punta y el
-    // arranque del tallo; con tinta fina (oscuro y entintado, un girasolar de espaldas era un montón
-    // de manchas negras).
-    float d1 = corona(p, 18.0, 0.3, 0.98, 0.2, 0.0, lado, largo);
-    capaConLinea(lienzo, d1, mix(vec3(0.95, 0.72, 0.2), vec3(0.99, 0.84, 0.34), largo), vec3(0.72, 0.5, 0.12), 0.8);
-    float dSepalos = corona(p, 14.0, 0.2, 0.66, 0.19, 0.1, lado, largo);
-    vec3 caliz = mix(vec3(0.42, 0.6, 0.26), vec3(0.56, 0.72, 0.34), smoothstep(-0.5, 0.6, dot(p, normalize(vSolEnFlor + 1e-4))));
-    capaConLinea(lienzo, min(dSepalos, length(p) - 0.44), caliz, vec3(0.28, 0.42, 0.16), 0.8);
-    capaConLinea(lienzo, length(p) - 0.1, vec3(0.36, 0.52, 0.22), vec3(0.28, 0.42, 0.16), 0.6);
+    // Por detrás: las puntas de los pétalos asomando, las brácteas verdes en punta y el dorso del
+    // disco, abombado (más oscuro al centro), con el arranque del tallo.
+    float d1 = petalosGirasol(p, 21.0, 0.3, 0.97, 0.11, 0.0, lado, largo);
+    capaConLinea(lienzo, d1, mix(vec3(0.93, 0.62, 0.14), vec3(0.99, 0.82, 0.3), largo), vec3(0.62, 0.38, 0.08), 0.8);
+    float dBracteas = petalosGirasol(p, 16.0, 0.2, 0.64, 0.14, 0.1, lado, largo);
+    vec3 caliz = mix(vec3(0.3, 0.46, 0.18), vec3(0.48, 0.68, 0.28), smoothstep(0.05, 0.5, r));
+    caliz *= 0.92 + 0.12 * alSol;
+    capaConLinea(lienzo, min(dBracteas, r - 0.43), caliz, vec3(0.2, 0.32, 0.12), 0.8);
+    capaConLinea(lienzo, r - 0.09, vec3(0.34, 0.5, 0.2), vec3(0.2, 0.32, 0.12), 0.6);
     return lienzo;
   }
-  float d1 = corona(p, 18.0, 0.28, 1.0, 0.2, 0.0, lado, largo);
-  capa(lienzo, d1, mix(vec3(0.95, 0.66, 0.1), vec3(0.99, 0.76, 0.16), largo), 1.2);
-  float d2 = corona(p, 18.0, 0.28, 0.9, 0.18, PI / 18.0, lado, largo);
-  vec3 petalo = mix(vec3(1.0, 0.8, 0.2), vec3(1.0, 0.9, 0.42), largo);
-  petalo = mix(petalo, petalo * 0.88, smoothstep(0.3, 1.0, abs(lado)));
-  capaConLinea(lienzo, d2, petalo, vec3(0.78, 0.5, 0.08), 1.0);
-  // Centro: pardo con un aro más claro y las semillas.
-  float r = length(p);
-  vec3 centro = mix(vec3(0.36, 0.2, 0.09), vec3(0.54, 0.33, 0.12), smoothstep(0.2, 0.32, r));
-  vec2 celda = floor(p * 16.0);
-  float semilla = 1.0 - smoothstep(0.2, 0.34, length(fract(p * 16.0) - 0.5 + 0.2 * (vec2(hash21(celda), hash21(celda + 3.1)) - 0.5)));
-  centro = mix(centro, vec3(0.58, 0.38, 0.16), semilla * 0.55 * vDetalle * (1.0 - smoothstep(0.26, 0.34, r)));
-  capa(lienzo, r - 0.33, centro, 1.4);
+  // Dos coronas de pétalos: la de atrás, más anaranjada; la de delante, dorada, más clara en la punta.
+  float d1 = petalosGirasol(p, 21.0, 0.3, 1.0, 0.115, 0.0, lado, largo);
+  vec3 atras = mix(vec3(0.98, 0.62, 0.1), vec3(1.0, 0.8, 0.2), smoothstep(0.0, 0.8, largo));
+  capaConLinea(lienzo, d1, atras * (0.94 + 0.08 * alSol), vec3(0.6, 0.32, 0.05), 1.1);
+  float d2 = petalosGirasol(p, 21.0, 0.3, 0.9, 0.105, PI / 21.0, lado, largo);
+  vec3 petalo = mix(vec3(1.0, 0.72, 0.12), vec3(1.0, 0.87, 0.24), smoothstep(0.0, 0.45, largo));
+  petalo = mix(petalo, vec3(1.0, 0.94, 0.56), smoothstep(0.6, 1.0, largo));
+  // El pliegue del medio, apenas más oscuro, y los bordes en sombra.
+  petalo *= 1.0 - 0.07 * (1.0 - smoothstep(0.0, 0.3, abs(lado))) * vDetalle - 0.1 * smoothstep(0.5, 1.0, abs(lado));
+  capaConLinea(lienzo, d2, petalo * (0.94 + 0.08 * alSol), vec3(0.72, 0.42, 0.06), 1.0);
+  // El centro: castaño muy oscuro en el medio y más claro hacia fuera, con las semillas en dos
+  // familias de espirales que se cruzan (21 y 34, como en los de verdad) y, en el borde, un aro de
+  // florecillas doradas. De lejos, más pequeño y más claro (si no, eran agujeros oscuros).
+  float radio = mix(0.28, 0.34, vDetalle);
+  vec3 centro = mix(vec3(0.27, 0.15, 0.06), vec3(0.52, 0.31, 0.11), smoothstep(0.04, radio, r));
+  centro = mix(vec3(0.56, 0.36, 0.13), centro, 0.35 + 0.65 * vDetalle);
+  float lr = log(max(r, 1e-3));
+  float a = atan(p.y, p.x);
+  float semillas = smoothstep(0.25, 0.85, sin(21.0 * a + 24.0 * lr) * sin(34.0 * a - 24.0 * lr));
+  centro = mix(centro, vec3(0.6, 0.4, 0.15), semillas * 0.45 * vDetalle * smoothstep(0.05, 0.12, r));
+  float aro = smoothstep(radio - 0.09, radio - 0.04, r);
+  centro = mix(centro, vec3(0.96, 0.66, 0.16), aro * 0.9);
+  centro *= 0.94 + 0.1 * alSol;
+  capaConLinea(lienzo, r - radio, centro, vec3(0.16, 0.09, 0.04), 1.3);
   return lienzo;
 }
 
@@ -714,6 +757,8 @@ void main() {
   // del lado del Sol.
   float sombra = vTipo < 2.5 ? 1.0 - smoothstep(-0.05, 0.12, vLuz) : 0.0;
   if (vDorso > 0.5) sombra = max(sombra, 0.2);
+  // Los girasoles, sólo un poco: en sombra lila quedaban pardos (los del corazón miran hacia él, no al Sol).
+  if (vTipo < 0.5) sombra *= 0.3;
   vec3 color = mix(flor.rgb, flor.rgb * vec3(0.72, 0.68, 0.86), sombra);
   if (vTipo > 2.5) color *= 0.9 + 0.14 * smoothstep(-0.6, 0.6, dot(p, normalize(vSolEnFlor + 1e-4)));
   // De lejos, cada flor se funde un poco con el tono de su macizo (las oscuras parecían tierra).
@@ -832,7 +877,7 @@ void main() {
   vForma = aForma.z;
   // La de girasol sale del tallo hacia su rumbo, algo caída; las del ramo suben junto a las flores
   // (tumbadas parecían nenúfares).
-  float subida = aForma.z < 0.5 ? -0.4 * sin(inclinacion) : sin(inclinacion);
+  float subida = aForma.z < 0.5 ? -0.95 * sin(inclinacion) : sin(inclinacion);
   vec3 hacia = normalize(vec3(sin(rumbo) * cos(inclinacion), subida, -cos(rumbo) * cos(inclinacion)));
   vec3 lado = normalize(cross(vec3(0.0, 1.0, 0.0), hacia));
   vec3 normal = normalize(cross(hacia, lado));
@@ -865,8 +910,11 @@ void main() {
   // sus nervios paralelos, como las que envuelven el ramo.
   vec2 p = vLocal;
   float t = clamp((p.y + 1.0) * 0.5, 0.0, 1.0);
-  float ancho = vForma < 0.5 ? 0.95 * sin(3.14159 * t) * (1.0 - 0.3 * t) : vForma < 1.5 ? 0.92 * sqrt(max(1.0 - p.y * p.y, 0.0)) : vForma < 2.5 ? 0.95 * pow(sin(3.14159 * t), 0.6) : 0.95 * pow(sin(3.14159 * pow(t, 0.8)), 0.9);
+  // La de girasol: ancha en la base (con la muesca del corazón junto al tallo), la punta afilada y el
+  // borde apenas dentado.
+  float ancho = vForma < 0.5 ? 0.97 * pow(sin(3.14159 * pow(t, 0.7)), 0.75) * (1.0 - 0.15 * t) * (1.0 - 0.035 * abs(sin(t * 46.0))) : vForma < 1.5 ? 0.92 * sqrt(max(1.0 - p.y * p.y, 0.0)) : vForma < 2.5 ? 0.95 * pow(sin(3.14159 * t), 0.6) : 0.95 * pow(sin(3.14159 * pow(t, 0.8)), 0.9);
   float d = abs(p.x) - ancho;
+  if (vForma < 0.5) d = max(d, 0.1 - t - abs(p.x) * 0.9);
   float w = max(fwidth(d), 1e-4);
   if (d > w) discard;
   vec3 claro = vForma < 0.5 ? vec3(0.5, 0.72, 0.28) : vForma < 1.5 ? vec3(0.54, 0.68, 0.62) : vForma < 2.5 ? vec3(0.46, 0.68, 0.28) : vec3(0.34, 0.58, 0.3);
@@ -877,6 +925,11 @@ void main() {
     // Nervios paralelos y el brillo de la hoja (un lado más claro, como encerado).
     verde = mix(verde, verde * 0.86, (1.0 - smoothstep(0.08, 0.2, abs(fract(x * 3.5) - 0.5))) * vDetalle * 0.7);
     verde = mix(verde, mix(verde, vec3(0.8, 0.9, 0.7), 0.5), smoothstep(0.2, 0.5, x) * (1.0 - smoothstep(0.5, 0.8, x)) * step(0.0, p.x) * 0.5);
+  }
+  if (vForma < 0.5) {
+    // Los nervios que salen del central hacia el borde, en V.
+    float nervio = 1.0 - smoothstep(0.06, 0.14, abs(fract(t * 5.0 - abs(p.x) * 1.3) - 0.5));
+    verde = mix(verde, verde * 0.84, nervio * smoothstep(0.08, 0.2, abs(p.x)) * vDetalle * 0.7);
   }
   verde = mix(verde, vec3(0.62, 0.78, 0.36), (1.0 - smoothstep(0.02, 0.06, abs(p.x))) * step(p.y, 0.8) * vDetalle);
   // El contorno, verde oscuro (a tinta negra, el suelo era un enredo de líneas): las hojas quedan

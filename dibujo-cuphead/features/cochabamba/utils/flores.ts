@@ -178,9 +178,12 @@ export function generarFlores(semilla = 20260929): DatosFlores {
     tallos.push([x, 0, z, altura, GROSOR_TALLO[tipo], tipo, semilla])
   }
 
-  /** Un girasol mirando al este (al Sol de la mañana) con algo de desorden; cerca de la cámara final, con sus hojas grandes. */
-  const girasol = (px: number, pz: number, altura: number): void => {
-    planta(px, pz, altura, 0.15 + 0.06 * azar(), TIPO_FLOR.girasol, 95 + (azar() - 0.5) * 30, 15 + 20 * azar())
+  /**
+   * Un girasol mirando al este (al Sol de la mañana) o hacia `rumbo` (grados), con algo de desorden;
+   * cerca de la cámara final, con sus hojas grandes.
+   */
+  const girasol = (px: number, pz: number, altura: number, rumbo = 95): void => {
+    planta(px, pz, altura, 0.15 + 0.06 * azar(), TIPO_FLOR.girasol, rumbo + (azar() - 0.5) * 30, 12 + 20 * azar())
     if (Math.hypot(px - FINAL[0], pz - FINAL[2]) < 60) {
       for (let h = 0; h < 3; h += 1) {
         hojas.push([px, altura * (0.3 + 0.2 * h + 0.06 * azar()), pz, 0.2 + 0.12 * azar(), 360 * azar() * RADIANES, (20 + 30 * azar()) * RADIANES, FORMA_HOJA.girasol, altura])
@@ -249,19 +252,23 @@ export function generarFlores(semilla = 20260929): DatosFlores {
   }
   // El girasolar que rodea el corazón (era un prado verde): hileras a lo largo del eje del valle,
   // como las que pinta el suelo, hasta el sendero de tierra. Junto al corazón, bajos (a la altura de
-  // los ojos de quien pasea, que ve sus caras y no un muro de tallos) y cada vez más altos.
+  // los ojos de quien pasea, que ve sus caras y no un muro de tallos) y cada vez más altos. Miran
+  // hacia el corazón (mirando al este, desde dentro sólo se les veía la espalda).
   {
     const [ejeX, ejeZ] = [Math.cos(CAMPOS.eje), Math.sin(CAMPOS.eje)]
-    for (let v = -60; v <= 60; v += CAMPO.entreHileras) {
-      for (let u = -60; u <= 60; u += CAMPO.entrePlantas) {
+    // Algo más espaciados que en los campos y de alturas variadas: tan juntos, eran un muro.
+    const entreHileras = CAMPO.entreHileras * 1.15
+    const entrePlantas = CAMPO.entrePlantas * 1.3
+    for (let v = -60; v <= 60; v += entreHileras) {
+      for (let u = -60; u <= 60; u += entrePlantas) {
         const x0 = ejeX * u - ejeZ * v
         const z0 = ejeZ * u + ejeX * v
         if (!enGirasolar(x0, z0)) continue
-        const px = x0 + (azar() - 0.5) * 0.2
-        const pz = z0 + (azar() - 0.5) * 0.16
-        if (!enGirasolar(px, pz) || azar() < 0.04) continue
+        const px = x0 + (azar() - 0.5) * 0.3
+        const pz = z0 + (azar() - 0.5) * 0.24
+        if (!enGirasolar(px, pz) || azar() < 0.06) continue
         const alejado = distanciaCorazon(px, pz) - SENDERO
-        girasol(px, pz, Math.min(1.85, 0.8 + 0.11 * alejado) + 0.2 * (azar() - 0.5))
+        girasol(px, pz, Math.min(1.85, 0.8 + 0.11 * alejado) + 0.36 * (azar() - 0.5), Math.atan2(-px, pz) / RADIANES)
       }
     }
   }
