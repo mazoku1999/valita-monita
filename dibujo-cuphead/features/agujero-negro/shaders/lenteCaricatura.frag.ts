@@ -5,23 +5,26 @@
  * versión realista y se ven sus imágenes por encima y por debajo de la sombra.
  *
  * Lo que cambia es lo que se dibuja:
- * - El disco es un sólido de caricatura (como un disco de vinilo con grosor): cara de arriba, cara
- *   de abajo y cantos. El rayo se detiene en la primera superficie que toca (cortando cada tramo
+ * - El disco es un sólido de caricatura con forma de lente fina: algo más grueso cerca del agujero y
+ *   afilado hacia fuera, hasta acabar en filo (era una losa que engordaba hacia fuera y acababa en
+ *   un canto recto: de lado, una barra con los extremos cuadrados). Cara de arriba, cara de abajo y
+ *   el canto interior. El rayo se detiene en la primera superficie que toca (cortando cada tramo
  *   recto de la geodésica con el sólido de forma exacta), no acumula gas: formas limpias que se
  *   pueden entintar.
  * - Colores planos por bandas (crema caliente, amarillo, naranja dorado, naranja, rojo) con un
  *   degradado de aerógrafo dentro de cada banda, y arcos de movimiento que giran con cada banda
- *   (unos más oscuros, otros de brillo), como las líneas de velocidad de los dibujos animados.
- * - Canto exterior granate, canto interior blanco caliente, anillo de fotones grueso (al menos
- *   unos píxeles a cualquier distancia) y la sombra como una mancha de tinta.
- * - El disco "late" con el ritmo del dibujo (su grosor sube y baja con cada compás).
+ *   (unos más oscuros, otros de brillo), como las líneas de velocidad de los dibujos animados. Las
+ *   sombras (la cara de abajo, los arcos) son cálidas, hacia el dorado y el rojo, nunca oliva.
+ * - De canto, el disco es una hoja dorada que brilla por dentro (crema en su línea media), como el
+ *   gas visto de lado; al inclinar la vista vuelve a sus bandas.
+ * - Canto interior blanco caliente, anillo de fotones grueso (al menos unos píxeles a cualquier
+ *   distancia) y la sombra como una mancha de tinta. El disco no late (su grosor latía con el compás).
  *
  * Además de color escribe, en una segunda salida, qué hay en cada píxel (objeto, banda y cara)
  * para que el pase de dibujo trace contornos limpios entre objetos y líneas de color entre bandas.
  */
 export const LENTE_CARICATURA_FRAG = /* glsl */ `
 uniform float uTiempo;
-uniform float uLatido;
 uniform mat4 uProyInversa;
 uniform mat4 uCamaraMundo;
 uniform mat4 uVistaProyeccion;
@@ -32,7 +35,7 @@ uniform vec2 uObservador;
 
 in vec2 vUv;
 layout(location = 0) out vec4 fragColor;
-// R: objeto (0 cielo, 1 cara del disco, 2 canto exterior, 3 canto interior, 4 anillo, 5 sombra) / 5
+// R: objeto (0 cielo, 1 cara del disco, 3 canto interior, 4 anillo, 5 sombra) / 5
 // G: banda del disco / 5; B: cara (0 abajo, 1 arriba).
 layout(location = 1) out vec4 fragId;
 
@@ -54,19 +57,33 @@ const vec3 BANDAS[5] = vec3[](
   vec3(0.945, 0.450, 0.185),
   vec3(0.840, 0.245, 0.175)
 );
-const vec3 CANTO_EXTERIOR = vec3(0.560, 0.145, 0.190);
 const vec3 CANTO_INTERIOR = vec3(1.000, 0.975, 0.900);
 const vec3 COLOR_ANILLO = vec3(1.000, 0.965, 0.850);
 const vec3 COLOR_SOMBRA = vec3(0.065, 0.045, 0.085);
 const vec3 BORDE_SOMBRA = vec3(0.170, 0.090, 0.230);
+// Sombras cálidas: oscurecer el amarillo multiplicando por un gris lo volvía oliva (verdoso); así
+// va hacia el dorado y el naranja, como las sombras de los dibujos de la época.
+const vec3 SOMBRA_CALIDA = vec3(0.95, 0.8, 0.62);
+const vec3 AEROGRAFO_CALIDO = vec3(0.96, 0.87, 0.84);
+const vec3 ARCO_CALIDO = vec3(0.78, 0.6, 0.56);
 
-// Semiespesor del disco: crece en línea con el radio, h(r) = ESPESOR_BASE + ESPESOR_PENDIENTE·r
-// (0.16 en el borde interior), y late con el compás.
-const float ESPESOR_BASE = 0.16 - 0.028 * R_INTERIOR;
-const float ESPESOR_PENDIENTE = 0.028;
+// Semiespesor del disco, un huso: sube despacio del borde interior a la cumbre, baja apenas por el
+// medio y se afila al final hasta acabar en punta (de canto, una lente larga con las puntas finas,
+// no una barra). Tres tramos, cada uno un cono (h = base + pendiente·r), entre estos radios y alturas.
+const int TRAMOS = 3;
+const float RADIOS_HUSO[4] = float[](3.0, 5.5, 9.4, 11.0);
+const float ALTOS_HUSO[4] = float[](0.15, 0.29, 0.19, 0.0);
+const float H_CUMBRE = 0.29;
+
+float pendienteTramo(int k) {
+  return (ALTOS_HUSO[k + 1] - ALTOS_HUSO[k]) / (RADIOS_HUSO[k + 1] - RADIOS_HUSO[k]);
+}
 
 float semiEspesor(float r) {
-  return (ESPESOR_BASE + ESPESOR_PENDIENTE * r) * (1.0 + 0.12 * uLatido);
+  for (int k = 0; k < TRAMOS; k++) {
+    if (r <= RADIOS_HUSO[k + 1]) return max(ALTOS_HUSO[k] + pendienteTramo(k) * (r - RADIOS_HUSO[k]), 0.0);
+  }
+  return 0.0;
 }
 
 bool enDisco(vec3 p) {
@@ -84,46 +101,48 @@ vec2 raices(float a, float b, float c) {
   return vec2(min(t1, t2), max(t1, t2));
 }
 
-// Primer punto del tramo recto p → p + d (t de 0 a 1) sobre el disco: caras cónicas y cantos
-// cilíndricos, cortados de forma exacta. Muestrear el tramo se saltaba las esquinas finas del borde
-// interior y el contorno salía en dientes de sierra. Devuelve 2 si no lo toca; en superficie, cuál
-// toca: 1 cara de arriba, -1 cara de abajo, 2 canto exterior, 3 canto interior.
+// Primer punto del tramo recto p → p + d (t de 0 a 1) sobre el disco: caras cónicas (un cono por
+// tramo del huso y por lado) y el canto interior cilíndrico,
+// cortados de forma exacta. Muestrear el tramo se saltaba las esquinas finas del borde interior y el
+// contorno salía en dientes de sierra. Devuelve 2 si no lo toca; en superficie, cuál toca: 1 cara de
+// arriba, -1 cara de abajo, 3 canto interior.
 float cortaDisco(vec3 p, vec3 d, out float superficie) {
-  float escala = 1.0 + 0.12 * uLatido;
-  float base = ESPESOR_BASE * escala;
-  float pendiente = ESPESOR_PENDIENTE * escala;
-  float k2 = pendiente * pendiente;
   float qq = dot(p.xz, p.xz);
   float qe = dot(p.xz, d.xz);
   float ee = dot(d.xz, d.xz);
   float mejor = 2.0;
   superficie = 0.0;
-  // Caras: con w = ±y − base, la cara es w = pendiente·r (w ≥ 0), o sea w² = k²·r².
-  for (int i = 0; i < 2; i++) {
-    float lado = i == 0 ? 1.0 : -1.0;
-    float w0 = lado * p.y - base;
-    float dw = lado * d.y;
-    vec2 t = raices(dw * dw - k2 * ee, w0 * dw - k2 * qe, w0 * w0 - k2 * qq);
-    for (int j = 0; j < 2; j++) {
-      float tj = t[j];
-      if (tj < 0.0 || tj >= mejor || w0 + tj * dw < 0.0) continue;
-      float r = sqrt(max(qq + tj * (2.0 * qe + tj * ee), 0.0));
-      if (r < R_INTERIOR || r > R_EXTERIOR) continue;
-      mejor = tj;
-      superficie = lado;
+  // Caras: con w = ±y − base, cada cono es w = pendiente·r (w con el signo de la pendiente), o sea
+  // w² = k²·r².
+  for (int pieza = 0; pieza < TRAMOS; pieza++) {
+    float pendiente = pendienteTramo(pieza);
+    float base = ALTOS_HUSO[pieza] - pendiente * RADIOS_HUSO[pieza];
+    float rMinimo = RADIOS_HUSO[pieza];
+    float rMaximo = RADIOS_HUSO[pieza + 1];
+    float k2 = pendiente * pendiente;
+    for (int i = 0; i < 2; i++) {
+      float lado = i == 0 ? 1.0 : -1.0;
+      float w0 = lado * p.y - base;
+      float dw = lado * d.y;
+      vec2 t = raices(dw * dw - k2 * ee, w0 * dw - k2 * qe, w0 * w0 - k2 * qq);
+      for (int j = 0; j < 2; j++) {
+        float tj = t[j];
+        if (tj < 0.0 || tj >= mejor || (w0 + tj * dw) * pendiente < 0.0) continue;
+        float r = sqrt(max(qq + tj * (2.0 * qe + tj * ee), 0.0));
+        if (r < rMinimo || r > rMaximo) continue;
+        mejor = tj;
+        superficie = lado;
+      }
     }
   }
-  // Cantos: r = R con |y| dentro del espesor.
-  for (int i = 0; i < 2; i++) {
-    float radio = i == 0 ? R_EXTERIOR : R_INTERIOR;
-    float h = base + pendiente * radio;
-    vec2 t = raices(ee, qe, qq - radio * radio);
-    for (int j = 0; j < 2; j++) {
-      float tj = t[j];
-      if (tj < 0.0 || tj >= mejor || abs(p.y + tj * d.y) > h) continue;
-      mejor = tj;
-      superficie = i == 0 ? 2.0 : 3.0;
-    }
+  // El canto interior: r = R_INTERIOR con |y| dentro del espesor.
+  float h = semiEspesor(R_INTERIOR);
+  vec2 t = raices(ee, qe, qq - R_INTERIOR * R_INTERIOR);
+  for (int j = 0; j < 2; j++) {
+    float tj = t[j];
+    if (tj < 0.0 || tj >= mejor || abs(p.y + tj * d.y) > h) continue;
+    mejor = tj;
+    superficie = 3.0;
   }
   return mejor;
 }
@@ -144,16 +163,22 @@ float tira(float x, float w) {
   return 1.0 - smoothstep(w - aa, w + aa, abs(x));
 }
 
-// Cara del disco: banda, aerógrafo y arcos de movimiento que giran con la banda.
-vec3 colorCara(vec3 p, float lado, out float banda) {
+// Cara del disco: banda, aerógrafo y arcos de movimiento que giran con la banda. De canto (deCanto
+// 1), el huso es una hoja que brilla por dentro, como el gas visto de lado: el color sale de la
+// altura del punto (la línea media de la hoja toca la punta, crema; sus bordes, la cumbre, dorado y
+// naranja). Al inclinar la vista se pasa de una a otra recorriendo la paleta, no mezclando colores
+// (el rojo con el crema daba un salmón).
+vec3 colorCara(vec3 p, float lado, float deCanto, out float banda) {
   float r = length(p.xz);
-  float t = clamp((r - R_INTERIOR) / (R_EXTERIOR - R_INTERIOR), 0.0, 0.9999);
+  float tCara = (r - R_INTERIOR) / (R_EXTERIOR - R_INTERIOR);
+  float tHoja = 0.75 * abs(p.y) / H_CUMBRE;
+  float t = clamp(mix(tCara, tHoja, deCanto), 0.0, 0.9999);
   float s = t * 5.0;
   banda = floor(s);
   float f = s - banda;
   vec3 base = BANDAS[int(banda)];
   // Aerógrafo: cada banda más clara hacia su lado interior.
-  base *= mix(1.08, 0.9, f);
+  base = mix(base * 1.08, base * AEROGRAFO_CALIDO, f);
   // Arcos de movimiento: cada banda gira a su ritmo (más deprisa por dentro); dos pistas de arcos.
   float angulo = atan(p.z, p.x);
   float velocidad = 0.75 * pow(R_INTERIOR / max(r, R_INTERIOR), 1.2);
@@ -164,10 +189,10 @@ vec3 colorCara(vec3 p, float lado, out float banda) {
   float fase2 = fract(giro * 2.0 + banda * 0.61 + 0.5);
   float arco1 = smoothstep(0.0, 0.03, fase1) * (1.0 - smoothstep(0.25, 0.3, fase1));
   float arco2 = smoothstep(0.0, 0.03, fase2) * (1.0 - smoothstep(0.18, 0.22, fase2));
-  base = mix(base, base * 0.66, pista1 * arco1);
+  base = mix(base, base * ARCO_CALIDO, pista1 * arco1);
   base = mix(base, mix(base, vec3(1.0, 0.99, 0.95), 0.65), pista2 * arco2);
-  // La cara de abajo, algo más oscura.
-  if (lado < 0.0) base *= 0.84;
+  // La cara de abajo, en sombra.
+  if (lado < 0.0) base *= SOMBRA_CALIDA;
   return base;
 }
 
@@ -204,6 +229,7 @@ void main() {
   bool pasoPerigeo = false;
   bool hitAntesDelPerigeo = false;
   vec3 pHit = vec3(0.0);
+  vec3 vHit = v0;
   float superficieHit = 0.0;
 
   if (otroLado) {
@@ -222,7 +248,7 @@ void main() {
       hitAntesDelPerigeo = true;
       superficieHit = p.y >= 0.0 ? 1.0 : -1.0;
     }
-    float hMaximo = semiEspesor(R_EXTERIOR);
+    float hMaximo = H_CUMBRE;
     for (int i = 0; i < MAX_PASOS && !hayHit; i++) {
       float r = length(p);
       if (r < R_HORIZONTE && dot(p, v) < 0.0) {
@@ -256,6 +282,7 @@ void main() {
         float t = cortaDisco(p, tramo, superficie);
         if (t <= 1.0) {
           pHit = p + t * tramo;
+          vHit = v;
           superficieHit = superficie;
           hayHit = true;
           hitAntesDelPerigeo = !pasoPerigeo;
@@ -286,17 +313,16 @@ void main() {
   } else if (hayHit) {
     if (abs(superficieHit) < 1.5) {
       cara = superficieHit;
-      color = colorCara(pHit, cara, banda);
+      // De canto (la cámara a menos de 1° del plano; a los 5° ya se ven las bandas), la hoja que
+      // brilla (ver colorCara): sin ella, los rayos de su línea media tocan la punta, el rojo de
+      // fuera, y era una aguja roja. Sólo lo que se ve de frente (rayos que apenas se doblaron): las
+      // imágenes que rodean la sombra conservan sus bandas. Con lo que se dobla el rayo y no con si
+      // pasó ya por su perigeo, que a los lados del disco cambia de golpe y dejaba una costura.
+      float elevacion = abs(uPosCamara.y) / max(length(uPosCamara), 1e-3);
+      float directo = smoothstep(0.939, 0.99, dot(normalize(vHit), dirRayo));
+      float deCanto = (1.0 - smoothstep(0.012, 0.09, elevacion)) * directo;
+      color = colorCara(pHit, cara, deCanto, banda);
       objeto = 1.0;
-    } else if (superficieHit < 2.5) {
-      // Canto exterior: el gas visto de canto brilla (como el haz del original): crema caliente en
-      // el centro, amarillo y naranja hacia las caras, y un filo granate.
-      float altura = abs(pHit.y) / semiEspesor(R_EXTERIOR);
-      color = mix(BANDAS[0], BANDAS[1], smoothstep(0.1, 0.45, altura));
-      color = mix(color, BANDAS[3], smoothstep(0.45, 0.8, altura));
-      color = mix(color, CANTO_EXTERIOR, smoothstep(0.82, 1.0, altura));
-      objeto = 2.0;
-      banda = 5.0;
     } else {
       color = CANTO_INTERIOR;
       objeto = 3.0;

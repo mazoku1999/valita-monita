@@ -21,8 +21,14 @@ esta carpeta en `next.config.mjs`). El proyecto original lo excluye de su `tscon
 El agujero negro se dibuja en caricatura desde el propio trazado de rayos
 (`features/agujero-negro/shaders/lenteCaricatura.frag.ts`): cada píxel sigue su geodésica de
 Schwarzschild como en el original, pero el disco es un sólido de dibujo animado (caras con bandas
-de color planas y arcos de movimiento, cantos con brillo, anillo de fotones grueso, sombra de
-tinta) y el shader escribe, además del color, qué objeto hay en cada píxel.
+de color planas y arcos de movimiento, canto interior con brillo, anillo de fotones grueso, sombra
+de tinta) y el shader escribe, además del color, qué objeto hay en cada píxel. Tiene forma de huso:
+algo más grueso cerca del agujero y afilado hasta acabar en filo (era una losa que engordaba hacia
+fuera y acababa en un canto recto; el usuario la vio "cuadrada al final" y "con grosor"). De canto
+es una hoja dorada que brilla por dentro, crema en su línea media; al inclinar la vista vuelve a
+sus bandas recorriendo la paleta (mezclar el rojo con el crema daba un salmón). Las sombras (la
+cara de abajo, los arcos) van hacia el dorado y el rojo: multiplicar el amarillo por un gris lo
+volvía oliva.
 
 El agujero de gusano (`features/agujero-negro/shaders/agujeroGusanoCaricatura.ts`) conserva su
 trazado por píxel, pero se dibuja como una espiral hipnótica de los años 30: bandas planas que
@@ -56,8 +62,8 @@ El dibujo es un pase al final del posproceso (`features/agujero-negro/components
   mientras la cámara y el scroll van a 60 por segundo parejos; si el aparato no llega, baja por
   escalones (`ESCALONES`): primero la resolución del dibujo y, al final, 30 por segundo, también
   parejos. Los fotogramas que no toca dibujar no calculan nada. Y el compás (112
-  pulsaciones por minuto): con él late el disco del agujero y se mecen las estrellas; el sistema
-  solar va sin latidos.
+  pulsaciones por minuto): con él laten un poco los rayos de sol detrás del agujero y se mecen las
+  estrellas; el disco ya no late (su grosor respiraba) y el sistema solar va sin latidos.
 - La película antigua lleva también el iris de la época: se cierra sobre la sombra al cruzar el
   horizonte y se abre sobre el remolino (tramos en `constantes/viajeScroll.ts`).
 - `utils/destellos.ts`: estrellas del cielo (puntos, destellos de cuatro puntas y estrellas de
@@ -458,7 +464,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
 `dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`,
-`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`, `dibujo-v0.50-fondo-desde-el-10`, `dibujo-v0.51-zoom-ios-y-calidad`, `dibujo-v0.52-audios-livianos`, `dibujo-v0.53-girasoles`.
+`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`, `dibujo-v0.50-fondo-desde-el-10`, `dibujo-v0.51-zoom-ios-y-calidad`, `dibujo-v0.52-audios-livianos`, `dibujo-v0.53-girasoles`, `dibujo-v0.54-agujero-mas-bonito`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

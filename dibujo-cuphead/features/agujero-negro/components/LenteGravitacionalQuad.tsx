@@ -3,7 +3,7 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
-import { latido, tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
+import { tocaDibujar } from '@/features/dibujo/store/ritmoDibujo'
 import { obtenerProgreso } from '@/features/narrativa/store/progresoScrollStore'
 import { LENTE_CARICATURA_FRAG } from '../shaders/lenteCaricatura.frag'
 import { LENTE_GRAVITACIONAL_VERT } from '../shaders/lenteGravitacional.vert'
@@ -19,7 +19,6 @@ type UniformesLente = {
   uPosCamara: THREE.IUniform<THREE.Vector3>
   uAnguloPixel: THREE.IUniform<number>
   uObservador: THREE.IUniform<THREE.Vector2>
-  uLatido: THREE.IUniform<number>
 }
 
 /**
@@ -40,7 +39,6 @@ export function LenteGravitacionalQuad() {
       uPosCamara: { value: new THREE.Vector3() },
       uAnguloPixel: { value: 0.001 },
       uObservador: { value: new THREE.Vector2(1, 0) },
-      uLatido: { value: 0 },
     }
     const geometria = new THREE.PlaneGeometry(2, 2)
     const materialLente = new THREE.ShaderMaterial({
@@ -123,7 +121,6 @@ export function LenteGravitacionalQuad() {
     // En la caída el disco se ve girar más deprisa (la luz llega comprimida en el tiempo).
     const gReferencia = observador.caida > 0 ? gBordeSombra(observador, distancia) : 1
     uniformes.uTiempo.value = tiempoVisto(clock.getElapsedTime(), gReferencia)
-    uniformes.uLatido.value = latido(clock.getElapsedTime())
     const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : 40
     uniformes.uAnguloPixel.value = THREE.MathUtils.degToRad(fov) / Math.max(size.height, 1)
     // Dentro del horizonte el agujero ya no es una superficie delante de la cámara (todo se
