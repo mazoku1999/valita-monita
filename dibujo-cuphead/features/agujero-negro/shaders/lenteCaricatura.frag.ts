@@ -14,8 +14,9 @@
  * - Colores planos por siete bandas (del crema blanco caliente al carmesí) con un degradado de
  *   aerógrafo dentro de cada banda, bordes que ondulan en un remolino de dos brazos que gira, y
  *   rayas de velocidad afiladas que giran con cada banda (unas más oscuras, otras de brillo), como
- *   en los dibujos animados. Más allá del borde, dos anillos finos carmesí y ciruela. Las sombras (la
- *   cara de abajo, los arcos) son cálidas, hacia el dorado y el rojo, nunca oliva.
+ *   en los dibujos animados, y tres bolas de fuego con su cola que dan la vuelta al agujero. Más
+ *   allá del borde, dos anillos finos rosados. Las sombras (la cara de abajo, los arcos) son
+ *   cálidas, hacia el dorado y el rojo, nunca oliva.
  * - De canto, el disco es una hoja dorada que brilla por dentro (crema en su línea media), como el
  *   gas visto de lado; al inclinar la vista vuelve a sus bandas.
  * - Canto interior blanco caliente, anillo de fotones grueso (al menos unos píxeles a cualquier
@@ -70,9 +71,22 @@ const vec3 BANDAS[9] = vec3[](
 // Remolino: ondas espirales de dos brazos que ondulan los bordes de las bandas y giran como un todo
 // (el patrón no se enrosca con los minutos): amplitud (en bandas) junto al borde de dentro y junto
 // al de fuera (cerca de la sombra, más ondas hacían orejas), enroscado y giro (rad/s).
-const vec2 REMOLINO_AMPLITUD = vec2(0.12, 0.42);
+const vec2 REMOLINO_AMPLITUD = vec2(0.2, 0.6);
 const float REMOLINO_ENROSCADO = 3.2;
-const float REMOLINO_GIRO = 0.35;
+const float REMOLINO_GIRO = 0.6;
+// Giro del gas (rad/s junto al borde de dentro; hacia fuera, más despacio): las rayas de velocidad.
+const float GIRO_GAS = 1.7;
+// Bolas de fuego: tres grumos de gas muy caliente que dan la vuelta al agujero (más deprisa los de
+// dentro) con su cola detrás, como cometas de dibujo animado. Radio de la órbita, fase, giro
+// (rad/s a R_INTERIOR), radio de la cabeza y largo de la cola.
+const vec3 BOLAS_RADIO = vec3(4.2, 5.6, 7.4);
+const vec3 BOLAS_FASE = vec3(0.0, 2.2, 4.3);
+const float BOLAS_GIRO = 2.6;
+const float BOLA_CABEZA = 0.42;
+const float BOLA_COLA = 3.6;
+const vec3 BOLA_BORDE = vec3(1.000, 0.520, 0.150);
+const vec3 BOLA_MEDIO = vec3(1.000, 0.860, 0.350);
+const vec3 BOLA_CENTRO = vec3(1.000, 0.990, 0.930);
 // El hueco entre la sombra y el borde interior del disco, oscuro (junto a la sombra y hacia el disco).
 const vec3 HUECO_DENTRO = vec3(0.060, 0.042, 0.095);
 const vec3 HUECO_FUERA = vec3(0.150, 0.085, 0.230);
@@ -226,7 +240,7 @@ vec3 colorCara(vec3 p, float lado, float deCanto, out float banda) {
   base = mix(base * 1.08, base * AEROGRAFO_CALIDO, f);
   // Rayas de velocidad: cada banda gira a su ritmo (más deprisa por dentro); dos pistas, unas más
   // oscuras y otras de brillo, afiladas en las puntas como pinceladas.
-  float velocidad = 0.75 * pow(R_INTERIOR / max(r, R_INTERIOR), 1.2);
+  float velocidad = GIRO_GAS * pow(R_INTERIOR / max(r, R_INTERIOR), 1.2);
   float giro = angulo / DOS_PI - velocidad * uTiempo / DOS_PI;
   float fase1 = fract(giro * 3.0 + banda * 0.37) / 0.42;
   float fase2 = fract(giro * 3.0 + banda * 0.61 + 0.5) / 0.32;
@@ -235,6 +249,27 @@ vec3 colorCara(vec3 p, float lado, float deCanto, out float banda) {
   // (En las bandas claras de dentro, las oscuras apenas: parecían semillas.)
   base = mix(base, base * ARCO_CALIDO, raya1 * smoothstep(0.5, 2.5, banda));
   base = mix(base, mix(base, vec3(1.0, 0.99, 0.95), 0.7), raya2);
+  // Bolas de fuego (ver BOLAS_*): cabeza redonda y cola que se afina hacia atrás; centro blanco,
+  // amarillo y borde naranja, y la banda 10, para que lleven su línea de color alrededor. El borde se
+  // suaviza con el tamaño de un píxel en el mundo (con fwidth, el ángulo salta en ±π y dejaba una raya).
+  float pixelMundo = max(uAnguloPixel * length(p - uPosCamara), 1e-4);
+  for (int k = 0; k < 3; k++) {
+    float rk = BOLAS_RADIO[k];
+    float giroBola = BOLAS_GIRO * pow(R_INTERIOR / rk, 1.5);
+    float dAng = mod(angulo - BOLAS_FASE[k] - giroBola * uTiempo + PI, DOS_PI) - PI;
+    vec2 q = vec2(dAng * rk, r - rk);
+    float u = clamp(-q.x / BOLA_COLA, 0.0, 1.0);
+    float radioLocal = q.x >= 0.0 ? BOLA_CABEZA : BOLA_CABEZA * (1.0 - u);
+    float d = q.x >= 0.0 ? length(q) - BOLA_CABEZA : (q.x > -BOLA_COLA ? abs(q.y) - radioLocal : 1e3);
+    d = min(d, length(q) - BOLA_CABEZA);
+    float cubre = 1.0 - smoothstep(-pixelMundo, pixelMundo, d);
+    if (cubre <= 0.0) continue;
+    float calor = clamp(-d / max(radioLocal, 1e-3), 0.0, 1.0) * (1.0 - 0.75 * u);
+    vec3 bola = mix(BOLA_BORDE, BOLA_MEDIO, smoothstep(0.08, 0.4, calor));
+    bola = mix(bola, BOLA_CENTRO, smoothstep(0.45, 0.8, calor));
+    base = mix(base, bola, cubre);
+    if (cubre > 0.5) banda = 10.0;
+  }
   // La cara de abajo, en sombra.
   if (lado < 0.0) base *= SOMBRA_CALIDA;
   return base;
@@ -392,7 +427,7 @@ void main() {
     float bRayo = sqrt(h2Rayo / max(dot(v0, v0) - h2Rayo / (r0 * r0 * r0), 1e-4));
     if (perigeo(bRayo) < R_INTERIOR) {
       color = mix(HUECO_DENTRO, HUECO_FUERA, smoothstep(B_CRITICO, 3.67, bRayo));
-      cobertura = smoothstep(4.5, 7.0, r0);
+      cobertura = smoothstep(3.2, 4.5, r0);
     }
   }
 
@@ -409,11 +444,11 @@ void main() {
     vec3 e1 = normalize(cross(haciaAgujero, abs(haciaAgujero.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
     vec3 e2 = cross(e1, haciaAgujero);
     float anguloAnillo = atan(dot(dirRayo, e2), dot(dirRayo, e1));
-    float destello = pow(0.5 + 0.5 * cos(anguloAnillo - 0.8 * uTiempo), 8.0);
-    float ancho = max(0.07, 3.2 * uAnguloPixel * r0) * (1.0 + 0.8 * destello);
+    float destello = pow(0.5 + 0.5 * cos(2.0 * (anguloAnillo - 0.9 * uTiempo)), 10.0);
+    float ancho = max(0.07, 3.2 * uAnguloPixel * r0) * (1.0 + 1.3 * destello);
     float exceso = bRayo - B_CRITICO;
     if (perigeoDelante && exceso >= 0.0 && exceso < ancho) {
-      color = mix(COLOR_ANILLO, vec3(1.0), 0.7 * destello);
+      color = mix(COLOR_ANILLO, vec3(1.0), 0.85 * destello);
       objeto = 4.0;
       cobertura = 1.0;
     }

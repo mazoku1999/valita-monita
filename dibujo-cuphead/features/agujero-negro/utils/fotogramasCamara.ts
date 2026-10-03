@@ -9,12 +9,13 @@ export type FotogramaCamara = {
 export type EstadoCamara = Omit<FotogramaCamara, 'progreso'>
 
 /**
- * Recorrido de cámara ligado al scroll para la vista DE CANTO. Las referencias están tomadas casi
- * de canto, con la cámara apenas 0.45°–0.7° por encima del plano del gas: el disco es una línea
- * fina que atraviesa la sombra (con más elevación su superficie se proyecta en una banda que el
- * bloom engorda). Las filas de arcos de escombros no vienen de la elevación sino de la
- * perspectiva: la cámara está dentro del sistema de anillos (r ≈ 35–42 de 60), y los anillos que
- * pasan cerca se abren en pantalla mientras el gas lejano sigue siendo una línea. El viaje
+ * Recorrido de cámara ligado al scroll para la vista DE CANTO. En el original, calibrado con las
+ * referencias del usuario, la cámara iba apenas 0.45°–0.7° por encima del plano del gas: el disco
+ * era una línea fina que atravesaba la sombra. En el dibujo va unos 5° por encima (paso 57): de
+ * canto, lo que se veía era una hoja dorada y el anillo de la lente, y el usuario veía "casi lo
+ * mismo" por mucho que cambiara el disco; así se ve la cara del disco con sus bandas, su remolino,
+ * sus bolas de fuego y sus anillos de fuera cruzando por delante de la sombra, y el arco de la lente
+ * por encima (como Gargantua). La hoja de canto sigue a mano con el cursor o arrastrando. El viaje
  * conserva ese ángulo y sólo varía el azimut y la distancia.
  *
  * El ángulo polar se mide desde la normal del disco (π/2 = de canto). La distancia mínima se
@@ -28,14 +29,14 @@ export type EstadoCamara = Omit<FotogramaCamara, 'progreso'>
  * cambiar de vista a mitad de scroll no gire el agujero de golpe.
  */
 export const FOTOGRAMAS_CAMARA: readonly FotogramaCamara[] = [
-  { progreso: 0.0, azimut: 0.05, polar: 1.563, distancia: 42, fov: 40 },
-  { progreso: 0.15, azimut: -0.3, polar: 1.5625, distancia: 41, fov: 40 },
-  { progreso: 0.3, azimut: -0.7, polar: 1.5615, distancia: 39, fov: 41 },
-  { progreso: 0.45, azimut: -1.2, polar: 1.56, distancia: 37, fov: 42 },
-  { progreso: 0.6, azimut: -1.8, polar: 1.5586, distancia: 35, fov: 43 },
-  { progreso: 0.75, azimut: -2.4, polar: 1.56, distancia: 37, fov: 42 },
-  { progreso: 0.88, azimut: -2.9, polar: 1.562, distancia: 40, fov: 41 },
-  { progreso: 1.0, azimut: -3.3, polar: 1.563, distancia: 42, fov: 40 },
+  { progreso: 0.0, azimut: 0.05, polar: 1.49, distancia: 42, fov: 40 },
+  { progreso: 0.15, azimut: -0.3, polar: 1.48, distancia: 41, fov: 40 },
+  { progreso: 0.3, azimut: -0.7, polar: 1.47, distancia: 39, fov: 41 },
+  { progreso: 0.45, azimut: -1.2, polar: 1.47, distancia: 37, fov: 42 },
+  { progreso: 0.6, azimut: -1.8, polar: 1.47, distancia: 35, fov: 43 },
+  { progreso: 0.75, azimut: -2.4, polar: 1.47, distancia: 37, fov: 42 },
+  { progreso: 0.88, azimut: -2.9, polar: 1.48, distancia: 40, fov: 41 },
+  { progreso: 1.0, azimut: -3.3, polar: 1.49, distancia: 42, fov: 40 },
 ]
 
 const suavizar = (t: number): number => t * t * (3 - 2 * t)

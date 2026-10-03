@@ -43,6 +43,14 @@ del fondo y parecía un engranaje): la sombra es una pupila con el anillo de fot
 el anillo da la vuelta despacio un destello. La banda de polvo empieza ahora en 15.5 y los rayos de
 sol se miden con el disco nuevo.
 
+Paso 57 (el usuario lo veía "casi lo mismo"): en el viaje el agujero se veía casi de canto (0.45°,
+el ángulo de las referencias del original), así que de todo lo anterior apenas se notaba la hoja.
+Ahora la cámara del acercamiento va unos 5° por encima del plano (`FOTOGRAMAS_CAMARA`): la cara
+del disco con sus bandas, su remolino y sus anillos cruza por delante de la sombra y el arco de la
+lente pasa por encima, como Gargantua. Además, tres bolas de fuego (centro blanco, amarillo y borde
+naranja, con su cola y su línea de color) dan la vuelta al agujero, más deprisa las de dentro; el
+gas y el remolino giran más rápido y el destello del anillo de fotones se ve más.
+
 El cielo estrellado (paso 55; el usuario lo quería tan bonito como el de la versión realista,
 "ajustado al estilo Cuphead"): miles de estrellitas pintadas sin contorno de tinta (con tinta, los
 puntos pequeños parecían cuentas de un collar), las más claras como destellos de cuatro puntas; una
@@ -491,7 +499,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
 `dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`,
-`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`, `dibujo-v0.50-fondo-desde-el-10`, `dibujo-v0.51-zoom-ios-y-calidad`, `dibujo-v0.52-audios-livianos`, `dibujo-v0.53-girasoles`, `dibujo-v0.54-agujero-mas-bonito`, `dibujo-v0.55-cielo-estrellado`, `dibujo-v0.56-agujero-espectacular`.
+`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`, `dibujo-v0.50-fondo-desde-el-10`, `dibujo-v0.51-zoom-ios-y-calidad`, `dibujo-v0.52-audios-livianos`, `dibujo-v0.53-girasoles`, `dibujo-v0.54-agujero-mas-bonito`, `dibujo-v0.55-cielo-estrellado`, `dibujo-v0.56-agujero-espectacular`, `dibujo-v0.57-gargantua`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).
