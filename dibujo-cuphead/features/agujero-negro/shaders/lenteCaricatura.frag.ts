@@ -11,14 +11,16 @@
  *   el canto interior. El rayo se detiene en la primera superficie que toca (cortando cada tramo
  *   recto de la geodésica con el sólido de forma exacta), no acumula gas: formas limpias que se
  *   pueden entintar.
- * - Colores planos por bandas (crema caliente, amarillo, naranja dorado, naranja, rojo) con un
- *   degradado de aerógrafo dentro de cada banda, y arcos de movimiento que giran con cada banda
- *   (unos más oscuros, otros de brillo), como las líneas de velocidad de los dibujos animados. Las
- *   sombras (la cara de abajo, los arcos) son cálidas, hacia el dorado y el rojo, nunca oliva.
+ * - Colores planos por siete bandas (del crema blanco caliente al carmesí) con un degradado de
+ *   aerógrafo dentro de cada banda, bordes que ondulan en un remolino de dos brazos que gira, y
+ *   rayas de velocidad afiladas que giran con cada banda (unas más oscuras, otras de brillo), como
+ *   en los dibujos animados. Más allá del borde, dos anillos finos carmesí y ciruela. Las sombras (la
+ *   cara de abajo, los arcos) son cálidas, hacia el dorado y el rojo, nunca oliva.
  * - De canto, el disco es una hoja dorada que brilla por dentro (crema en su línea media), como el
  *   gas visto de lado; al inclinar la vista vuelve a sus bandas.
  * - Canto interior blanco caliente, anillo de fotones grueso (al menos unos píxeles a cualquier
- *   distancia) y la sombra como una mancha de tinta. El disco no late (su grosor latía con el compás).
+ *   distancia) sobre un hueco oscuro entre la sombra y el disco, y la sombra como una mancha de
+ *   tinta. El disco no late (su grosor latía con el compás).
  *
  * Además de color escribe, en una segunda salida, qué hay en cada píxel (objeto, banda y cara)
  * para que el pase de dibujo trace contornos limpios entre objetos y líneas de color entre bandas.
@@ -36,7 +38,7 @@ uniform vec2 uObservador;
 in vec2 vUv;
 layout(location = 0) out vec4 fragColor;
 // R: objeto (0 cielo, 1 cara del disco, 2 hoja fina de canto, 3 canto interior, 4 anillo, 5 sombra) / 5
-// G: banda del disco / 5; B: cara (0 abajo, 1 arriba).
+// G: banda del disco / 10; B: cara (0 abajo, 1 arriba).
 layout(location = 1) out vec4 fragId;
 
 const float R_HORIZONTE = 1.0;
@@ -44,19 +46,36 @@ const float R_FOTON = 1.5;
 const float B_CRITICO = 2.5980762;
 const float R_BORDE = 17.0;
 const float R_INTERIOR = 3.0;
-const float R_EXTERIOR = 11.0;
+// Borde del disco; más allá, dos anillos planos y finos (ANILLOS_FUERA: desde y hasta de cada uno).
+const float R_EXTERIOR = 12.6;
+const vec4 ANILLOS_FUERA = vec4(13.05, 13.6, 14.0, 14.35);
 const int MAX_PASOS = 260;
 const float PI = 3.14159265359;
 const float DOS_PI = 6.28318530718;
 
-// Paleta (sRGB): se pasa a lineal al final.
-const vec3 BANDAS[5] = vec3[](
-  vec3(1.000, 0.955, 0.830),
-  vec3(1.000, 0.830, 0.270),
+// Paleta (sRGB): se pasa a lineal al final. Siete bandas, del crema blanco caliente del borde de
+// dentro al carmesí del de fuera (que casa con el cielo morado), y los dos anillos finos.
+const int N_BANDAS = 7;
+const vec3 BANDAS[9] = vec3[](
+  vec3(1.000, 0.965, 0.880),
+  vec3(1.000, 0.895, 0.560),
+  vec3(1.000, 0.800, 0.260),
   vec3(1.000, 0.640, 0.180),
-  vec3(0.945, 0.450, 0.185),
-  vec3(0.840, 0.245, 0.175)
+  vec3(0.960, 0.470, 0.170),
+  vec3(0.880, 0.300, 0.170),
+  vec3(0.730, 0.170, 0.200),
+  vec3(0.920, 0.430, 0.420),
+  vec3(0.840, 0.470, 0.580)
 );
+// Remolino: ondas espirales de dos brazos que ondulan los bordes de las bandas y giran como un todo
+// (el patrón no se enrosca con los minutos): amplitud (en bandas) junto al borde de dentro y junto
+// al de fuera (cerca de la sombra, más ondas hacían orejas), enroscado y giro (rad/s).
+const vec2 REMOLINO_AMPLITUD = vec2(0.12, 0.42);
+const float REMOLINO_ENROSCADO = 3.2;
+const float REMOLINO_GIRO = 0.35;
+// El hueco entre la sombra y el borde interior del disco, oscuro (junto a la sombra y hacia el disco).
+const vec3 HUECO_DENTRO = vec3(0.060, 0.042, 0.095);
+const vec3 HUECO_FUERA = vec3(0.150, 0.085, 0.230);
 const vec3 CANTO_INTERIOR = vec3(1.000, 0.975, 0.900);
 const vec3 COLOR_ANILLO = vec3(1.000, 0.965, 0.850);
 const vec3 COLOR_SOMBRA = vec3(0.065, 0.045, 0.085);
@@ -69,11 +88,13 @@ const vec3 ARCO_CALIDO = vec3(0.78, 0.6, 0.56);
 
 // Semiespesor del disco, un huso: sube despacio del borde interior a la cumbre, baja apenas por el
 // medio y se afila al final hasta acabar en punta (de canto, una lente larga con las puntas finas,
-// no una barra). Tres tramos, cada uno un cono (h = base + pendiente·r), entre estos radios y alturas.
+// no una barra). Tres tramos, cada uno un cono (h = base + pendiente·r), entre estos radios y
+// alturas. Los anillos de fuera son planos (sin grosor: un corte del disco a mitad dejaba entrar los
+// rayos rasantes por el borde y la hoja salía con una franja negra por dentro).
 const int TRAMOS = 3;
-const float RADIOS_HUSO[4] = float[](3.0, 5.5, 9.4, 11.0);
-const float ALTOS_HUSO[4] = float[](0.15, 0.29, 0.19, 0.0);
-const float H_CUMBRE = 0.29;
+const float RADIOS_HUSO[4] = float[](3.0, 6.0, 10.6, 12.6);
+const float ALTOS_HUSO[4] = float[](0.15, 0.30, 0.20, 0.0);
+const float H_CUMBRE = 0.30;
 
 float pendienteTramo(int k) {
   return (ALTOS_HUSO[k + 1] - ALTOS_HUSO[k]) / (RADIOS_HUSO[k + 1] - RADIOS_HUSO[k]);
@@ -91,6 +112,10 @@ bool enDisco(vec3 p) {
   return r >= R_INTERIOR && r <= R_EXTERIOR && abs(p.y) <= semiEspesor(r);
 }
 
+bool enAnillosFuera(float r) {
+  return (r >= ANILLOS_FUERA.x && r <= ANILLOS_FUERA.y) || (r >= ANILLOS_FUERA.z && r <= ANILLOS_FUERA.w);
+}
+
 // Raíces de a·t² + 2·b·t + c = 0 (forma estable); -1 donde no hay raíz.
 vec2 raices(float a, float b, float c) {
   float disc = b * b - a * c;
@@ -102,7 +127,7 @@ vec2 raices(float a, float b, float c) {
 }
 
 // Primer punto del tramo recto p → p + d (t de 0 a 1) sobre el disco: caras cónicas (un cono por
-// tramo del huso y por lado) y el canto interior cilíndrico,
+// tramo del huso y por lado), el canto interior cilíndrico y los anillos planos de fuera,
 // cortados de forma exacta. Muestrear el tramo se saltaba las esquinas finas del borde interior y el
 // contorno salía en dientes de sierra. Devuelve 2 si no lo toca; en superficie, cuál toca: 1 cara de
 // arriba, -1 cara de abajo, 3 canto interior.
@@ -144,6 +169,14 @@ float cortaDisco(vec3 p, vec3 d, out float superficie) {
     mejor = tj;
     superficie = 3.0;
   }
+  // Los anillos de fuera, en el plano.
+  if (abs(d.y) > 1e-7) {
+    float tp = -p.y / d.y;
+    if (tp >= 0.0 && tp < mejor && enAnillosFuera(length(p.xz + tp * d.xz))) {
+      mejor = tp;
+      superficie = d.y < 0.0 ? 1.0 : -1.0;
+    }
+  }
   return mejor;
 }
 
@@ -163,34 +196,45 @@ float tira(float x, float w) {
   return 1.0 - smoothstep(w - aa, w + aa, abs(x));
 }
 
-// Cara del disco: banda, aerógrafo y arcos de movimiento que giran con la banda. De canto (deCanto
-// 1), el huso es una hoja que brilla por dentro, como el gas visto de lado: el color sale de la
-// altura del punto (la línea media de la hoja toca la punta, crema; sus bordes, la cumbre, dorado y
-// naranja). Al inclinar la vista se pasa de una a otra recorriendo la paleta, no mezclando colores
-// (el rojo con el crema daba un salmón).
+// Cara del disco: banda, aerógrafo y arcos de movimiento que giran con la banda. Los bordes de las
+// bandas ondulan con el remolino (ver REMOLINO_*). De canto (deCanto 1), el huso es una hoja que
+// brilla por dentro, como el gas visto de lado: el color sale de la altura del punto (la línea media
+// de la hoja toca la punta, crema; sus bordes, la cumbre, dorado y naranja). Al inclinar la vista se
+// pasa de una a otra recorriendo la paleta, no mezclando colores (el rojo con el crema daba un
+// salmón). Los anillos de fuera llevan sus dos colores.
 vec3 colorCara(vec3 p, float lado, float deCanto, out float banda) {
   float r = length(p.xz);
-  float tCara = (r - R_INTERIOR) / (R_EXTERIOR - R_INTERIOR);
-  float tHoja = 0.75 * abs(p.y) / H_CUMBRE;
-  float t = clamp(mix(tCara, tHoja, deCanto), 0.0, 0.9999);
-  float s = t * 5.0;
+  float angulo = atan(p.z, p.x);
+  float sCara;
+  if (r <= R_EXTERIOR) {
+    float tCara = (r - R_INTERIOR) / (R_EXTERIOR - R_INTERIOR);
+    float brazo = 2.0 * (angulo - REMOLINO_GIRO * uTiempo) + REMOLINO_ENROSCADO * log(r / R_INTERIOR);
+    float amplitud = mix(REMOLINO_AMPLITUD.x, REMOLINO_AMPLITUD.y, tCara);
+    sCara = clamp(tCara * float(N_BANDAS) + amplitud * sin(brazo), 0.0, float(N_BANDAS) - 0.001);
+  } else if (r < ANILLOS_FUERA.z) {
+    sCara = float(N_BANDAS) + clamp((r - ANILLOS_FUERA.x) / (ANILLOS_FUERA.y - ANILLOS_FUERA.x), 0.0, 0.999);
+  } else {
+    sCara = float(N_BANDAS) + 1.0 + clamp((r - ANILLOS_FUERA.z) / (ANILLOS_FUERA.w - ANILLOS_FUERA.z), 0.0, 0.999);
+  }
+  // (Cuatro tonos en la hoja, del crema al dorado: con más, la hoja de cerca era una vara a rayas.)
+  float sHoja = 0.55 * float(N_BANDAS) * abs(p.y) / H_CUMBRE;
+  float s = clamp(mix(sCara, sHoja, deCanto), 0.0, float(N_BANDAS) + 1.999);
   banda = floor(s);
   float f = s - banda;
   vec3 base = BANDAS[int(banda)];
   // Aerógrafo: cada banda más clara hacia su lado interior.
   base = mix(base * 1.08, base * AEROGRAFO_CALIDO, f);
-  // Arcos de movimiento: cada banda gira a su ritmo (más deprisa por dentro); dos pistas de arcos.
-  float angulo = atan(p.z, p.x);
+  // Rayas de velocidad: cada banda gira a su ritmo (más deprisa por dentro); dos pistas, unas más
+  // oscuras y otras de brillo, afiladas en las puntas como pinceladas.
   float velocidad = 0.75 * pow(R_INTERIOR / max(r, R_INTERIOR), 1.2);
   float giro = angulo / DOS_PI - velocidad * uTiempo / DOS_PI;
-  float pista1 = tira(f - 0.34, 0.07);
-  float pista2 = tira(f - 0.72, 0.055);
-  float fase1 = fract(giro * 3.0 + banda * 0.37);
-  float fase2 = fract(giro * 2.0 + banda * 0.61 + 0.5);
-  float arco1 = smoothstep(0.0, 0.03, fase1) * (1.0 - smoothstep(0.25, 0.3, fase1));
-  float arco2 = smoothstep(0.0, 0.03, fase2) * (1.0 - smoothstep(0.18, 0.22, fase2));
-  base = mix(base, base * ARCO_CALIDO, pista1 * arco1);
-  base = mix(base, mix(base, vec3(1.0, 0.99, 0.95), 0.65), pista2 * arco2);
+  float fase1 = fract(giro * 3.0 + banda * 0.37) / 0.42;
+  float fase2 = fract(giro * 3.0 + banda * 0.61 + 0.5) / 0.32;
+  float raya1 = fase1 < 1.0 ? tira(f - 0.36, 0.06 * sin(PI * fase1)) : 0.0;
+  float raya2 = fase2 < 1.0 ? tira(f - 0.72, 0.06 * sin(PI * fase2)) : 0.0;
+  // (En las bandas claras de dentro, las oscuras apenas: parecían semillas.)
+  base = mix(base, base * ARCO_CALIDO, raya1 * smoothstep(0.5, 2.5, banda));
+  base = mix(base, mix(base, vec3(1.0, 0.99, 0.95), 0.7), raya2);
   // La cara de abajo, en sombra.
   if (lado < 0.0) base *= SOMBRA_CALIDA;
   return base;
@@ -331,11 +375,25 @@ void main() {
       float bPlano = abs(ro.x * dirRayo.z - ro.z * dirRayo.x) / max(length(dirRayo.xz), 1e-4);
       float grosorPx = 2.0 * semiEspesor(max(bPlano, RADIOS_HUSO[1])) / max(length(pHit - ro) * uAnguloPixel, 1e-6);
       if (deCanto * (1.0 - smoothstep(7.0, 13.0, grosorPx)) > 0.5) objeto = 2.0;
+      // Los anillos de fuera, pintados suaves, también sin tinta (con ella eran rayas oscuras).
+      if (length(pHit.xz) > R_EXTERIOR) objeto = 2.0;
     } else {
       color = CANTO_INTERIOR;
       objeto = 3.0;
     }
     cobertura = 1.0;
+  } else if (escapo && dot(ro, v0) < 0.0) {
+    // El hueco entre la sombra y el borde interior del disco (rayos que pasan a menos de R_INTERIOR
+    // del centro, por dentro del disco, y escapan): oscuro, como en la versión realista, con el anillo
+    // de fotones brillando encima. Por él se veían los rayos de sol del fondo y parecía un engranaje.
+    // De cerca, en la caída, como antes (dentro del disco todos los rayos pasarían por ahí).
+    vec3 hRayo = cross(ro, v0);
+    float h2Rayo = dot(hRayo, hRayo);
+    float bRayo = sqrt(h2Rayo / max(dot(v0, v0) - h2Rayo / (r0 * r0 * r0), 1e-4));
+    if (perigeo(bRayo) < R_INTERIOR) {
+      color = mix(HUECO_DENTRO, HUECO_FUERA, smoothstep(B_CRITICO, 3.67, bRayo));
+      cobertura = smoothstep(4.5, 7.0, r0);
+    }
   }
 
   // Anillo de fotones: grueso (al menos unos píxeles a cualquier distancia), delante de las
@@ -345,10 +403,17 @@ void main() {
     float h2Rayo = dot(hRayo, hRayo);
     float bRayo = sqrt(h2Rayo / max(dot(v0, v0) - h2Rayo / (r0 * r0 * r0), 1e-4));
     bool perigeoDelante = r0 <= R_FOTON || dot(ro, v0) < 0.0;
-    float ancho = max(0.07, 3.2 * uAnguloPixel * r0);
+    // Un destello que da la vuelta al anillo despacio (más grueso y blanco a su paso), como el brillo
+    // de un anillo de oro: el ángulo del rayo alrededor de la dirección del agujero.
+    vec3 haciaAgujero = -radialCamara;
+    vec3 e1 = normalize(cross(haciaAgujero, abs(haciaAgujero.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 e2 = cross(e1, haciaAgujero);
+    float anguloAnillo = atan(dot(dirRayo, e2), dot(dirRayo, e1));
+    float destello = pow(0.5 + 0.5 * cos(anguloAnillo - 0.8 * uTiempo), 8.0);
+    float ancho = max(0.07, 3.2 * uAnguloPixel * r0) * (1.0 + 0.8 * destello);
     float exceso = bRayo - B_CRITICO;
     if (perigeoDelante && exceso >= 0.0 && exceso < ancho) {
-      color = COLOR_ANILLO;
+      color = mix(COLOR_ANILLO, vec3(1.0), 0.7 * destello);
       objeto = 4.0;
       cobertura = 1.0;
     }
@@ -362,6 +427,6 @@ void main() {
   gl_FragDepth = profundidad;
 
   fragColor = vec4(pow(color, vec3(2.2)), cobertura);
-  fragId = vec4(objeto / 5.0, banda / 5.0, cara * 0.5 + 0.5, 1.0);
+  fragId = vec4(objeto / 5.0, banda / 10.0, cara * 0.5 + 0.5, 1.0);
 }
 `

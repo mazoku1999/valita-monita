@@ -211,8 +211,8 @@ float cieloAbierto(vec2 uv) {
 
 vec3 rayosDeSol(vec2 uv, vec3 cielo) {
   vec2 q = (uv - uAgujero.xy) * vec2(uAspecto, 1.0);
-  // Distancia en radios del disco (el disco mide ~4.2 radios de sombra).
-  float d = length(q) / max(uAgujero.z * 4.2, 1e-4);
+  // Distancia en radios del disco (el disco, con sus anillos, mide ~5.2 radios de sombra).
+  float d = length(q) / max(uAgujero.z * 5.2, 1e-4);
   float angulo = atan(q.y, q.x);
   // Rayos alternos con borde de aerógrafo, que giran despacio y laten con el compás.
   float rayo = smoothstep(-0.25, 0.25, cos(angulo * 16.0 + uTiempo * 0.12));
@@ -362,7 +362,7 @@ float profundidadLineal(float d) {
 float objetoEn(vec2 uv, out float banda) {
   vec2 t = vec2(textureSize(uIdGas, 0));
   vec4 id = texelFetch(uIdGas, ivec2(clamp(uv, 0.0, 0.9999) * t), 0);
-  banda = floor(id.g * 5.0 + 0.5);
+  banda = floor(id.g * 10.0 + 0.5);
   return floor(id.r * 5.0 + 0.5);
 }
 
