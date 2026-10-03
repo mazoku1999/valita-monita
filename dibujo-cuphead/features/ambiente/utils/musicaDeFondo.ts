@@ -36,20 +36,35 @@ function fundir(destino: number, segundos: number): void {
   }
 }
 
+function obtenerMusica(): HTMLAudioElement {
+  if (!musica) {
+    musica = new Audio()
+    musica.loop = true
+    musica.preload = 'auto'
+    musica.src = MUSICA_FONDO.audio
+  }
+  return musica
+}
+
+/**
+ * Empieza a cargarla mientras se ve el diálogo del sonido, para que al presionarlo suene enseguida
+ * (en el iPhone, Safari no carga nada hasta el gesto).
+ */
+export function precargarMusicaDeFondo(): void {
+  obtenerMusica()
+}
+
 /**
  * (En un gesto: el diálogo del sonido.) La deja lista para sonar: en iOS un elemento sólo suena
- * más tarde si ya sonó en un gesto. Empieza a cargarse aquí.
+ * más tarde si ya sonó en un gesto.
  */
 export function desbloquearMusicaDeFondo(): void {
   if (desbloqueada) return
   desbloqueada = true
-  musica = new Audio()
-  musica.loop = true
-  musica.preload = 'auto'
-  musica.src = MUSICA_FONDO.audio
-  ganancia = enlazarAudio(musica)
-  if (!ganancia) musica.volume = 0
-  const audio = musica
+  const elemento = obtenerMusica()
+  ganancia = enlazarAudio(elemento)
+  if (!ganancia) elemento.volume = 0
+  const audio = elemento
   void audio
     .play()
     .then(() => {

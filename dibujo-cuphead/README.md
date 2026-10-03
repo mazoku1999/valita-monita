@@ -165,7 +165,8 @@ nada más; también es el nombre de la app en la pantalla de inicio).
 Donde no suena otra música (el acercamiento al agujero negro y, después de la canción, el sistema
 solar, la Tierra, las nubes, el valle y el paseo, hasta que se abre la carta), una música de fondo
 bajita (paso 49; el usuario la prefirió al sonido ambiente sintetizado del paso 48): una versión
-instrumental que dio el usuario, en bucle (`public/fondo/musica.mp3`, a 96 kbps). Empieza en el
+instrumental que dio el usuario, en bucle (`public/fondo/musica.mp3`, a 80 kbps; empieza a cargarse
+mientras se ve el diálogo del sonido). Empieza en el
 segundo 10 de la pista, la primera vez y cada vez que da la vuelta (paso 50: el archivo empieza ahí,
 con un fundido de un cuarto de segundo, y acaba sin el silencio del final). Va a un 20 % de su volumen (`NIVEL_FONDO`, unos −32 dB, muy
 por debajo de la canción) y pasa por el mismo Web Audio que la canción
@@ -175,6 +176,12 @@ vuelve por donde iba, nunca desde el principio (`components/MusicaDeFondo.tsx`; 
 pausó por si el navegador la reinicia). En el iPhone suena aunque el teléfono esté en
 silencio, y si el sistema pausa el audio (una llamada), el siguiente toque lo reanuda. En
 desarrollo, `window.__fondo()` dice si suena y por qué segundo va.
+
+**El peso de los audios** (paso 52): la canción a 128 kbps (3,2 MB), la música de la carta a 96 kbps
+(2,1 MB) y la de fondo a 80 kbps (2,6 MB): 7,9 MB en vez de 11. La canción, recomprimida desde el
+archivo que dio el usuario, quedó alineada a la muestra con la anterior (la letra sigue a tiempo).
+Se probó servirlos desde Cloudflare R2 y no resultó más rápido que Vercel (los dos desde São Paulo,
+con la misma variación, la de la conexión): se quedan en `public/`.
 
 ## La canción del agujero negro
 
@@ -441,7 +448,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
 `dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`,
-`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`, `dibujo-v0.50-fondo-desde-el-10`, `dibujo-v0.51-zoom-ios-y-calidad`.
+`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`, `dibujo-v0.50-fondo-desde-el-10`, `dibujo-v0.51-zoom-ios-y-calidad`, `dibujo-v0.52-audios-livianos`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

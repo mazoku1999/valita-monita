@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { faseCancion } from '@/features/cancion/store/cancion'
 import { cancionAudible, estadoDelSonido, reanudarAudio } from '@/features/cancion/utils/audio'
 import { faseCarta } from '@/features/cochabamba/store/carta'
-import { ajustarMusicaDeFondo, estadoMusicaDeFondo } from '../utils/musicaDeFondo'
+import { ajustarMusicaDeFondo, estadoMusicaDeFondo, precargarMusicaDeFondo } from '../utils/musicaDeFondo'
 
 /**
  * La música de fondo (ver `utils/musicaDeFondo.ts`) donde no suena otra: desde que se activa el sonido en
@@ -18,12 +18,16 @@ export function MusicaDeFondo() {
       ajustarMusicaDeFondo(!callar)
     }
     const intervalo = window.setInterval(revisar, 250)
+    // Mientras se ve el diálogo del sonido ya se va cargando (un momento después de abrir la página,
+    // para no quitarle ancho de banda a lo primero que hace falta).
+    const precarga = window.setTimeout(precargarMusicaDeFondo, 800)
     // Si el teléfono pausó el audio (una llamada, la pantalla bloqueada), el siguiente gesto lo reanuda.
     const tipos = ['pointerup', 'keydown'] as const
     for (const tipo of tipos) window.addEventListener(tipo, reanudarAudio, { passive: true })
     if (process.env.NODE_ENV === 'development') (window as unknown as { __fondo?: unknown }).__fondo = estadoMusicaDeFondo
     return () => {
       window.clearInterval(intervalo)
+      window.clearTimeout(precarga)
       for (const tipo of tipos) window.removeEventListener(tipo, reanudarAudio)
     }
   }, [])
