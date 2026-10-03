@@ -12,6 +12,8 @@
  *   con aguadas cálidas en tres tonos, cada una con su borde de acuarela.
  */
 
+import { VIA_LACTEA } from '../constantes/dibujo'
+
 /** Paleta de época (sRGB 0–255); se busca el más próximo por tono y croma. */
 export const PALETA_EPOCA: readonly { readonly nombre: string; readonly srgb: readonly [number, number, number] }[] = [
   { nombre: 'noche', srgb: [30, 40, 58] },
@@ -93,14 +95,25 @@ float fbm3(vec3 p) {
 }
 `
 
+const normalVia = (() => {
+  const [x, y, z] = VIA_LACTEA.normal
+  const largo = Math.hypot(x, y, z)
+  return [x / largo, y / largo, z / largo]
+})()
+
 /**
  * Cielo nocturno en acuarela, sobre la dirección de vista en el mundo (necesita RUIDO3_GLSL).
  * Dos aguadas: una base azul noche que varía despacio y manchas verdosas más claras, cada una con
- * el borde oscurecido donde el agua se secó, y el grano del pigmento en las zonas oscuras.
+ * el borde oscurecido donde el agua se secó, y el grano del pigmento en las zonas oscuras. Y la
+ * Vía Láctea: una aguada clara y algo lila a lo largo de un círculo máximo (allí se juntan sus
+ * estrellas, ver `utils/destellos.ts`), con una veta más oscura de polvo.
  */
 export const CIELO_ACUARELA_GLSL = /* glsl */ `
 uniform mat4 uProyInversa;
 uniform mat4 uCamaraMundo;
+
+const vec3 NORMAL_VIA = ${vec3(normalVia)};
+const float ANCHO_VIA = ${VIA_LACTEA.anchura.toFixed(4)};
 
 vec3 direccionMundo(vec2 uv) {
   vec4 ojo = uProyInversa * vec4(uv * 2.0 - 1.0, 1.0, 1.0);
@@ -132,11 +145,19 @@ vec3 cieloAcuarela(vec3 dir) {
   // Manchas claras de la aguada, con la orilla más oscura donde se secó el agua.
   float campo = grande + 0.35 * (medio - 0.5);
   float mancha = aguada(campo, 0.58, 0.012);
-  c = mix(c, claro, 0.28 * mancha);
-  c *= 1.0 - 0.12 * orilla(campo, 0.58, 0.018);
+  // (Más suaves desde que el cielo tiene miles de estrellas: grandes y marcadas parecían manchones.)
+  c = mix(c, claro, 0.16 * mancha);
+  c *= 1.0 - 0.07 * orilla(campo, 0.58, 0.018);
   float mancha2 = aguada(medio + 0.2 * (grande - 0.5), 0.66, 0.012);
-  c = mix(c, mix(claro, bajo, 0.4), 0.22 * mancha2);
-  c *= 1.0 - 0.12 * orilla(medio + 0.2 * (grande - 0.5), 0.66, 0.016);
+  c = mix(c, mix(claro, bajo, 0.4), 0.12 * mancha2);
+  c *= 1.0 - 0.07 * orilla(medio + 0.2 * (grande - 0.5), 0.66, 0.016);
+  // Vía Láctea: irregular, con su orilla, y la veta oscura por dentro.
+  float latitud = dot(dir, NORMAL_VIA) / ANCHO_VIA;
+  float via = exp(-0.5 * latitud * latitud);
+  float campoVia = via * (0.75 + 0.7 * (fbm3(dir * 6.0 + vec3(3.0, -2.0, 6.0)) - 0.5));
+  c = mix(c, mix(claro, vec3(0.66, 0.6, 0.82), 0.45), 0.2 * aguada(campoVia, 0.42, 0.03) + 0.06 * via);
+  c *= 1.0 - 0.08 * orilla(campoVia, 0.42, 0.03);
+  c = mix(c, oscuro, 0.2 * aguada(via * fbm3(dir * 11.0 + 4.0), 0.48, 0.04));
   // Grano del pigmento.
   c *= 0.93 + 0.1 * fino;
   return c;

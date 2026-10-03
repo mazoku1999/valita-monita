@@ -184,6 +184,8 @@ export class PasoDibujo extends Pass {
       uDia: { value: 0 },
       uRotacionValle: { value: VALLE_EN_ESCENA.rotacion },
       uSolValle: { value: VALLE_EN_ESCENA.sol },
+      uPosCamara: { value: new THREE.Vector3() },
+      uBanda: { value: 0 },
       ...this.uCamara,
     })
     this.matContorno = material(CONTORNO_FRAG, {
@@ -237,6 +239,8 @@ export class PasoDibujo extends Pass {
       uPelicula: { value: new THREE.Vector4(PELICULA.grano, PELICULA.polvo, PELICULA.rayas, PELICULA.parpadeo) },
       uPelicula2: { value: new THREE.Vector3(PELICULA.vaiven, PELICULA.vineta, PELICULA.envejecido) },
       uAberracion: { value: PELICULA.aberracion },
+      uCielo: { value: this.cielo.texture },
+      uCieloSinAberracion: { value: 1 },
       uIris: { value: 1 },
     })
     this.matCopia = material(COPIA_FRAG, { uEntrada: { value: null }, uAPantalla: { value: 1 } })
@@ -401,6 +405,9 @@ export class PasoDibujo extends Pass {
     uc.uTiempo.value = this.tiempo
     uc.uLatido.value = this.latido
     uc.uDia.value = VALLE_EN_ESCENA.dia
+    // La banda pintada, como sus destellos: sólo con la cámara fuera del horizonte y el agujero a la vista.
+    if (camara) (uc.uPosCamara.value as THREE.Vector3).copy(camara.position)
+    uc.uBanda.value = camara && uc.uProfundidad.value ? this.bandaVisible * suavizar(0, 1, gasVisible) * uc.uCieloPintado.value : 0
     this.dibujar(renderer, this.matCielo, this.cielo)
 
     // 3. Contornos.
@@ -503,6 +510,8 @@ export class PasoDibujo extends Pass {
     // En el valle, con tantos bordes pequeños (flores), la separación de colores de la lente vieja
     // ensuciaba: se reduce.
     this.matPelicula.uniforms.uAberracion.value = PELICULA.aberracion * (1 - 0.65 * VALLE_EN_ESCENA.dia)
+    // Sobre el cielo abierto, casi sin ella (salvo con el escenario de la canción delante).
+    this.matPelicula.uniforms.uCieloSinAberracion.value = escenario.activo ? 0 : 1
     // En la noche estrellada, menos sepia: los azules y amarillos del cuadro, vivos.
     ;(this.matPelicula.uniforms.uPelicula2.value as THREE.Vector3).z = PELICULA.envejecido * (1 - 0.7 * suavizar(0, 1, VALLE_EN_ESCENA.noche))
     this.dibujar(renderer, this.matPelicula, destino)

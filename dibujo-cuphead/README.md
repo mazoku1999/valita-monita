@@ -28,7 +28,21 @@ fuera y acababa en un canto recto; el usuario la vio "cuadrada al final" y "con 
 es una hoja dorada que brilla por dentro, crema en su línea media; al inclinar la vista vuelve a
 sus bandas recorriendo la paleta (mezclar el rojo con el crema daba un salmón). Las sombras (la
 cara de abajo, los arcos) van hacia el dorado y el rojo: multiplicar el amarillo por un gris lo
-volvía oliva.
+volvía oliva. De lejos, donde la hoja mide menos de unos 10 píxeles, va sin tinta (objeto 2, que el
+pase de dibujo no entinta): su contorno la llenaba de rayitas negras; es un hilo de luz dorado,
+como la línea de luz de la versión realista.
+
+El cielo estrellado (paso 55; el usuario lo quería tan bonito como el de la versión realista,
+"ajustado al estilo Cuphead"): miles de estrellitas pintadas sin contorno de tinta (con tinta, los
+puntos pequeños parecían cuentas de un collar), las más claras como destellos de cuatro puntas; una
+Vía Láctea en aguada clara que cruza en diagonal (allí se juntan más estrellas); la banda de polvo
+como un río de chispas doradas: 7000 granos (más densos cerca del agujero, algunos sueltos por
+encima y por debajo) y la luz de los lejanos pintada en el cielo en aguadas (`bandaPintada` en
+`CIELO_FRAG`, con el mismo reparto que los granos, `BANDA_POLVO`). Los granos que pasan junto a la
+cámara no cuentan para esa luz (se ven sueltos; contándolos, la banda era una franja ancha) y el
+río sólo aparece con la banda de canto (vista desde arriba, su luz salía del disco como un
+cometa). Sobre el cielo abierto la película casi no separa los colores: partía cada estrellita en
+tres puntos de colores.
 
 El agujero de gusano (`features/agujero-negro/shaders/agujeroGusanoCaricatura.ts`) conserva su
 trazado por píxel, pero se dibuja como una espiral hipnótica de los años 30: bandas planas que
@@ -66,9 +80,11 @@ El dibujo es un pase al final del posproceso (`features/agujero-negro/components
   estrellas; el disco ya no late (su grosor respiraba) y el sistema solar va sin latidos.
 - La película antigua lleva también el iris de la época: se cierra sobre la sombra al cruzar el
   horizonte y se abre sobre el remolino (tramos en `constantes/viajeScroll.ts`).
-- `utils/destellos.ts`: estrellas del cielo (puntos, destellos de cuatro puntas y estrellas de
-  cinco puntas que se mecen despacio), destellos de la banda de polvo que se abren a tiempo con el
-  compás y una estrella fugaz que cruza el cielo de vez en cuando.
+- `utils/destellos.ts`: estrellas del cielo (6500 en toda la esfera: puntos de pintura de uno a
+  tres píxeles y destellos de cuatro puntas, un tercio a lo largo de la Vía Láctea), los granos de
+  la banda de polvo (unos pocos se abren en destellos a tiempo con el compás) y una estrella fugaz
+  que cruza el cielo de vez en cuando. La Vía Láctea y la banda comparten sus medidas con el cielo
+  pintado (`VIA_LACTEA` y `BANDA_POLVO` en `constantes/dibujo.ts`).
 
 ## Cámara e interfaz en el espacio
 
@@ -464,7 +480,7 @@ Cada paso quedó en su commit y etiqueta: `dibujo-v0.1-base`, `dibujo-v0.2-tinta
 `dibujo-v0.34-musica-al-abrirse-la-carta`, `dibujo-v0.35-letra-sincronizada`,
 `dibujo-v0.36-letra-en-espanol`, `dibujo-v0.37-escenas-de-la-letra`,
 `dibujo-v0.38-escenario-cuphead`, `dibujo-v0.39-portal-y-mensaje`, `dibujo-v0.40-video-y-vortice`,
-`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`, `dibujo-v0.50-fondo-desde-el-10`, `dibujo-v0.51-zoom-ios-y-calidad`, `dibujo-v0.52-audios-livianos`, `dibujo-v0.53-girasoles`, `dibujo-v0.54-agujero-mas-bonito`.
+`dibujo-v0.41-viajes-y-papel`, `dibujo-v0.42-viaje-sereno`, `dibujo-v0.43-fluido-en-movil`, `dibujo-v0.44-centrado-y-pantalla-completa`, `dibujo-v0.45-dialogo-de-sonido`, `dibujo-v0.46-titulo`, `dibujo-v0.47-sin-zoom-y-android`, `dibujo-v0.48-sonido-ambiente`, `dibujo-v0.49-musica-de-fondo`, `dibujo-v0.50-fondo-desde-el-10`, `dibujo-v0.51-zoom-ios-y-calidad`, `dibujo-v0.52-audios-livianos`, `dibujo-v0.53-girasoles`, `dibujo-v0.54-agujero-mas-bonito`, `dibujo-v0.55-cielo-estrellado`.
 
 La versión anterior de esta carpeta, pintada al óleo al estilo de Van Gogh, sigue en el
 historial de git (etiquetas `pintura-v0.1-copia` … `pintura-v0.6-viaje-completo`).

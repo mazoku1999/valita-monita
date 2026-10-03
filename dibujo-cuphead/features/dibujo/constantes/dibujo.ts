@@ -68,3 +68,18 @@ export const HERVOR = {
   amplitud: 0.9,
   cadaDibujos: 2,
 } as const
+
+/**
+ * Cielo estrellado (ver `utils/destellos.ts` y `CIELO_ACUARELA_GLSL`): la Vía Láctea es el círculo
+ * máximo perpendicular a `normal`, de esta anchura (rad). Inclinado unos 35° respecto al plano del
+ * disco y pasando unos 14° por encima del agujero tal como se ve al acercarse: cruza el cielo en
+ * diagonal sin confundirse con la banda.
+ */
+export const VIA_LACTEA = { normal: [0.565, -0.813, -0.131] as const, anchura: 0.16 } as const
+
+/**
+ * Banda de polvo del agujero, la misma para sus granos (`utils/destellos.ts`) y para su luz pintada en
+ * el cielo (`bandaPintada` en `CIELO_FRAG`): entre estos radios, con espesor gaussiano
+ * σ = espesorBase + espesorPendiente·r y densidad de superficie ∝ (radioMinimo/r)².
+ */
+export const BANDA_POLVO = { radioMinimo: 13, radioMaximo: 100, espesorBase: 0.06, espesorPendiente: 0.006 } as const

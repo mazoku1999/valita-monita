@@ -35,7 +35,7 @@ uniform vec2 uObservador;
 
 in vec2 vUv;
 layout(location = 0) out vec4 fragColor;
-// R: objeto (0 cielo, 1 cara del disco, 3 canto interior, 4 anillo, 5 sombra) / 5
+// R: objeto (0 cielo, 1 cara del disco, 2 hoja fina de canto, 3 canto interior, 4 anillo, 5 sombra) / 5
 // G: banda del disco / 5; B: cara (0 abajo, 1 arriba).
 layout(location = 1) out vec4 fragId;
 
@@ -323,6 +323,14 @@ void main() {
       float deCanto = (1.0 - smoothstep(0.012, 0.09, elevacion)) * directo;
       color = colorCara(pHit, cara, deCanto, banda);
       objeto = 1.0;
+      // De canto y de lejos la hoja mide pocos píxeles (menos de unos 10): su contorno de tinta y las
+      // líneas entre sus bandas la llenaban de rayitas negras. Ahí es un hilo de luz sin tinta (el pase de dibujo no
+      // entinta el objeto 2), como la línea de luz de la versión realista; de cerca, con su contorno.
+      // El grosor es el de la hoja en ese punto de su largo (el mayor que cruza la visual, que pasa a
+      // bPlano del centro), igual en todo su ancho: con el del punto tocado, la tinta salía a trozos.
+      float bPlano = abs(ro.x * dirRayo.z - ro.z * dirRayo.x) / max(length(dirRayo.xz), 1e-4);
+      float grosorPx = 2.0 * semiEspesor(max(bPlano, RADIOS_HUSO[1])) / max(length(pHit - ro) * uAnguloPixel, 1e-6);
+      if (deCanto * (1.0 - smoothstep(7.0, 13.0, grosorPx)) > 0.5) objeto = 2.0;
     } else {
       color = CANTO_INTERIOR;
       objeto = 3.0;

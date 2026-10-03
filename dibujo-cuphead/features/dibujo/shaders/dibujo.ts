@@ -5,6 +5,7 @@
  * lineal sólo si detrás hay otro pase.
  */
 
+import { BANDA_POLVO } from '../constantes/dibujo'
 import { CIELO_ACUARELA_GLSL, CIELO_MANANA_GLSL, PALETA_EPOCA_GLSL, PAPEL_GLSL, RUIDO3_GLSL } from './acuarela'
 import { CAIDA_NOCHE_GLSL, NOCHE_ESTRELLADA_GLSL } from './nocheEstrellada'
 
@@ -178,6 +179,10 @@ uniform float uLatido;
 uniform float uDia;
 uniform mat3 uRotacionValle;
 uniform vec3 uSolValle;
+// La banda de polvo del agujero pintada en el cielo: posición de la cámara en el mundo y cuánto se
+// ve (sólo con el agujero a la vista).
+uniform vec3 uPosCamara;
+uniform float uBanda;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -221,6 +226,92 @@ vec3 rayosDeSol(vec2 uv, vec3 cielo) {
   return mix(cielo, c, clamp(mezcla, 0.0, 1.0));
 }
 
+// La luz de la banda de polvo, pintada (el río de chispas doradas de la versión realista): la luz
+// de los granos que el rayo atraviesa, con el mismo reparto que sus destellos (ver BANDA_POLVO en
+// constantes/dibujo.ts): densidad de superficie (rMin/r)², espesor gaussiano σ(r) y brillo por grano
+// que cae hacia fuera (rMin/r), algo más que el de los destellos para que el río se apague antes
+// del borde de la pantalla. Sólo cuentan los lejanos: los que pasan cerca de la cámara ya se ven
+// sueltos, como destellos (contándolos, la banda era una franja ancha que cruzaba media pantalla).
+// Devuelve la luz del río (x), la de un velo tres veces y media más ancho (y) y el punto medio de
+// la luz en el plano (zw), donde se ancla el grano de la aguada.
+const float BANDA_R_MIN = ${BANDA_POLVO.radioMinimo.toFixed(1)};
+const float BANDA_R_MAX = ${BANDA_POLVO.radioMaximo.toFixed(1)};
+const float BANDA_ESPESOR = ${BANDA_POLVO.espesorBase.toFixed(4)};
+const float BANDA_PENDIENTE = ${BANDA_POLVO.espesorPendiente.toFixed(4)};
+const float VELO_ANCHO = 3.5;
+vec4 luzBanda(vec3 o, vec3 d) {
+  // Tramo del rayo dentro de la losa (tres σ del velo en el borde) y del cilindro de la banda.
+  float alto = 3.0 * VELO_ANCHO * (BANDA_ESPESOR + BANDA_PENDIENTE * BANDA_R_MAX);
+  float t0 = 12.0;
+  float t1 = 1e5;
+  if (abs(d.y) > 1e-6) {
+    float ta = (-alto - o.y) / d.y;
+    float tb = (alto - o.y) / d.y;
+    t0 = max(t0, min(ta, tb));
+    t1 = min(t1, max(ta, tb));
+  } else if (abs(o.y) > alto) {
+    return vec4(0.0);
+  }
+  float a = dot(d.xz, d.xz);
+  float b = dot(o.xz, d.xz);
+  float disc = b * b - a * (dot(o.xz, o.xz) - BANDA_R_MAX * BANDA_R_MAX);
+  if (a < 1e-8 || disc <= 0.0) return vec4(0.0);
+  float raiz = sqrt(disc);
+  t0 = max(t0, (-b - raiz) / a);
+  t1 = min(t1, (-b + raiz) / a);
+  if (t1 <= t0) return vec4(0.0);
+  // Más muestras cerca de donde el rayo pasa más cerca del agujero (allí la banda es más densa).
+  float tc = clamp(-b / a, t0, t1);
+  float rio = 0.0;
+  float velo = 0.0;
+  vec2 medio = vec2(0.0);
+  const int N = 14;
+  for (int lado = 0; lado < 2; lado++) {
+    float largo = (lado == 0 ? t0 : t1) - tc;
+    for (int i = 0; i < N; i++) {
+      float u = (float(i) + 0.5) / float(N);
+      float t = tc + largo * u * u;
+      vec3 q = o + t * d;
+      float r = length(q.xz);
+      float sigma = BANDA_ESPESOR + BANDA_PENDIENTE * r;
+      float k = BANDA_R_MIN / max(r, 1.0);
+      float luzGranos = k * k * k
+        * smoothstep(BANDA_R_MIN - 2.0, BANDA_R_MIN + 4.0, r) * (1.0 - smoothstep(BANDA_R_MAX - 25.0, BANDA_R_MAX, r))
+        * smoothstep(18.0, 45.0, t) * abs(largo) * 2.0 * u / float(N) / (2.5066 * sigma);
+      float y2 = 0.5 * q.y * q.y / (sigma * sigma);
+      float w = luzGranos * exp(-y2);
+      rio += w;
+      velo += luzGranos * exp(-y2 / (VELO_ANCHO * VELO_ANCHO)) / VELO_ANCHO;
+      medio += w * q.xz;
+    }
+  }
+  return vec4(rio, velo, medio / max(rio, 1e-6));
+}
+
+vec3 bandaPintada(vec3 c, vec3 d) {
+  vec4 luz = luzBanda(uPosCamara, d);
+  // El río sólo con la banda de canto (rayos casi en su plano); vista desde arriba o desde abajo,
+  // sólo el velo (su luz se juntaba en una estela que salía del disco como un cometa).
+  float rasante = 1.0 - smoothstep(0.04, 0.12, abs(d.y));
+  float luzRio = (1.0 - exp(-0.1 * luz.x)) * rasante;
+  float luzVelo = 1.0 - exp(-0.1 * luz.y);
+  if (luzVelo < 0.004 && luzRio < 0.004) return c;
+  // Grano de la aguada anclado a la banda (gira despacio con ella), para que la orilla sea irregular.
+  float r = length(luz.zw);
+  float giro = 0.9 * pow(max(r, 1.0), -1.5) * uTiempo;
+  vec2 q = mat2(cos(giro), -sin(giro), sin(giro), cos(giro)) * luz.zw;
+  float grano = 0.55 + 0.9 * fbm3(vec3(q * 0.18, 1.7));
+  // El velo dorado, el río y su centro claro, cada uno con su orilla.
+  float velo = aguada(luzVelo * grano, 0.08, 0.03);
+  float rio = aguada(luzRio * grano, 0.25, 0.03);
+  float centro = aguada(luzRio * grano, 0.62, 0.03);
+  c = mix(c, vec3(0.74, 0.47, 0.42), 0.32 * velo * uBanda);
+  c = mix(c, vec3(0.98, 0.72, 0.46), 0.6 * rio * uBanda);
+  c = mix(c, vec3(1.0, 0.9, 0.7), 0.75 * centro * uBanda);
+  c *= 1.0 - 0.1 * uBanda * (orilla(luzVelo * grano, 0.08, 0.035) + orilla(luzRio * grano, 0.25, 0.035));
+  return c;
+}
+
 void main() {
   float cielo = cieloAbierto(vUv + uTexelEntrada * vec2(-1.0, -1.0));
   cielo += cieloAbierto(vUv + uTexelEntrada * vec2(1.0, -1.0));
@@ -230,6 +321,7 @@ void main() {
   vec3 c = uDia < 0.999 ? cieloAcuarela(direccion) : vec3(0.0);
   if (uDia > 0.001) c = mix(c, cieloManana(uRotacionValle * direccion, uSolValle), uDia);
   if (uAgujero.w > 0.0) c = rayosDeSol(vUv, c);
+  if (uBanda > 0.001) c = bandaPintada(c, direccion);
   if (uSol.w > 0.0) c = resplandorDelSol(vUv, c);
   fragColor = vec4(c, 0.25 * cielo * uCieloPintado);
 }
@@ -327,9 +419,11 @@ void main() {
     if (conGas) {
       float banda;
       float objeto = objetoEn(q, banda);
-      // El anillo y la sombra se tocan sin línea: el anillo es el borde de la sombra.
+      // El anillo y la sombra se tocan sin línea: el anillo es el borde de la sombra. La hoja fina
+      // del disco de canto (2), sin tinta: es un hilo de luz.
       bool pareja = (objeto == 4.0 && objeto0 == 5.0) || (objeto == 5.0 && objeto0 == 4.0);
-      if (objeto != objeto0 && !pareja) tinta += 1.0;
+      bool hilo = objeto == 2.0 || objeto0 == 2.0;
+      if (objeto != objeto0 && !pareja && !hilo) tinta += 1.0;
       if (objeto0 == 1.0 && k % 2 == 0) {
         float bandaCerca;
         float objetoCerca = objetoEn(uv + direccion * 0.55 * grosor / uResolucion, bandaCerca);
@@ -555,6 +649,9 @@ uniform vec4 uPelicula;
 uniform vec3 uPelicula2;
 // Separación de los colores en el borde del cuadro (fracción de la pantalla).
 uniform float uAberracion;
+// El cielo abierto (A), para quitarle la aberración, y si se aplica (no con el escenario de la canción).
+uniform sampler2D uCielo;
+uniform float uCieloSinAberracion;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -590,7 +687,9 @@ void main() {
   // los bordes, como en las copias viejas).
   vec2 vaiven = (vec2(hash11(f * 1.37 + 0.1), hash11(f * 2.71 + 5.3)) - 0.5) * vec2(0.5, 1.0) * uPelicula2.x * escala;
   vec2 uvCuadro = vUv + vaiven / uResolucion;
-  vec2 separacion = (vUv - 0.5) * uAberracion;
+  // Sobre el cielo abierto, casi sin aberración: partía cada estrellita en tres puntos de colores.
+  float abierto = uCieloSinAberracion * smoothstep(0.35, 0.75, texture(uCielo, uvCuadro).a);
+  vec2 separacion = (vUv - 0.5) * uAberracion * (1.0 - 0.85 * abierto);
   vec3 c = vec3(
     texture(uImagen, uvCuadro + separacion).r,
     texture(uImagen, uvCuadro).g,
@@ -681,17 +780,18 @@ void main() {
  * (`uPulsaciones`, ver `store/ritmoDibujo.ts`), la mitad en el pulso y la otra mitad a
  * contratiempo:
  *
- * - Las estrellas de cinco puntas se mecen despacio a un lado y a otro.
- * - Los puntos y destellos titilan a mano (cambian con cada dibujo), a veces parpadean y a veces se
- *   encienden en un destello grande que se apaga antes del pulso siguiente.
- * - Los destellos de la banda se abren unas pulsaciones de cada tanto y vuelven a ser puntos.
+ * - Las estrellas son puntos de pintura sin contorno (de un píxel los más tenues) y las más claras,
+ *   destellos de cuatro puntas pintados. Titilan a mano (cambian con cada dibujo), a veces parpadean
+ *   y muy de vez en cuando una se enciende en un destello que se apaga antes del pulso siguiente.
+ * - Los granos de la banda, dorados, algo mayores cuanto más cerca pasan de la cámara; unos pocos
+ *   se abren en destellos unas pulsaciones de cada tanto.
  * - Cada 16 pulsaciones puede pasar una estrella fugaz (empieza en un pulso y dura algo más de
  *   dos): cabeza de estrella que gira y se estira con la velocidad, estela entintada que se afina
  *   y se desvanece. Sólo sobre cielo abierto y oscuro, en la parte de arriba de la pantalla.
  *
- * Las estrellas sólo se dibujan sobre cielo abierto y oscuro; los destellos de la banda, allí donde
- * nada de la escena queda delante (profundidad). Sobre el disco del agujero, que es claro, pierden
- * el contorno de tinta y brillan en blanco (con tinta parecían agujeros).
+ * Las estrellas sólo se dibujan sobre cielo abierto y oscuro; los granos de la banda, allí donde
+ * nada de la escena queda delante (profundidad), y sobre el disco del agujero, que es claro, en
+ * blanco.
  */
 export const DESTELLO_VERT = /* glsl */ `
 uniform mat4 uVistaProyeccion;
@@ -710,6 +810,7 @@ uniform float uBandaVisible;
 
 in vec4 aPosicion;
 in vec4 aForma;
+in float aBrillo;
 
 out vec2 vLocal;
 out float vTipo;
@@ -721,6 +822,10 @@ out vec4 vMedidas;
 out vec2 vFugaz;
 // 1: estrella del cielo (se tapa por píxel con lo que haya delante); 0: destello de la banda.
 out float vDelCielo;
+// Brillo (0–1), medio lado del quad y radio del punto, en píxeles.
+out float vBrillo;
+out float vTamano;
+out float vRadio;
 
 const float PI = 3.14159265359;
 
@@ -784,6 +889,9 @@ void main() {
   vMedidas = vec4(1.0);
   vFugaz = vec2(0.0, 1.0);
   vDelCielo = 1.0;
+  vBrillo = 1.0;
+  vTamano = 1.0;
+  vRadio = 0.5;
   if (aPosicion.w > 1.5) {
     estrellaFugaz();
     return;
@@ -814,7 +922,7 @@ void main() {
   if (esBanda) {
     float delante = textureLod(uProfundidad, uvc, 0.0).r;
     visible = uBandaVisible * step(ndc.z * 0.5 + 0.5, delante + 2e-4);
-    // Delante del disco (claro): sin tinta.
+    // Delante del disco (claro), blancos.
     vec4 gas = textureLod(uGasColor, uvc, 0.0);
     float luzGas = dot(gas.rgb, vec3(0.2126, 0.7152, 0.0722)) * clamp(gas.a, 0.0, 1.0) * uGasVisible;
     vFondoClaro = smoothstep(0.08, 0.25, luzGas);
@@ -831,55 +939,65 @@ void main() {
   float azar = hash11(semilla * 7.31 + 1.7);
   // La mitad va con el pulso y la otra mitad a contratiempo.
   float n = uPulsaciones + 0.5 * step(0.5, hash11(semilla * 3.17 + 0.3));
-  vec2 escala;
-  float giro;
-  if (tipo > 1.5) {
-    // Estrella de cinco puntas: se mece despacio a un lado y a otro (dos pulsaciones hacia cada
-    // lado), cada una con su inclinación. Sin latir: aplastarse en cada pulso parecía un latido.
-    escala = vec2(1.0);
-    giro = 0.14 * sin(0.5 * PI * n) + 0.5 * (azar - 0.5);
-  } else {
-    // Titileo a mano (cambia con cada dibujo) y algún parpadeo.
-    float titileo = 0.85 + 0.22 * sin(uDibujo * 0.45 * aForma.z + semilla);
-    float parpadeo = step(0.94, hash11(floor(uDibujo / 3.0) * 1.37 + semilla * 17.0));
-    escala = vec2(titileo * mix(1.0, 0.45, parpadeo));
-    giro = tipo > 0.5 ? 0.12 * sin(uDibujo * 0.3 * aForma.z + semilla * 3.0) : 0.0;
-    if (esBanda) {
-      if (tipo > 0.5) {
-        // Destello de la banda: se abre unas pulsaciones de cada tanto (el ciclo empieza en un
-        // pulso) y el resto del tiempo es un punto.
-        float periodo = 3.0 + floor(4.0 * azar);
-        float c = mod(floor(n) + floor(hash11(semilla * 5.3) * periodo), periodo) + fract(n);
-        float vida = smoothstep(0.0, 0.2, c) * (1.0 - smoothstep(1.3, 2.0, c));
-        tipo = vida > 0.35 ? 1.0 : 0.0;
-        escala *= mix(0.55, 1.0, vida);
-      }
-    } else {
-      // ¡Ting!: en algún pulso al azar un punto o un destello se enciende en grande y gira, y se
-      // apaga antes del pulso siguiente.
-      float ting = step(0.955, hash11(floor(n) * 0.619 + semilla * 13.7));
-      float f = fract(n);
-      float brillo = ting * smoothstep(0.0, 0.12, f) * (1.0 - smoothstep(0.45, 0.95, f));
-      escala *= 1.0 + 1.3 * brillo;
-      giro += 0.8 * brillo;
-      if (brillo > 0.3) tipo = 1.0;
+  float escalaPantalla = uResolucion.y / 720.0;
+  float tamano = aForma.x * escalaPantalla;
+  if (esBanda) {
+    // Perspectiva: los granos que pasan cerca de la cámara, algo mayores (con tope bajo: más grandes
+    // eran bolitas, y las chispas tienen que ser finas).
+    tamano *= clamp(32.0 / max(length(mundo - uPosCamara), 1.0), 0.75, 1.5);
+  }
+  // Titileo a mano (cambia con cada dibujo), suave, y algún parpadeo.
+  float titileo = 0.9 + 0.12 * sin(uDibujo * 0.45 * aForma.z + semilla);
+  float parpadeo = step(0.96, hash11(floor(uDibujo / 3.0) * 1.37 + semilla * 17.0));
+  float escala = titileo * mix(1.0, 0.7, parpadeo);
+  float brillo = aBrillo * visible * mix(1.0, 0.55, parpadeo);
+  float giro = tipo > 0.5 ? 0.1 * sin(uDibujo * 0.3 * aForma.z + semilla * 3.0) : 0.0;
+  if (esBanda) {
+    if (tipo > 0.5) {
+      // Destello de la banda: se abre unas pulsaciones de cada tanto (el ciclo empieza en un
+      // pulso) y el resto del tiempo es un grano algo mayor que los demás.
+      float periodo = 3.0 + floor(4.0 * azar);
+      float c = mod(floor(n) + floor(hash11(semilla * 5.3) * periodo), periodo) + fract(n);
+      float vida = smoothstep(0.0, 0.2, c) * (1.0 - smoothstep(1.3, 2.0, c));
+      tipo = vida > 0.35 ? 1.0 : 0.0;
+      escala *= mix(0.45, 1.0, vida);
     }
+  } else {
+    // ¡Ting!: muy de vez en cuando, en un pulso, una estrella se enciende en un destello que gira y
+    // se apaga antes del pulso siguiente.
+    float ting = step(0.988, hash11(floor(n) * 0.619 + semilla * 13.7));
+    float f = fract(n);
+    float destello = ting * smoothstep(0.0, 0.12, f) * (1.0 - smoothstep(0.45, 0.95, f));
+    tamano = mix(tamano, max(2.2 * tamano, 6.5 * escalaPantalla), destello);
+    brillo = mix(brillo, visible, destello);
+    giro += 0.8 * destello;
+    if (destello > 0.3) tipo = 1.0;
   }
 
-  // Relleno: la mayoría crema; algunas estrellas doradas, rosadas o verde agua (tintes de época).
+  // Relleno: casi todas crema blanca; algunas doradas, rosadas o celestes (tintes de época). Los
+  // granos de la banda, dorados (más claros cerca del agujero, alguno melocotón), y blancos sobre
+  // el disco.
   float tono = hash11(semilla * 11.1 + 4.2);
-  vec3 relleno = tono < 0.55 ? vec3(1.0, 0.94, 0.68)
-    : tono < 0.8 ? vec3(1.0, 0.86, 0.52)
-    : tono < 0.92 ? vec3(1.0, 0.8, 0.74)
-    : vec3(0.82, 0.95, 0.93);
-  if (esBanda) relleno = mix(vec3(1.0, 0.84, 0.48), vec3(1.0, 0.98, 0.9), vFondoClaro);
+  vec3 relleno = tono < 0.6 ? vec3(1.0, 0.96, 0.84)
+    : tono < 0.82 ? vec3(1.0, 0.88, 0.62)
+    : tono < 0.92 ? vec3(1.0, 0.83, 0.79)
+    : vec3(0.82, 0.93, 1.0);
+  if (esBanda) {
+    vec3 oro = mix(vec3(1.0, 0.96, 0.84), vec3(1.0, 0.86, 0.58), smoothstep(16.0, 70.0, length(aPosicion.xz)));
+    oro = mix(oro, vec3(1.0, 0.8, 0.62), 0.4 * step(0.75, tono));
+    relleno = mix(oro, vec3(1.0, 0.98, 0.9), vFondoClaro);
+  }
   vRelleno = relleno;
+  vBrillo = brillo;
 
-  float tamano = aForma.x * (uResolucion.y / 720.0) * visible;
+  tamano *= escala;
+  // El punto mide "tamano" de diámetro; el quad, al menos un par de píxeles para que salga.
+  float semiLado = max(tamano, 1.5);
+  vTamano = semiLado;
+  vRadio = 0.5 * tamano;
   vec2 esquina = position.xy;
-  vec2 e = esquina * escala;
-  vec2 rotada = vec2(cos(giro) * e.x - sin(giro) * e.y, sin(giro) * e.x + cos(giro) * e.y);
-  gl_Position = vec4(ndc.xy + rotada * tamano / uResolucion * 2.0, 0.0, 1.0);
+  vec2 rotada = vec2(cos(giro) * esquina.x - sin(giro) * esquina.y, sin(giro) * esquina.x + cos(giro) * esquina.y);
+  gl_Position = vec4(ndc.xy + rotada * semiLado / uResolucion * 2.0, 0.0, 1.0);
   vLocal = esquina;
   vTipo = tipo;
 }
@@ -897,6 +1015,9 @@ in vec3 vRelleno;
 in vec4 vMedidas;
 in vec2 vFugaz;
 in float vDelCielo;
+in float vBrillo;
+in float vTamano;
+in float vRadio;
 out vec4 fragColor;
 
 // Lo del cielo, detrás de todo: sólo donde el cielo está abierto en ese píxel (antes bastaba con
@@ -984,45 +1105,26 @@ void main() {
   }
   vec2 p = vLocal;
   vec3 relleno = vRelleno;
+  float rPx = length(p) * vTamano;
   float lleno;
-  float tinta;
-  if (vTipo > 1.5) {
-    // Estrella regordeta de puntas redondas, con contorno de tinta, volumen de aerógrafo (clara
-    // arriba a la izquierda, más cálida abajo a la derecha) y un brillo.
-    float d = estrella5(p, 0.6, 0.64) - 0.08;
-    float aa = fwidth(d);
-    lleno = 1.0 - smoothstep(-aa, aa, d);
-    float exterior = 1.0 - smoothstep(0.13 - aa, 0.13 + aa, d);
-    tinta = max(exterior - lleno, 0.0);
-    float lado = smoothstep(-0.25, 0.55, dot(p, vec2(0.6, -0.8)));
-    relleno = mix(relleno, relleno * vec3(0.99, 0.8, 0.6), lado);
-    vec2 q = (p - vec2(-0.16, 0.19)) * vec2(1.0, 1.6);
-    float brillo = 1.0 - smoothstep(0.07, 0.07 + fwidth(q.x) * 2.0, length(q));
-    relleno = mix(relleno, vec3(1.0, 0.995, 0.97), brillo);
-  } else if (vTipo > 0.5) {
-    // Destello de cuatro puntas: curva |x|^k + |y|^k = r^k (lados cóncavos), con contorno de tinta.
+  if (vTipo > 0.5) {
+    // Destello de cuatro puntas pintado: lados cóncavos (|x|^k + |y|^k = r^k) que se afinan hacia
+    // las puntas, un cuerpo redondo en el centro y el centro casi blanco. Sin contorno.
     vec2 a = abs(p) + 1e-4;
-    const float K = 0.55;
-    float f = pow(a.x / 0.72, K) + pow(a.y / 0.72, K);
-    float fe = pow(a.x / 0.97, K) + pow(a.y / 0.97, K);
+    const float K = 0.5;
+    float f = pow(a.x / 0.92, K) + pow(a.y / 0.92, K);
     float aa = fwidth(f);
-    float aae = fwidth(fe);
-    lleno = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, f);
-    float exterior = 1.0 - smoothstep(1.0 - aae, 1.0 + aae, fe);
-    tinta = max(exterior - lleno, 0.0);
-    relleno = mix(relleno, vec3(1.0, 0.99, 0.94), 1.0 - smoothstep(0.0, 0.3, length(p)));
+    lleno = max(1.0 - smoothstep(1.0 - aa, 1.0 + aa, f), clamp(0.3 * vTamano + 0.5 - rPx, 0.0, 1.0));
+    relleno = mix(relleno, vec3(1.0, 0.99, 0.95), 1.0 - smoothstep(0.0, 0.32, length(p)));
   } else {
-    float d = length(p);
-    float aa = fwidth(d);
-    lleno = 1.0 - smoothstep(0.5 - aa, 0.5 + aa, d);
-    float exterior = 1.0 - smoothstep(0.78 - aa, 0.78 + aa, d);
-    tinta = 0.8 * max(exterior - lleno, 0.0);
+    // Punto de pintura: un disco con el borde de un píxel (al menos de 0.8 px de radio: más finos se
+    // repartían entre cuatro píxeles y no se veían) y el centro algo más claro.
+    lleno = clamp(max(vRadio, 0.8) + 0.5 - rPx, 0.0, 1.0);
+    relleno = mix(relleno, vec3(1.0, 0.99, 0.96), 0.6 * (1.0 - smoothstep(0.0, max(0.7 * vRadio, 0.5), rPx)));
   }
-  tinta *= 1.0 - vFondoClaro;
-  float alfa = max(lleno, tinta) * cielo;
+  float alfa = lleno * vBrillo * cielo;
   if (alfa < 0.01) discard;
-  vec3 color = mix(uTinta, relleno, lleno / max(max(lleno, tinta), 1e-4));
-  fragColor = vec4(color * alfa, alfa);
+  fragColor = vec4(relleno * alfa, alfa);
 }
 `
 
